@@ -1,0 +1,23 @@
+# Local development only. The deployed stack lives in docker-compose.yml and is
+# driven by scripts/deploy.sh on Gaia; this file just gives you a database.
+#
+#   docker compose -f docker-compose.dev.yml up -d
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: kratos
+      POSTGRES_PASSWORD: kratos
+      POSTGRES_DB: kratos
+    ports:
+      - "5432:5432"
+    volumes:
+      - kratos-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kratos -d kratos"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  kratos-db:

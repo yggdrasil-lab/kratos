@@ -14,8 +14,9 @@ through a migration. Features are added from here.
 ## Layout
 
 ```
-api/    FastAPI service, SQLAlchemy 2.0 models, Alembic migrations
-web/    React + TypeScript + Vite PWA client
+api/      FastAPI service, SQLAlchemy 2.0 models, Alembic migrations
+web/      React + TypeScript + Vite PWA client
+scripts/  Shared deploy scripts (ops-scripts submodule)
 ```
 
 ## Domain
@@ -34,7 +35,7 @@ Derived values — volume, estimated 1RM, last performance — are database view
 ## Running the API
 
 ```bash
-docker compose up -d db
+docker compose -f docker-compose.dev.yml up -d db
 cd api
 cp ../.env.example .env
 python -m venv .venv && . .venv/bin/activate
@@ -73,3 +74,81 @@ with `KRATOS_TEST_DATABASE_URL`.
 ## Configuration
 
 Environment variables carry the `KRATOS_` prefix — see `.env.example`.
+
+## Deployment
+
+Runs on the Gaia swarm as the stack `kratos`, behind the fleet's Traefik
+instance, and is published at `kratos.${DOMAIN_NAME}`.
+
+### Services
+
+| Service     | Image                     | Published             |
+|-------------|---------------------------|-----------------------|
+| `kratos-db` | `postgres:16-alpine`      | internal only         |
+| `kratos-api`| `${REGISTRY_PREFIX}kratos-api` | via Traefik at `/api` |
+| `kratos-web`| `${REGISTRY_PREFIX}kratos-web` | via Traefik at `/`   |
+
+All three join the external `aether-net` overlay, which is how Traefik reaches
+them; none publishes a host port. The database is reachable as `kratos-db` on
+that network and is never exposed publicly.
+
+### Routing
+
+Traefik rules are declared as service labels in `docker-compose.yml`:
+
+- `kratos-web` matches `Host(\`kratos.${DOMAIN_NAME}\`)`. The nginx image serves
+  the built client and falls back to `index.html` for client-side routes.
+- `kratos-api` matches the same host with `PathPrefix(\`/api\`)`. Traefik prefers
+  the more specific rule, so `/api/*` reaches the API and everything else reaches
+  the client. A `stripprefix` middleware removes `/api` before forwarding, since
+  the service itself serves unprefixed routes.
+
+Both routers sit behind the `authelia` forward-auth middleware and terminate TLS
+with the `cloudflare` certificate resolver.
+
+### Secrets and the database password
+
+The Postgres password is never written into the repository, the image, or a
+compose file. The workflow pipes it through `scripts/ensure_secret.sh`, which
+creates a content-hashed swarm secret and returns its name. That name reaches the
+stack as `KRATOS_POSTGRES_PASSWORD_NAME`.
+
+At container start, `api/entrypoint.sh` reads the secret file, assembles
+`KRATOS_DATABASE_URL`, waits for the database to accept connections, runs
+`alembic upgrade head`, and only then starts the API. Migrations therefore run on
+every deploy, and a database that is not ready yet is retried rather than treated
+as a failure.
+
+The database stores its data on a bind mount, because Swarm cannot resolve
+relative paths. Create the directory on the node once, before the first deploy:
+
+```bash
+./setup_host.sh
+```
+
+### Deploying
+
+Pushing to `main` triggers `.github/workflows/deploy.yml` on the `gaia` runner.
+It logs in to the registry, ensures the secret, builds both images, pushes them,
+and deploys the stack. To run it by hand, the same entrypoint works on the host:
+
+```bash
+./scripts/deploy.sh "kratos" docker-compose.yml
+```
+
+### Repository configuration
+
+The workflow reads one repository variable and two secrets. They are set on the
+repository, not in the code:
+
+| Name                     | Kind     | Purpose                                  |
+|--------------------------|----------|------------------------------------------|
+| `DOMAIN_NAME`            | variable | apex domain used in the Traefik host rule |
+| `REGISTRY_USERNAME`      | secret   | registry login                            |
+| `REGISTRY_RAW_PASSWORD`  | secret   | registry login                            |
+| `POSTGRES_PASSWORD`      | secret   | becomes the `kratos_postgres_password_*` swarm secret |
+
+`STACK_NAME` is set by `scripts/deploy.sh` from its argument (`kratos`), so the
+images are tagged `kratos`. `REGISTRY_PREFIX` and `KRATOS_DB_MOUNT_PATH` are
+optional: without the prefix the images stay local and are not pushed, and the
+mount path falls back to `/opt/kratos/data`.
