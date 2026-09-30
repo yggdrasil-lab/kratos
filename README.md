@@ -126,6 +126,12 @@ relative paths. Create the directory on the node once, before the first deploy:
 ./setup_host.sh
 ```
 
+Run this **on the Gaia host by hand, not from the deploy workflow.** The
+self-hosted runner is itself a container — it mounts only the Docker socket and
+its own workspace, so a host path like `/opt/kratos/data` does not exist inside
+it, and an `mkdir` there either fails or silently creates nothing. It is
+deliberately kept out of `deploy.yml` for that reason.
+
 ### Deploying
 
 Pushing to `main` triggers `.github/workflows/deploy.yml` on the `gaia` runner.
