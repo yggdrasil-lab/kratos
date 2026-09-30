@@ -106,18 +106,27 @@ Traefik rules are declared as service labels in `docker-compose.yml`:
 Both routers sit behind the `authelia` forward-auth middleware and terminate TLS
 with the `cloudflare` certificate resolver.
 
-### Secrets and the database password
+### The database password
 
-The Postgres password is never written into the repository, the image, or a
-compose file. The workflow pipes it through `scripts/ensure_secret.sh`, which
-creates a content-hashed swarm secret and returns its name. That name reaches the
-stack as `KRATOS_POSTGRES_PASSWORD_NAME`.
+The Postgres password is hardcoded to `kratos`. It is not a secret: the database
+publishes no host port and is reachable only from other services on the internal
+`aether-net` overlay, so the only way to reach it is from inside the stack.
 
-At container start, `api/entrypoint.sh` reads the secret file, assembles
-`KRATOS_DATABASE_URL`, waits for the database to accept connections, runs
-`alembic upgrade head`, and only then starts the API. Migrations therefore run on
-every deploy, and a database that is not ready yet is retried rather than treated
-as a failure.
+The value appears in two places, both in `docker-compose.yml`:
+`POSTGRES_PASSWORD` on `kratos-db`, and `KRATOS_DATABASE_URL` on `kratos-api`.
+They must match. To change it, change both.
+
+This is deliberately not the fleet's Swarm-secret pattern. That pattern
+(`scripts/ensure_secret.sh` plus `POSTGRES_PASSWORD_FILE`) exists to keep a
+credential out of the repository; with a non-secret local-only password it would
+be ceremony for a value that is in the compose file either way. If Kratos ever
+exposes the database — a published port, an external client, a second host — the
+password becomes a real secret and this should be switched back.
+
+At container start, `api/entrypoint.sh` waits for the database to accept
+connections, runs `alembic upgrade head`, and only then starts the API.
+Migrations therefore run on every deploy, and a database that is not ready yet is
+retried rather than treated as a failure.
 
 The database stores its data on a bind mount, because Swarm cannot resolve
 relative paths. Create the directory on the node once, before the first deploy:
@@ -135,8 +144,8 @@ deliberately kept out of `deploy.yml` for that reason.
 ### Deploying
 
 Pushing to `main` triggers `.github/workflows/deploy.yml` on the `gaia` runner.
-It logs in to the registry, ensures the secret, builds both images, pushes them,
-and deploys the stack. To run it by hand, the same entrypoint works on the host:
+It logs in to the registry, builds both images, pushes them, and deploys the
+stack. To run it by hand, the same entrypoint works on the host:
 
 ```bash
 ./scripts/deploy.sh "kratos" docker-compose.yml
@@ -144,17 +153,19 @@ and deploys the stack. To run it by hand, the same entrypoint works on the host:
 
 ### Repository configuration
 
-The workflow reads one repository variable and two secrets. They are set on the
-repository, not in the code:
+The workflow reads three repository variables and two secrets. They are set on
+the repository, not in the code:
 
 | Name                     | Kind     | Purpose                                  |
 |--------------------------|----------|------------------------------------------|
 | `DOMAIN_NAME`            | variable | apex domain used in the Traefik host rule |
+| `REGISTRY_PREFIX`        | variable | image prefix, e.g. `registry.example.net/` |
+| `KRATOS_DB_MOUNT_PATH`   | variable | optional; host path for the bind mount    |
 | `REGISTRY_USERNAME`      | secret   | registry login                            |
 | `REGISTRY_RAW_PASSWORD`  | secret   | registry login                            |
-| `POSTGRES_PASSWORD`      | secret   | becomes the `kratos_postgres_password_*` swarm secret |
 
 `STACK_NAME` is set by `scripts/deploy.sh` from its argument (`kratos`), so the
-images are tagged `kratos`. `REGISTRY_PREFIX` and `KRATOS_DB_MOUNT_PATH` are
-optional: without the prefix the images stay local and are not pushed, and the
-mount path falls back to `/opt/kratos/data`.
+images are tagged `kratos`. There is no `POSTGRES_PASSWORD` — the database
+password is hardcoded; see "The database password" above. `KRATOS_DB_MOUNT_PATH`
+falls back to `/opt/kratos/data` when unset. If `REGISTRY_PREFIX` is unset,
+`scripts/deploy.sh` skips the push entirely and the images stay local.

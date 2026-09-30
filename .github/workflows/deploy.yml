@@ -22,13 +22,6 @@ jobs:
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.REGISTRY_RAW_PASSWORD }}
 
-      - name: Setup Secrets
-        env:
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-        run: |
-          chmod +x scripts/ensure_secret.sh
-          echo "KRATOS_POSTGRES_PASSWORD_NAME=$(echo "$POSTGRES_PASSWORD" | ./scripts/ensure_secret.sh kratos_postgres_password)" >> $GITHUB_ENV
-
       - name: Build and Deploy with Docker Compose
         env:
           REGISTRY_PREFIX: ${{ vars.REGISTRY_PREFIX }}
