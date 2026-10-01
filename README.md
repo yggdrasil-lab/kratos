@@ -141,10 +141,20 @@ before its first deploy:
 ./setup_host.sh
 ```
 
-Both set the directory to 1000:1000, the fleet convention for Postgres bind
-mounts (apollo-core's `jellystat-db` does the same on this node). The postgres
-entrypoint runs as root, chowns PGDATA to the postgres user and chmods it 00700,
-so the directory is re-owned on first init regardless.
+Neither one sets an owner, and that is deliberate. The postgres entrypoint runs
+as root and, on every start, chowns PGDATA to the postgres user and chmods it
+00700, so ownership on a fresh directory is handled for us. Re-owning a
+directory that already holds a database is actively harmful: a `chown -R` over
+a live PGDATA re-owns files out from under the running server, which then dies
+with `FATAL: could not open file "global/pg_filenode.map": Permission denied`.
+Create the directory and leave its contents alone.
+
+On an already-broken node the same entrypoint heals it — restarting the
+database task re-runs the chown as root and repairs PGDATA:
+
+```bash
+docker service update --force kratos_kratos-db
+```
 
 The workflow cannot `mkdir` a host path directly — the self-hosted runner is a
 container that mounts only the Docker socket and its own workspace, so

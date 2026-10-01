@@ -34,11 +34,15 @@ jobs:
           # The runner is a container that mounts only the Docker socket, so it
           # cannot mkdir a host path itself. The daemon can, though, through a
           # throwaway container with a host bind mount; odin/deploy.yml uses the
-          # same technique for /opt/odin/*. 1000:1000 matches the fleet
-          # convention for Postgres bind mounts (apollo-core's jellystat-db runs
-          # the same way on this node).
+          # same technique for /opt/odin/*.
+          #
+          # Ownership is deliberately NOT set here. The postgres entrypoint runs
+          # as root and chowns PGDATA to the postgres user on every start, so a
+          # fresh directory is handled for us; re-owning it on a directory that
+          # already holds a database breaks the running server with
+          # "FATAL: could not open file \"global/pg_filenode.map\": Permission denied".
           DB_DIR="${KRATOS_DB_MOUNT_PATH:-/opt/kratos/data}"
-          docker run --rm -v "${DB_DIR}":/data alpine sh -c "mkdir -p /data && chown 1000:1000 /data && chmod 755 /data"
+          docker run --rm -v "${DB_DIR}":/data alpine mkdir -p /data
 
       - name: Build and Deploy with Docker Compose
         env:
