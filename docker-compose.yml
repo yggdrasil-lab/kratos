@@ -30,7 +30,8 @@ services:
     environment:
       # The database is reachable only on the internal aether-net network and
       # publishes no host port, so the credential is hardcoded rather than
-      # plumbed through a Swarm secret. See README, "The database password".
+      # plumbed through a Swarm secret. See "The database password" in
+      # Areas/90-Infrastructure/Kratos/Kratos Stack.md.
       - KRATOS_DATABASE_URL=postgresql+psycopg://kratos:kratos@kratos-db:5432/kratos
       - KRATOS_ENVIRONMENT=production
       - TZ=Pacific/Auckland

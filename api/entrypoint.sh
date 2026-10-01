@@ -3,7 +3,8 @@ set -e
 
 # KRATOS_DATABASE_URL is supplied by docker-compose.yml (or the ambient
 # environment for local development). Nothing is assembled or read from a file
-# here; see README, "The database password".
+# here; see "The database password" in
+# Areas/90-Infrastructure/Kratos/Kratos Stack.md.
 
 # Swarm starts services independently, so the database may not be accepting
 # connections yet. Retry the migration rather than assuming ordering.

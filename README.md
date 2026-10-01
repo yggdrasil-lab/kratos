@@ -5,6 +5,24 @@ Postgres database and a FastAPI service.
 
 One codebase, installs to the home screen on both iOS and Android.
 
+## Services
+
+| Service | Port | Purpose |
+|:---|:---|:---|
+| `kratos-web` | 8080 | Built PWA client served by nginx, SPA fallback |
+| `kratos-api` | 8000 | FastAPI service over SQLAlchemy 2.0 |
+| `kratos-db` | 5432 | PostgreSQL 16, data on a host bind mount |
+
+```mermaid
+graph TD
+    Traefik --> Web[kratos-web]
+    Traefik -->|"/api"| API[kratos-api]
+    API --> DB[(kratos-db)]
+```
+
+Both application services sit behind Traefik on the external `aether-net`
+network and are published at `kratos.${DOMAIN_NAME}`.
+
 ## Status
 
 Bootstrap. The repository holds the decided stack and a working skeleton of the
@@ -23,14 +41,15 @@ scripts/  Shared deploy scripts (ops-scripts submodule)
 
 Three groups, in the order data arrives:
 
-| Group     | Tables                                 | Question it answers     |
-|-----------|----------------------------------------|-------------------------|
-| Catalogue | `exercise`                             | What can be performed?  |
-| Plan      | `routine`, `routine_item`              | What do I intend to do? |
-| Log       | `session`, `session_item`, `set_entry` | What did I actually do? |
+| Group | Tables | Question it answers |
+|:---|:---|:---|
+| Catalogue | `exercise` | What can be performed? |
+| Plan | `routine`, `routine_item` | What do I intend to do? |
+| Log | `session`, `session_item`, `set_entry` | What did I actually do? |
 
 Derived values — volume, estimated 1RM, last performance — are database views
 (`v_set`, `v_e1rm`, `v_session_volume`, `v_exercise_last`), never stored columns.
+The Alembic migration `0001_v1_schema` is the schema of record.
 
 ## Running the API
 
@@ -75,118 +94,18 @@ with `KRATOS_TEST_DATABASE_URL`.
 
 Environment variables carry the `KRATOS_` prefix — see `.env.example`.
 
-## Deployment
+## Deploy
 
-Runs on the Gaia swarm as the stack `kratos`, behind the fleet's Traefik
-instance, and is published at `kratos.${DOMAIN_NAME}`.
-
-### Services
-
-| Service     | Image                     | Published             |
-|-------------|---------------------------|-----------------------|
-| `kratos-db` | `postgres:16-alpine`      | internal only         |
-| `kratos-api`| `${REGISTRY_PREFIX}kratos-api` | via Traefik at `/api` |
-| `kratos-web`| `${REGISTRY_PREFIX}kratos-web` | via Traefik at `/`   |
-
-All three join the external `aether-net` overlay, which is how Traefik reaches
-them; none publishes a host port. The database is reachable as `kratos-db` on
-that network and is never exposed publicly.
-
-### Routing
-
-Traefik rules are declared as service labels in `docker-compose.yml`:
-
-- `kratos-web` matches `Host(\`kratos.${DOMAIN_NAME}\`)`. The nginx image serves
-  the built client and falls back to `index.html` for client-side routes.
-- `kratos-api` matches the same host with `PathPrefix(\`/api\`)`. Traefik prefers
-  the more specific rule, so `/api/*` reaches the API and everything else reaches
-  the client. A `stripprefix` middleware removes `/api` before forwarding, since
-  the service itself serves unprefixed routes.
-
-Both routers sit behind the `authelia` forward-auth middleware and terminate TLS
-with the `cloudflare` certificate resolver.
-
-### The database password
-
-The Postgres password is hardcoded to `kratos`. It is not a secret: the database
-publishes no host port and is reachable only from other services on the internal
-`aether-net` overlay, so the only way to reach it is from inside the stack.
-
-The value appears in two places, both in `docker-compose.yml`:
-`POSTGRES_PASSWORD` on `kratos-db`, and `KRATOS_DATABASE_URL` on `kratos-api`.
-They must match. To change it, change both.
-
-This is deliberately not the fleet's Swarm-secret pattern. That pattern
-(`scripts/ensure_secret.sh` plus `POSTGRES_PASSWORD_FILE`) exists to keep a
-credential out of the repository; with a non-secret local-only password it would
-be ceremony for a value that is in the compose file either way. If Kratos ever
-exposes the database — a published port, an external client, a second host — the
-password becomes a real secret and this should be switched back.
-
-At container start, `api/entrypoint.sh` waits for the database to accept
-connections, runs `alembic upgrade head`, and only then starts the API.
-Migrations therefore run on every deploy, and a database that is not ready yet is
-retried rather than treated as a failure.
-
-The database stores its data on a bind mount, because Swarm cannot resolve
-relative paths. The source directory must exist on the node before the stack can
-start, otherwise Swarm rejects the database task with `bind source path does not
-exist` and the API crash-loops waiting on a database that never comes up.
-
-The deploy workflow creates it, so the normal deploy path needs nothing extra.
-`setup_host.sh` does the same thing for a hand deploy, or to prepare a node
-before its first deploy:
+Pushing to `main` deploys to the Gaia swarm. To deploy by hand:
 
 ```bash
 ./setup_host.sh
-```
-
-Neither one sets an owner, and that is deliberate. The postgres entrypoint runs
-as root and, on every start, chowns PGDATA to the postgres user and chmods it
-00700, so ownership on a fresh directory is handled for us. Re-owning a
-directory that already holds a database is actively harmful: a `chown -R` over
-a live PGDATA re-owns files out from under the running server, which then dies
-with `FATAL: could not open file "global/pg_filenode.map": Permission denied`.
-Create the directory and leave its contents alone.
-
-On an already-broken node the same entrypoint heals it — restarting the
-database task re-runs the chown as root and repairs PGDATA:
-
-```bash
-docker service update --force kratos_kratos-db
-```
-
-The workflow cannot `mkdir` a host path directly — the self-hosted runner is a
-container that mounts only the Docker socket and its own workspace, so
-`/opt/kratos/data` does not exist inside it. It goes through the daemon instead,
-mounting the host path into a throwaway `alpine` container, the same technique
-`odin/deploy.yml` uses for `/opt/odin/*`.
-
-### Deploying
-
-Pushing to `main` triggers `.github/workflows/deploy.yml` on the `gaia` runner.
-It logs in to the registry, builds both images, pushes them, and deploys the
-stack. To run it by hand, the same entrypoint works on the host:
-
-```bash
 ./scripts/deploy.sh "kratos" docker-compose.yml
 ```
 
-### Repository configuration
+## Documentation
 
-The workflow reads three repository variables and two secrets. They are set on
-the repository, not in the code:
-
-| Name                     | Kind     | Purpose                                  |
-|--------------------------|----------|------------------------------------------|
-| `DOMAIN_NAME`            | variable | apex domain used in the Traefik host rule |
-| `REGISTRY_PREFIX`        | variable | image prefix, e.g. `registry.example.net/` |
-| `KRATOS_DB_MOUNT_PATH`   | variable | optional; host path for the bind mount    |
-| `REGISTRY_USERNAME`      | secret   | registry login                            |
-| `REGISTRY_RAW_PASSWORD`  | secret   | registry login                            |
-
-`STACK_NAME` is set by `scripts/deploy.sh` from its argument (`kratos`), so the
-images are tagged `kratos`. There is no `POSTGRES_PASSWORD` — the database
-password is hardcoded; see "The database password" above. `KRATOS_DB_MOUNT_PATH`
-falls back to `/opt/kratos/data` when unset. If `REGISTRY_PREFIX` is unset,
-`scripts/deploy.sh` skips the push entirely and the images stay local.
+Full documentation lives in the vault:
+`Areas/90-Infrastructure/Kratos/Kratos Stack.md` — architecture, routing, the
+database password rationale, host-directory procedure, the fleet-wide label
+convention, troubleshooting, and pitfalls.
