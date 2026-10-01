@@ -13,14 +13,27 @@ set -e
 
 KRATOS_DB_DIR="${KRATOS_DB_MOUNT_PATH:-/opt/kratos/data}"
 
-echo "[Info] Creating live database directory at: $KRATOS_DB_DIR"
-sudo mkdir -p "$KRATOS_DB_DIR"
-# 1000:1000 matches the fleet convention — apollo-core's jellystat-db is the
-# other gaia Postgres bind mount and its setup script does the same. The postgres
-# entrypoint starts as root, chowns PGDATA to the postgres user and chmods it
-# 00700, so a directory owned any other way is simply re-owned on first init.
-sudo chown -R 1000:1000 "$KRATOS_DB_DIR"
-sudo chmod 755 "$KRATOS_DB_DIR"
+# Ownership is deliberately left alone here.
+#
+# The postgres entrypoint starts as root and, on every start, runs
+#
+#   find "$PGDATA" ! -user postgres -exec chown postgres '{}' +
+#   chmod 00700 "$PGDATA"
+#
+# so PGDATA ends up owned by postgres no matter what this script does. Chowning
+# it ourselves adds nothing on a fresh directory, and chowning it -R on a
+# directory that already holds a database re-owns live files out from under a
+# running server, which then dies with:
+#
+#   FATAL: could not open file "global/pg_filenode.map": Permission denied
+#
+# Only ever create the directory, and never touch what is already inside it.
+if [ -d "$KRATOS_DB_DIR" ]; then
+  echo "[Info] $KRATOS_DB_DIR already exists; leaving it untouched."
+else
+  echo "[Info] Creating live database directory at: $KRATOS_DB_DIR"
+  sudo mkdir -p "$KRATOS_DB_DIR"
+fi
 
 echo "[Success] Host directories initialised."
 echo "You can now deploy the stack to the swarm."
