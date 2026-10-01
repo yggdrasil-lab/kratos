@@ -11,6 +11,10 @@ services:
       - ${KRATOS_DB_MOUNT_PATH:-/opt/kratos/data}:/var/lib/postgresql/data
     networks:
       - aether-net
+    # Service root, not deploy.labels: -- the container is what dashboards
+    # group by, and only root labels reach it.
+    labels:
+      - "com.docker.compose.project=${STACK_NAME}"
     deploy:
       mode: replicated
       replicas: 1
@@ -19,8 +23,6 @@ services:
           - node.role == manager
       restart_policy:
         condition: on-failure
-      labels:
-        - "com.docker.compose.project=${STACK_NAME}"
 
   kratos-api:
     image: ${REGISTRY_PREFIX}kratos-api:${STACK_NAME:-latest}
@@ -34,6 +36,8 @@ services:
       - TZ=Pacific/Auckland
     networks:
       - aether-net
+    labels:
+      - "com.docker.compose.project=${STACK_NAME}"
     deploy:
       mode: replicated
       replicas: 1
@@ -43,7 +47,6 @@ services:
       restart_policy:
         condition: on-failure
       labels:
-        - "com.docker.compose.project=${STACK_NAME}"
         - "traefik.enable=true"
         # PathPrefix makes /api more specific than the web catch-all, so the API
         # wins for /api/* and everything else falls through to the client.
@@ -64,6 +67,8 @@ services:
       - TZ=Pacific/Auckland
     networks:
       - aether-net
+    labels:
+      - "com.docker.compose.project=${STACK_NAME}"
     deploy:
       mode: replicated
       replicas: 1
@@ -73,7 +78,6 @@ services:
       restart_policy:
         condition: on-failure
       labels:
-        - "com.docker.compose.project=${STACK_NAME}"
         - "traefik.enable=true"
         - "traefik.http.routers.kratos-web.rule=Host(`kratos.${DOMAIN_NAME:?DOMAIN_NAME is required}`)"
         - "traefik.http.routers.kratos-web.entrypoints=websecure"
