@@ -129,17 +129,28 @@ Migrations therefore run on every deploy, and a database that is not ready yet i
 retried rather than treated as a failure.
 
 The database stores its data on a bind mount, because Swarm cannot resolve
-relative paths. Create the directory on the node once, before the first deploy:
+relative paths. The source directory must exist on the node before the stack can
+start, otherwise Swarm rejects the database task with `bind source path does not
+exist` and the API crash-loops waiting on a database that never comes up.
+
+The deploy workflow creates it, so the normal deploy path needs nothing extra.
+`setup_host.sh` does the same thing for a hand deploy, or to prepare a node
+before its first deploy:
 
 ```bash
 ./setup_host.sh
 ```
 
-Run this **on the Gaia host by hand, not from the deploy workflow.** The
-self-hosted runner is itself a container — it mounts only the Docker socket and
-its own workspace, so a host path like `/opt/kratos/data` does not exist inside
-it, and an `mkdir` there either fails or silently creates nothing. It is
-deliberately kept out of `deploy.yml` for that reason.
+Both set the directory to 1000:1000, the fleet convention for Postgres bind
+mounts (apollo-core's `jellystat-db` does the same on this node). The postgres
+entrypoint runs as root, chowns PGDATA to the postgres user and chmods it 00700,
+so the directory is re-owned on first init regardless.
+
+The workflow cannot `mkdir` a host path directly — the self-hosted runner is a
+container that mounts only the Docker socket and its own workspace, so
+`/opt/kratos/data` does not exist inside it. It goes through the daemon instead,
+mounting the host path into a throwaway `alpine` container, the same technique
+`odin/deploy.yml` uses for `/opt/odin/*`.
 
 ### Deploying
 
