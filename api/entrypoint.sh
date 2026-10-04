@@ -6,6 +6,13 @@ set -e
 # here; see "The database password" in
 # Areas/90-Infrastructure/Kratos/Kratos Stack.md.
 
+# Swarm delivers the MCP token as a file, but the app reads KRATOS_MCP_TOKEN
+# from the environment (pydantic-settings). Bridge the two here.
+if [ -n "${KRATOS_MCP_TOKEN_FILE:-}" ]; then
+    KRATOS_MCP_TOKEN=$(cat "$KRATOS_MCP_TOKEN_FILE")
+    export KRATOS_MCP_TOKEN
+fi
+
 # Swarm starts services independently, so the database may not be accepting
 # connections yet. Retry the migration rather than assuming ordering.
 attempt=1
