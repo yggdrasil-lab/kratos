@@ -13,7 +13,8 @@ from sqlalchemy.orm import Session
 from app import __version__
 from app.config import settings
 from app.db import get_db
-from app.routers import catalogue, log, plan, stats, mcp
+from app.routers import catalogue, log, plan, stats
+from app.routers.mcp import install_mcp
 from app.schemas import HealthRead
 
 app = FastAPI(
@@ -34,7 +35,10 @@ app.include_router(catalogue.router)
 app.include_router(plan.router)
 app.include_router(log.router)
 app.include_router(stats.router)
-app.include_router(mcp.router)
+
+# The MCP endpoint at /mcp is not an APIRouter: it registers the SDK's own
+# streamable-HTTP routes on this app and adds its bearer-token guard.
+install_mcp(app)
 
 
 @app.get("/health", response_model=HealthRead, tags=["meta"])
