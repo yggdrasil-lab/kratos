@@ -39,10 +39,10 @@ export interface SetEntry {
   set_number: number
   status: SetStatus
   reps: number | null
-  weight_kg: string | null
+  weight_kg: number | null
   duration_s: number | null
   distance_m: number | null
-  rpe: string | null
+  rpe: number | null
   notes: string | null
   extra: Record<string, unknown>
 }

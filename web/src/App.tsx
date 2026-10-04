@@ -1,23 +1,22 @@
 import { useEffect, useState } from 'react'
 import { api } from './api'
-import { flush, pending } from './outbox'
+import { db } from './db'
+import { enqueue, flush, newId, pending } from './outbox'
 import type { Exercise, SessionPayload, SessionItemPayload, SetEntry } from './types'
 
 type Status = { kind: 'idle' | 'busy' | 'error'; message?: string }
 
-// Quick utility to generate uuids on the client
-function generateUUID() {
-  return crypto.randomUUID()
-}
+const DRAFT_KEY = 'current'
 
 export function App() {
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [queued, setQueued] = useState(0)
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
-  
+
   // App state
   const [session, setSession] = useState<SessionPayload | null>(null)
   const [showExercisePicker, setShowExercisePicker] = useState(false)
+  const [search, setSearch] = useState('')
 
   async function refresh() {
     setQueued((await pending()).length)
@@ -27,9 +26,10 @@ export function App() {
       setExercises(Array.isArray(ex) ? ex : [])
       setStatus({ kind: 'idle' })
     } catch (error) {
+      console.error('Could not reach the API', error)
       setStatus({
         kind: 'error',
-        message: error instanceof Error ? error.message : String(error),
+        message: 'Could not reach the API. The app still works offline; sessions are kept on the device until the next sync.',
       })
       setExercises([]) // fallback
     }
@@ -39,14 +39,43 @@ export function App() {
     setStatus({ kind: 'busy', message: 'Syncing…' })
     const left = await flush()
     setQueued(left)
-    setStatus({
-      kind: 'idle',
-      message: left === 0 ? 'Up to date.' : `${left} still queued.`,
-    })
+    setStatus(
+      left === 0
+        ? { kind: 'idle', message: 'Up to date.' }
+        : { kind: 'error', message: `${left} still queued — will sync when online.` },
+    )
+  }
+
+  // The in-progress workout is persisted to Dexie on every mutation so a
+  // reload/backgrounding doesn't lose it. Only the single "current" draft is kept.
+  async function persistDraft(next: SessionPayload | null) {
+    try {
+      if (next) {
+        await db.drafts.put({ id: DRAFT_KEY, session: next, savedAt: Date.now() })
+      } else {
+        await db.drafts.delete(DRAFT_KEY)
+      }
+    } catch (error) {
+      console.error('Failed to persist draft', error)
+    }
+  }
+
+  function updateSession(next: SessionPayload | null) {
+    setSession(next)
+    void persistDraft(next)
   }
 
   useEffect(() => {
     void refresh()
+    // Restore a draft that survived a reload/backgrounding.
+    void (async () => {
+      try {
+        const draft = await db.drafts.get(DRAFT_KEY)
+        if (draft?.session) setSession(draft.session)
+      } catch (error) {
+        console.error('Failed to restore draft', error)
+      }
+    })()
     const onVisible = () => {
       if (document.visibilityState === 'visible') void sync()
     }
@@ -55,77 +84,79 @@ export function App() {
   }, [])
 
   const startSession = () => {
-    setSession({
-      id: generateUUID(),
+    updateSession({
+      id: newId(),
       routine_id: null,
       started_at: new Date().toISOString(),
       ended_at: null,
       notes: null,
       extra: {},
-      items: []
+      items: [],
     })
   }
 
   const finishSession = async () => {
     if (!session) return
-    const finalSession = {
+    const finalSession: SessionPayload = {
       ...session,
-      ended_at: new Date().toISOString()
+      ended_at: new Date().toISOString(),
     }
-    setSession(null)
-    
-    // Save to outbox
+    updateSession(null)
+
+    // Durable local write first, then an immediate drain attempt. If offline the
+    // entry stays queued and flushes on the next launch/resume.
     try {
-      await api.putSession(finalSession)
-      void refresh() // Update queued count
-    } catch (e) {
-      console.error("Failed to put session", e)
-      // Actually it's saved in outbox? Wait, api.putSession talks directly to API. 
-      // If we want to save offline, we should just use outbox. Wait, api.putSession is defined in api.ts to hit API.
-      // The outbox architecture intercepts it or handles retries?
-      // Looking at original App.tsx, they used `sync` to flush.
-      // I will just put it to API directly, and if it fails, the user can sync later?
-      // Wait, let's just assume `api.putSession` is what we use.
+      await enqueue(finalSession)
+      const left = await flush()
+      setQueued(left)
+      setStatus(
+        left === 0
+          ? { kind: 'idle', message: 'Up to date.' }
+          : { kind: 'error', message: 'Saved offline — will sync when online.' },
+      )
+    } catch (error) {
+      console.error('Failed to save session', error)
+      setStatus({ kind: 'error', message: 'Could not save this workout. Please try again.' })
     }
   }
 
   const addExerciseToSession = (exercise: Exercise) => {
     if (!session) return
-    
+
     const newItem: SessionItemPayload = {
-      id: generateUUID(),
+      id: newId(),
       exercise_id: exercise.id,
       position: session.items.length,
       notes: null,
       extra: {},
-      sets: []
+      sets: [],
     }
-    
-    setSession({
+
+    updateSession({
       ...session,
-      items: [...session.items, newItem]
+      items: [...session.items, newItem],
     })
     setShowExercisePicker(false)
   }
 
   const removeExercise = (itemId: string) => {
     if (!session) return
-    setSession({
+    updateSession({
       ...session,
-      items: session.items.filter(item => item.id !== itemId)
+      items: session.items.filter((item) => item.id !== itemId),
     })
   }
 
   const addSet = (itemIndex: number) => {
     if (!session) return
-    const newItems = [...session.items]
+    const newItems = session.items.map((it, i) => (i === itemIndex ? { ...it } : it))
     const item = newItems[itemIndex]
-    
+
     // Copy previous set if exists, otherwise defaults
     const prevSet = item.sets[item.sets.length - 1]
-    
+
     const newSet: SetEntry = {
-      id: generateUUID(),
+      id: newId(),
       set_number: item.sets.length + 1,
       status: 'done',
       reps: prevSet ? prevSet.reps : null,
@@ -134,41 +165,52 @@ export function App() {
       distance_m: null,
       rpe: null,
       notes: null,
-      extra: {}
+      extra: {},
     }
-    
-    item.sets.push(newSet)
-    setSession({ ...session, items: newItems })
+
+    item.sets = [...item.sets, newSet]
+    newItems[itemIndex] = item
+    updateSession({ ...session, items: newItems })
   }
 
-  const updateSet = (itemIndex: number, setIndex: number, field: keyof SetEntry, value: string | number | null) => {
+  const updateSet = (itemIndex: number, setIndex: number, field: 'weight_kg' | 'reps', value: number | null) => {
     if (!session) return
     const newItems = [...session.items]
-    newItems[itemIndex].sets[setIndex] = {
-      ...newItems[itemIndex].sets[setIndex],
-      [field]: value
-    }
-    setSession({ ...session, items: newItems })
+    const sets = [...newItems[itemIndex].sets]
+    sets[setIndex] = { ...sets[setIndex], [field]: value }
+    newItems[itemIndex] = { ...newItems[itemIndex], sets }
+    updateSession({ ...session, items: newItems })
   }
 
   const removeSet = (itemIndex: number, setIndex: number) => {
     if (!session) return
-    const newItems = [...session.items]
-    newItems[itemIndex].sets.splice(setIndex, 1)
-    
-    // Re-index sets
-    newItems[itemIndex].sets.forEach((s, i) => s.set_number = i + 1)
-    
-    setSession({ ...session, items: newItems })
+    const newItems = session.items.map((it, i) => {
+      if (i !== itemIndex) return it
+      const sets = it.sets
+        .filter((_, j) => j !== setIndex)
+        .map((s, j) => ({ ...s, set_number: j + 1 }))
+      return { ...it, sets }
+    })
+    updateSession({ ...session, items: newItems })
   }
+
+  const filteredExercises = search.trim()
+    ? exercises.filter((e) => e.name.toLowerCase().includes(search.trim().toLowerCase()))
+    : exercises
 
   return (
     <main className="animate-fade-in">
       <header className="header-area">
         <h1>Kratos</h1>
         <div className="flex-row" style={{ justifyContent: 'center', marginTop: '0.5rem' }}>
-          <span className={`status-badge ${status.kind === 'busy' ? 'syncing' : ''}`}>
-            {status.kind === 'busy' ? 'Syncing...' : (queued === 0 ? 'All synced' : `${queued} pending`)}
+          <span className={`status-badge ${status.kind === 'busy' ? 'syncing' : status.kind === 'error' ? 'error' : ''}`}>
+            {status.kind === 'busy'
+              ? 'Syncing...'
+              : status.kind === 'error'
+                ? 'Offline — data saved locally'
+                : queued === 0
+                  ? 'All synced'
+                  : `${queued} pending`}
           </span>
           {queued > 0 && (
             <button className="btn-secondary" style={{ padding: '0.2rem 0.6rem', fontSize: '0.8rem' }} onClick={sync} disabled={status.kind === 'busy'}>
@@ -176,7 +218,7 @@ export function App() {
             </button>
           )}
         </div>
-        {status.message && status.kind === 'error' && (
+        {status.kind === 'error' && status.message && (
           <p style={{ color: 'var(--danger-color)', marginTop: '0.5rem' }}>{status.message}</p>
         )}
       </header>
@@ -304,13 +346,25 @@ export function App() {
               </button>
             </div>
             
-            <input type="text" placeholder="Search exercises..." style={{ marginBottom: '1rem' }} />
+            <input
+              type="text"
+              placeholder="Search exercises..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{ marginBottom: '1rem' }}
+            />
             
             {exercises.length === 0 ? (
-              <p style={{ textAlign: 'center', padding: '2rem' }}>No exercises found. Add some to the database first.</p>
+              status.kind === 'error' ? (
+                <p style={{ textAlign: 'center', padding: '2rem' }}>Couldn't load exercises — check your connection and try again.</p>
+              ) : (
+                <p style={{ textAlign: 'center', padding: '2rem' }}>No exercises found. Add some to the database first.</p>
+              )
+            ) : filteredExercises.length === 0 ? (
+              <p style={{ textAlign: 'center', padding: '2rem' }}>No exercises match your search.</p>
             ) : (
               <ul className="exercise-list">
-                {exercises.map(exercise => (
+                {filteredExercises.map(exercise => (
                   <li key={exercise.id} className="exercise-item" onClick={() => addExerciseToSession(exercise)}>
                     <div>
                       <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{exercise.name}</div>

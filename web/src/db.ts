@@ -12,13 +12,25 @@ export interface QueuedSession {
   lastError?: string
 }
 
+// The single in-progress workout, persisted so a reload/backgrounding can
+// restore it. Only the "current" draft is kept — finishing the session removes it.
+export interface DraftSession {
+  id: string
+  session: SessionPayload
+  savedAt: number
+}
+
 class KratosDb extends Dexie {
   outbox!: Table<QueuedSession, string>
+  drafts!: Table<DraftSession, string>
 
   constructor() {
     super('kratos')
     this.version(1).stores({
       outbox: 'id, queuedAt',
+    })
+    this.version(2).stores({
+      drafts: 'id, savedAt',
     })
   }
 }
