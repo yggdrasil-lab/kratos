@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -19,6 +20,31 @@ def _get_or_404(db: Session, exercise_id: uuid.UUID) -> Exercise:
     if exercise is None or exercise.deleted_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Exercise not found")
     return exercise
+
+
+def _commit_or_409(db: Session, name: str) -> None:
+    """Commit, mapping a duplicate `exercise.name` onto a clean 409.
+
+    `exercise.name` carries a global unique constraint, so a second row with the
+    same name is refused by the database. The spec is explicit that a duplicate
+    name "must fail loudly" (Specs - MCP endpoint.md) and that `exercise_create`
+    "rejects a duplicate by name rather than making a second one" — an
+    unhandled `IntegrityError` surfacing as a 500 is not that. Any other
+    integrity failure is a real error and keeps propagating.
+    """
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        if "exercise_name_key" not in str(exc.orig):
+            raise
+        existing = db.execute(
+            select(Exercise).where(Exercise.name == name)
+        ).scalar_one_or_none()
+        detail = f"An exercise named {name!r} already exists"
+        if existing is not None and existing.deleted_at is not None:
+            detail += " (soft-deleted, so it is hidden from the catalogue)"
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=detail) from exc
 
 
 @router.get("", response_model=list[ExerciseRead])
@@ -40,7 +66,7 @@ def list_exercises(
 def create_exercise(payload: ExerciseCreate, db: Session = Depends(get_db)) -> Exercise:
     exercise = Exercise(**payload.model_dump(exclude_none=True))
     db.add(exercise)
-    db.commit()
+    _commit_or_409(db, exercise.name)
     db.refresh(exercise)
     return exercise
 
@@ -57,7 +83,7 @@ def update_exercise(
     exercise = _get_or_404(db, exercise_id)
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(exercise, field, value)
-    db.commit()
+    _commit_or_409(db, exercise.name)
     db.refresh(exercise)
     return exercise
 

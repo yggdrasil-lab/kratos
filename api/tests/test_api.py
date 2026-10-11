@@ -135,3 +135,31 @@ def test_stats_endpoints_read_the_views(client) -> None:
 
     last = client.get("/stats/last").json()
     assert len(last) == 1 and last[0]["reps"] == 10
+
+
+def test_duplicate_exercise_name_is_a_clean_conflict(client) -> None:
+    """A second exercise with the same name is rejected, not a 500.
+
+    The spec requires `exercise_create` to reject a duplicate by name rather
+    than making a second one, and a duplicate name "must fail loudly" — an
+    unhandled IntegrityError is a 500, which is neither.
+    """
+    first = client.post("/exercises", json={"name": "Zercher Squat"})
+    assert first.status_code == 201
+
+    duplicate = client.post("/exercises", json={"name": "Zercher Squat"})
+    assert duplicate.status_code == 409
+    assert "already exists" in duplicate.json()["detail"]
+
+    # The catalogue still holds exactly one row.
+    assert len(client.get("/exercises").json()) == 1
+
+
+def test_renaming_onto_an_existing_name_is_a_conflict(client) -> None:
+    """The same guard covers PATCH, which can collide on rename."""
+    client.post("/exercises", json={"name": "Overhead Press"})
+    second = client.post("/exercises", json={"name": "Behind Neck Press"}).json()
+
+    response = client.patch(f"/exercises/{second['id']}", json={"name": "Overhead Press"})
+    assert response.status_code == 409
+    assert "already exists" in response.json()["detail"]
