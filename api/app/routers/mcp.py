@@ -32,10 +32,11 @@ from __future__ import annotations
 import contextlib
 import json
 import uuid
-from typing import Any
+from typing import Any, Iterator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
 from sqlalchemy.orm import Session
 from starlette.applications import Starlette
@@ -116,6 +117,22 @@ def mcp_session() -> Session:
     from app.db import SessionLocal
 
     return SessionLocal()
+
+
+@contextlib.contextmanager
+def _tool_errors() -> Iterator[None]:
+    """Surface a router ``HTTPException`` as a clean MCP tool error.
+
+    The MCP tools call the same functions the REST routes use. When one raises
+    (a duplicate name is a 409, not a 500), the SDK would otherwise stringify
+    the exception as ``"409: An exercise named ..."``. Re-raising the detail
+    alone keeps the message a sentence an agent can act on. Anything that is
+    not an ``HTTPException`` keeps propagating untouched.
+    """
+    try:
+        yield
+    except HTTPException as exc:
+        raise ToolError(str(exc.detail)) from exc
 
 
 def _with_source(extra: dict | None) -> dict:
@@ -236,7 +253,7 @@ def build_mcp_server() -> MCPServer:
             fields["secondary_muscles"] = secondary_muscles
         if notes is not None:
             fields["notes"] = notes
-        with mcp_session() as db:
+        with mcp_session() as db, _tool_errors():
             return _serialise_exercise(_create_exercise(ExerciseCreate(**fields), db=db))
 
     @server.tool(name="exercise_update", description="Update an existing exercise.")
@@ -262,7 +279,7 @@ def build_mcp_server() -> MCPServer:
         }.items():
             if value is not None:
                 fields[key] = value
-        with mcp_session() as db:
+        with mcp_session() as db, _tool_errors():
             exercise = _get_exercise(uuid.UUID(exercise_id), db=db)
             # Merge, so an update records provenance without dropping keys a
             # previous writer left in `extra`.

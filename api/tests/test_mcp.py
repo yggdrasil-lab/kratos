@@ -191,3 +191,19 @@ def test_mcp_routine_with_items(authorized_client: TestClient):
     )
     assert [item["position"] for item in fetched["items"]] == [1]
     assert fetched["items"][0]["exercise_id"] == exercise["id"]
+
+
+def test_mcp_duplicate_exercise_name_is_a_tool_error(authorized_client: TestClient):
+    """A duplicate create over MCP fails loudly, as a tool error.
+
+    The MCP create tool delegates to the same `create_exercise` the REST layer
+    uses, so the conflict surfaces as a clean isError rather than a 500.
+    """
+    _initialize(authorized_client)
+
+    first = _call_tool(authorized_client, "exercise_create", {"name": "Front Squat"})
+    assert "result" in first and first["result"].get("isError") is not True
+
+    duplicate = _call_tool(authorized_client, "exercise_create", {"name": "Front Squat"})
+    assert duplicate["result"]["isError"] is True
+    assert "already exists" in duplicate["result"]["content"][0]["text"]
