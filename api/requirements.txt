@@ -5,3 +5,7 @@ alembic>=1.13.0
 psycopg[binary]>=3.2.0
 pydantic>=2.7.0
 pydantic-settings>=2.3.0
+
+# Official MCP Python SDK — the /mcp endpoint is built on MCPServer
+# (mcp.server.mcpserver), which replaced FastMCP in 2.x.
+mcp>=2.3.0,<3.0.0

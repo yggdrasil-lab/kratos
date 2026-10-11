@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     log_level: str = "INFO"
     cors_origins: str = "http://localhost:5173"
+    mcp_token: str | None = None
 
     @property
     def cors_origin_list(self) -> list[str]:

@@ -22,6 +22,16 @@ jobs:
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.REGISTRY_RAW_PASSWORD }}
 
+      # Registers the MCP bearer token as a Docker secret and exports the
+      # generated name (kratos_mcp_token_<hash>) for the deploy step. Content
+      # comes from the repo's KRATOS_MCP_TOKEN secret.
+      - name: Setup Secrets
+        env:
+          KRATOS_MCP_TOKEN: ${{ secrets.KRATOS_MCP_TOKEN }}
+        run: |
+          chmod +x scripts/ensure_secret.sh
+          echo "KRATOS_MCP_TOKEN_NAME=$(echo "$KRATOS_MCP_TOKEN" | ./scripts/ensure_secret.sh kratos_mcp_token)" >> $GITHUB_ENV
+
       - name: Prepare host data directory
         env:
           KRATOS_DB_MOUNT_PATH: ${{ vars.KRATOS_DB_MOUNT_PATH }}

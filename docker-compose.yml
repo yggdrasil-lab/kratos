@@ -34,7 +34,13 @@ services:
       # Areas/90-Infrastructure/Kratos/Kratos Stack.md.
       - KRATOS_DATABASE_URL=postgresql+psycopg://kratos:kratos@kratos-db:5432/kratos
       - KRATOS_ENVIRONMENT=production
+      # The MCP bearer token arrives as a file; entrypoint.sh exports it as
+      # KRATOS_MCP_TOKEN for pydantic-settings. Same shape as the fleet's other
+      # *_FILE env vars.
+      - KRATOS_MCP_TOKEN_FILE=/run/secrets/kratos_mcp_token
       - TZ=Pacific/Auckland
+    secrets:
+      - kratos_mcp_token
     networks:
       - aether-net
     labels:
@@ -58,6 +64,16 @@ services:
         - "traefik.http.routers.kratos-api.middlewares=authelia,kratos-api-strip"
         # The client calls /api/*; the service itself serves unprefixed routes.
         - "traefik.http.middlewares.kratos-api-strip.stripprefix.prefixes=/api"
+        # The MCP endpoint is machine-to-machine: an agent presents a bearer
+        # token, which Authelia's forward-auth would challenge. Give /mcp its own
+        # router on the same service with no auth middleware and no prefix strip
+        # (the API serves /mcp itself). The longer path prefix outranks the web
+        # catch-all, so /mcp reaches the API instead of the client.
+        - "traefik.http.routers.kratos-mcp.rule=Host(`kratos.${DOMAIN_NAME:?DOMAIN_NAME is required}`) && PathPrefix(`/mcp`)"
+        - "traefik.http.routers.kratos-mcp.entrypoints=websecure"
+        - "traefik.http.routers.kratos-mcp.tls=true"
+        - "traefik.http.routers.kratos-mcp.tls.certresolver=cloudflare"
+        - "traefik.http.routers.kratos-mcp.service=kratos-api"
         - "traefik.http.services.kratos-api.loadbalancer.server.port=8000"
         - "traefik.docker.network=aether-net"
 
@@ -91,3 +107,11 @@ services:
 networks:
   aether-net:
     external: true
+
+secrets:
+  # Created by CI with scripts/ensure_secret.sh, which appends a content hash to
+  # the name (kratos_mcp_token_<hash>). The resulting name is exported as
+  # KRATOS_MCP_TOKEN_NAME for the deploy.
+  kratos_mcp_token:
+    external: true
+    name: ${KRATOS_MCP_TOKEN_NAME}
