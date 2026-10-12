@@ -110,15 +110,19 @@ export function App() {
           target_weight_kg: item.target_weight_kg,
           target_duration_s: item.target_duration_s,
         },
-        // Pre-stage the planned sets with their targets so the workout is
-        // prepared in the app and only the actuals need recording.
+        // Pre-stage the planned sets so the workout is prepared in the app and
+        // only the actuals need recording. They start empty and 'skipped' —
+        // planned, not performed — so finishing an untrained session cannot
+        // write phantom completed sets into the stats that drive next week's
+        // plan. Entering a value flips the set to 'done' (see updateSet); the
+        // planned targets are carried on the item and shown as placeholders.
         sets: Array.from({ length: item.target_sets ?? 0 }, (_, i) => ({
           id: newId(),
           set_number: i + 1,
-          status: 'done' as const,
-          reps: item.target_reps,
-          weight_kg: item.target_weight_kg,
-          duration_s: item.target_duration_s,
+          status: 'skipped' as const,
+          reps: null,
+          weight_kg: null,
+          duration_s: null,
           distance_m: null,
           rpe: null,
           notes: null,
@@ -200,7 +204,9 @@ export function App() {
     const newSet: SetEntry = {
       id: newId(),
       set_number: item.sets.length + 1,
-      status: 'done',
+      // A new row inherits the previous set's outcome rather than assuming a
+      // completed set, so adding a row to an untrained exercise stays 'skipped'.
+      status: prevSet ? prevSet.status : 'skipped',
       reps: prevSet ? prevSet.reps : null,
       weight_kg: prevSet ? prevSet.weight_kg : null,
       duration_s: null,
@@ -219,7 +225,13 @@ export function App() {
     if (!session) return
     const newItems = [...session.items]
     const sets = [...newItems[itemIndex].sets]
-    sets[setIndex] = { ...sets[setIndex], [field]: value }
+    const prev = sets[setIndex]
+    // Recording an actual marks the set performed; clearing both metrics puts
+    // it back to 'skipped' so a planned-but-untrained set never counts.
+    const nextReps = field === 'reps' ? value : prev.reps
+    const nextWeight = field === 'weight_kg' ? value : prev.weight_kg
+    const status = nextReps === null && nextWeight === null ? 'skipped' : 'done'
+    sets[setIndex] = { ...prev, [field]: value, status }
     newItems[itemIndex] = { ...newItems[itemIndex], sets }
     updateSession({ ...session, items: newItems })
   }
@@ -347,6 +359,10 @@ export function App() {
               <div className="flex-col" style={{ gap: '2rem' }}>
                 {session.items.map((item, itemIdx) => {
                   const exercise = exercises.find(e => e.id === item.exercise_id)
+                  // Planned targets ride on the item; shown as input placeholders
+                  // so an untouched set stays empty (and 'skipped').
+                  const targetReps = (item.extra?.target_reps as number | null) ?? null
+                  const targetWeight = (item.extra?.target_weight_kg as number | null) ?? null
                   return (
                     <div key={item.id} className="workout-item">
                       <div className="flex-between" style={{ marginBottom: '1rem' }}>
@@ -372,13 +388,13 @@ export function App() {
                             <input 
                               type="number" 
                               step="0.5"
-                              placeholder="Weight" 
+                              placeholder={targetWeight !== null ? String(targetWeight) : 'Weight'} 
                               value={set.weight_kg || ''} 
                               onChange={(e) => updateSet(itemIdx, setIdx, 'weight_kg', e.target.value ? parseFloat(e.target.value) : null)}
                             />
                             <input 
                               type="number" 
-                              placeholder="Reps" 
+                              placeholder={targetReps !== null ? String(targetReps) : 'Reps'} 
                               value={set.reps || ''} 
                               onChange={(e) => updateSet(itemIdx, setIdx, 'reps', e.target.value ? parseInt(e.target.value) : null)}
                             />
