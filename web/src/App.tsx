@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from './api'
 import { db } from './db'
 import { enqueue, flush, newId, pending } from './outbox'
-import type { Exercise, SessionPayload, SessionItemPayload, SetEntry } from './types'
+import type { Exercise, Routine, SessionPayload, SessionItemPayload, SetEntry } from './types'
 
 type Status = { kind: 'idle' | 'busy' | 'error'; message?: string }
 
@@ -10,6 +10,7 @@ const DRAFT_KEY = 'current'
 
 export function App() {
   const [exercises, setExercises] = useState<Exercise[]>([])
+  const [routines, setRoutines] = useState<Routine[]>([])
   const [queued, setQueued] = useState(0)
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
 
@@ -24,6 +25,15 @@ export function App() {
       const ex = await api.exercises()
       // ensure we get an array back
       setExercises(Array.isArray(ex) ? ex : [])
+      try {
+        const rt = await api.routines()
+        setRoutines(Array.isArray(rt) ? rt : [])
+      } catch (error) {
+        // Routines are the planning layer; failing to load them must not take
+        // the exercise catalogue down with it, so degrade to empty.
+        console.error('Could not load routines', error)
+        setRoutines([])
+      }
       setStatus({ kind: 'idle' })
     } catch (error) {
       console.error('Could not reach the API', error)
@@ -83,15 +93,47 @@ export function App() {
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [])
 
-  const startSession = () => {
+  // Starting from a routine pre-fills the planned exercises and their target
+  // sets, so the session is ready to log against instead of an empty shell.
+  const startSession = (routine?: Routine) => {
+    const items: SessionItemPayload[] = (routine?.items ?? [])
+      .slice()
+      .sort((a, b) => a.position - b.position)
+      .map((item, index) => ({
+        id: newId(),
+        exercise_id: item.exercise_id,
+        position: index,
+        notes: item.notes,
+        extra: {
+          target_sets: item.target_sets,
+          target_reps: item.target_reps,
+          target_weight_kg: item.target_weight_kg,
+          target_duration_s: item.target_duration_s,
+        },
+        // Pre-stage the planned sets with their targets so the workout is
+        // prepared in the app and only the actuals need recording.
+        sets: Array.from({ length: item.target_sets ?? 0 }, (_, i) => ({
+          id: newId(),
+          set_number: i + 1,
+          status: 'done' as const,
+          reps: item.target_reps,
+          weight_kg: item.target_weight_kg,
+          duration_s: item.target_duration_s,
+          distance_m: null,
+          rpe: null,
+          notes: null,
+          extra: {},
+        })),
+      }))
+
     updateSession({
       id: newId(),
-      routine_id: null,
+      routine_id: routine?.id ?? null,
       started_at: new Date().toISOString(),
       ended_at: null,
       notes: null,
-      extra: {},
-      items: [],
+      extra: routine ? { routine_name: routine.name } : {},
+      items,
     })
   }
 
@@ -249,10 +291,42 @@ export function App() {
               </svg>
             </div>
             <h2>Ready to train?</h2>
-            <p style={{ marginBottom: '1.5rem' }}>Start an empty session and log as you go.</p>
-            <button className="btn-primary" onClick={startSession} style={{ padding: '1rem 2rem', fontSize: '1.1rem' }}>
-              Start Workout
-            </button>
+            {routines.length > 0 ? (
+              <>
+                <p style={{ marginBottom: '1.25rem' }}>Pick today&rsquo;s planned workout, then log your actuals.</p>
+                <div className="flex-col" style={{ gap: '0.75rem', width: '100%', maxWidth: '420px' }}>
+                  {routines.map((routine) => (
+                    <button
+                      key={routine.id}
+                      className="btn-primary"
+                      onClick={() => startSession(routine)}
+                      style={{ padding: '0.9rem 1.25rem', fontSize: '1rem', width: '100%' }}
+                    >
+                      <span style={{ display: 'block', fontWeight: 600 }}>{routine.name}</span>
+                      {routine.items.length > 0 && (
+                        <span style={{ display: 'block', fontSize: '0.8rem', opacity: 0.85, marginTop: '0.15rem' }}>
+                          {routine.items.length} exercises planned
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                  <button
+                    className="btn-secondary"
+                    onClick={() => startSession()}
+                    style={{ padding: '0.6rem 1rem', fontSize: '0.85rem' }}
+                  >
+                    Start empty session
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p style={{ marginBottom: '1.5rem' }}>Start an empty session and log as you go.</p>
+                <button className="btn-primary" onClick={() => startSession()} style={{ padding: '1rem 2rem', fontSize: '1.1rem' }}>
+                  Start Workout
+                </button>
+              </>
+            )}
           </div>
         </section>
       ) : (
