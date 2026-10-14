@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Exercise, SessionItemPayload, SessionPayload, SetEntry } from '../types'
+import type { Exercise, SessionPayload, SetEntry } from '../types'
 
 interface HistoryViewProps {
   sessions: SessionPayload[]

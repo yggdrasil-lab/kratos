@@ -1,17 +1,19 @@
 import { useEffect, useState } from 'react'
 import { api } from './api'
 import { db, requestPersistence } from './db'
-import { drainOutbox, pendingCount, queueSession, type SyncStatus } from './outbox'
+import { enqueue, flush, newId, pending } from './outbox'
 import type { ActiveTab, Exercise, Routine, SessionItemPayload, SessionPayload } from './types'
 import { WeekView } from './components/WeekView'
 import { HistoryView } from './components/HistoryView'
 import { BottomNav } from './components/BottomNav'
 
+type Status = { kind: 'idle' | 'busy' | 'error'; message?: string }
+
 const DRAFT_KEY = 'current'
 
 export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('train')
-  const [status, setStatus] = useState<SyncStatus>({ kind: 'idle' })
+  const [status, setStatus] = useState<Status>({ kind: 'idle' })
   const [queued, setQueued] = useState<number>(0)
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [routines, setRoutines] = useState<Routine[]>([])
@@ -22,10 +24,29 @@ export function App() {
   const [search, setSearch] = useState<string>('')
 
   const sync = async () => {
+    setStatus({ kind: 'busy', message: 'Syncing…' })
     try {
-      await drainOutbox(setStatus)
-    } finally {
-      setQueued(await pendingCount())
+      const left = await flush()
+      setQueued(left)
+      setStatus(
+        left === 0
+          ? { kind: 'idle', message: 'Up to date.' }
+          : { kind: 'error', message: `${left} still queued — will sync when online.` }
+      )
+    } catch (err) {
+      setStatus({
+        kind: 'error',
+        message: err instanceof Error ? err.message : 'Sync failed',
+      })
+    }
+  }
+
+  const refreshQueueCount = async () => {
+    try {
+      const items = await pending()
+      setQueued(items.length)
+    } catch {
+      // ignore
     }
   }
 
@@ -36,7 +57,7 @@ export function App() {
       setSessions(data)
     } catch {
       // Offline fallback: check outbox sessions
-      const queuedSessions = await db.outbox.toArray()
+      const queuedSessions = await pending()
       if (queuedSessions.length > 0) {
         setSessions(queuedSessions.map((q) => q.payload))
       }
@@ -47,7 +68,7 @@ export function App() {
 
   useEffect(() => {
     requestPersistence()
-    sync()
+    refreshQueueCount()
 
     db.drafts.get(DRAFT_KEY).then((draft) => {
       if (draft) setSession(draft.session)
@@ -60,6 +81,12 @@ export function App() {
       // Non-fatal: user can still start an empty session.
     })
     loadSessions()
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void sync()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
   }, [])
 
   const updateSession = (next: SessionPayload | null) => {
@@ -72,34 +99,38 @@ export function App() {
   }
 
   const startSession = (routine?: Routine) => {
-    const id = crypto.randomUUID()
+    const id = newId()
     const started_at = new Date().toISOString()
-    const items: SessionItemPayload[] = (routine?.items ?? []).map((it, idx) => {
-      const targetSets = it.target_sets ?? 1
-      return {
-        id: crypto.randomUUID(),
-        exercise_id: it.exercise_id,
-        position: idx + 1,
-        notes: it.notes,
-        extra: {
-          target_reps: it.target_reps,
-          target_weight_kg: it.target_weight_kg,
-        },
-        sets: Array.from({ length: targetSets }, (_, setIdx) => ({
-          id: crypto.randomUUID(),
-          set_number: setIdx + 1,
-          // Planned sets start skipped; only recording a weight/rep flips to 'done'.
-          status: 'skipped' as const,
-          reps: null,
-          weight_kg: null,
-          duration_s: null,
-          distance_m: null,
-          rpe: null,
-          notes: null,
-          extra: {},
-        })),
-      }
-    })
+    const items: SessionItemPayload[] = (routine?.items ?? [])
+      .slice()
+      .sort((a, b) => a.position - b.position)
+      .map((it, idx) => {
+        const targetSets = it.target_sets ?? 1
+        return {
+          id: newId(),
+          exercise_id: it.exercise_id,
+          position: idx,
+          notes: it.notes,
+          extra: {
+            target_sets: it.target_sets,
+            target_reps: it.target_reps,
+            target_weight_kg: it.target_weight_kg,
+            target_duration_s: it.target_duration_s,
+          },
+          sets: Array.from({ length: targetSets }, (_, setIdx) => ({
+            id: newId(),
+            set_number: setIdx + 1,
+            status: 'skipped' as const,
+            reps: null,
+            weight_kg: null,
+            duration_s: null,
+            distance_m: null,
+            rpe: null,
+            notes: null,
+            extra: {},
+          })),
+        }
+      })
     updateSession({
       id,
       routine_id: routine?.id ?? null,
@@ -115,7 +146,7 @@ export function App() {
     if (!session) return
     const ended_at = new Date().toISOString()
     const finalSession = { ...session, ended_at }
-    await queueSession(finalSession)
+    await enqueue(finalSession)
     updateSession(null)
     await sync()
     await loadSessions()
@@ -126,7 +157,7 @@ export function App() {
     try {
       await api.putSession(updated)
     } catch {
-      await queueSession(updated)
+      await enqueue(updated)
     }
     await loadSessions()
     await sync()
@@ -139,18 +170,19 @@ export function App() {
       await db.outbox.delete(sessionId)
     }
     setSessions((prev) => prev.filter((s) => s.id !== sessionId))
+    await refreshQueueCount()
   }
 
   const addExerciseToSession = (exercise: Exercise) => {
     if (!session) return
     const newItem: SessionItemPayload = {
-      id: crypto.randomUUID(),
+      id: newId(),
       exercise_id: exercise.id,
-      position: session.items.length + 1,
+      position: session.items.length,
       notes: null,
       extra: {},
       sets: [{
-        id: crypto.randomUUID(),
+        id: newId(),
         set_number: 1,
         status: 'skipped',
         reps: null,
@@ -180,11 +212,10 @@ export function App() {
     const newItems = [...session.items]
     const item = { ...newItems[itemIndex] }
     const lastSet = item.sets[item.sets.length - 1]
-    // A manually added set is an intentional action, so it starts 'done'.
     item.sets = [
       ...item.sets,
       {
-        id: crypto.randomUUID(),
+        id: newId(),
         set_number: item.sets.length + 1,
         status: 'done',
         reps: lastSet?.reps ?? null,
@@ -198,6 +229,7 @@ export function App() {
     ]
     newItems[itemIndex] = item
     updateSession({ ...session, items: newItems })
+  }
   }
 
   const updateSet = (itemIndex: number, setIndex: number, field: 'weight_kg' | 'reps', value: number | null) => {
