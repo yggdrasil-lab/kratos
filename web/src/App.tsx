@@ -230,7 +230,6 @@ export function App() {
     newItems[itemIndex] = item
     updateSession({ ...session, items: newItems })
   }
-  }
 
   const updateSet = (itemIndex: number, setIndex: number, field: 'weight_kg' | 'reps', value: number | null) => {
     if (!session) return
