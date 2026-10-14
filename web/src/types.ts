@@ -78,3 +78,18 @@ export interface SessionItemPayload {
   extra: Record<string, unknown>
   sets: SetEntry[]
 }
+
+export type ActiveTab = 'train' | 'week' | 'history'
+
+export interface WeekDayPlan {
+  dayName: string
+  dayShort: string
+  dateStr: string
+  isoDate: string
+  isToday: boolean
+  sessionName: string
+  type: 'lift' | 'sport' | 'rest'
+  emphasis: string
+  notes?: string
+}
+
