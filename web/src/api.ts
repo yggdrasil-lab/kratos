@@ -30,11 +30,21 @@ export const api = {
 
   routines: () => request<Routine[]>('/routines'),
 
+  sessions: (limit = 50, offset = 0) =>
+    request<SessionPayload[]>(`/sessions?limit=${limit}&offset=${offset}`),
+
+  getSession: (id: string) => request<SessionPayload>(`/sessions/${id}`),
+
   // The outbox sends the whole session under a client-generated UUID; the write
   // path upserts on it, so a retried flush is harmless.
   putSession: (payload: SessionPayload) =>
     request<SessionPayload>(`/sessions/${payload.id}`, {
       method: 'PUT',
       body: JSON.stringify(payload),
+    }),
+
+  deleteSession: (id: string) =>
+    request<void>(`/sessions/${id}`, {
+      method: 'DELETE',
     }),
 }
