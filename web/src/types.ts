@@ -81,7 +81,26 @@ export interface SessionItemPayload {
 
 export type ActiveTab = 'train' | 'week' | 'history'
 
+export interface PlannedActivity {
+  id: string
+  name: string
+  type: 'lift' | 'sport' | 'rest'
+  emphasis?: string
+  notes?: string
+  durationMinutes?: number
+  isUnplanned?: boolean
+}
+
+export interface DayScheduleConfig {
+  sessionName: string
+  type: 'lift' | 'sport' | 'rest'
+  emphasis: string
+  notes?: string
+  extraActivities?: PlannedActivity[]
+}
+
 export interface WeekDayPlan {
+  dayIndex: number
   dayName: string
   dayShort: string
   dateStr: string
@@ -91,5 +110,6 @@ export interface WeekDayPlan {
   type: 'lift' | 'sport' | 'rest'
   emphasis: string
   notes?: string
+  extraActivities?: PlannedActivity[]
 }
 

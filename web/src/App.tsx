@@ -173,6 +173,17 @@ export function App() {
     await refreshQueueCount()
   }
 
+  const handleSaveCustomSession = async (customSession: SessionPayload) => {
+    try {
+      await enqueue(customSession)
+      await sync()
+      await loadSessions()
+    } catch {
+      setSessions((prev) => [customSession, ...prev.filter((s) => s.id !== customSession.id)])
+      await refreshQueueCount()
+    }
+  }
+
   const addExerciseToSession = (exercise: Exercise) => {
     if (!session) return
     const newItem: SessionItemPayload = {
@@ -472,6 +483,8 @@ export function App() {
             startSession(routine)
             setActiveTab('train')
           }}
+          onSaveSession={handleSaveCustomSession}
+          onDeleteSession={handleDeleteSession}
         />
       )}
 
