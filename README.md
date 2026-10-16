@@ -34,7 +34,6 @@ through a migration. Features are added from here.
 ```
 api/      FastAPI service, SQLAlchemy 2.0 models, Alembic migrations
 web/      React + TypeScript + Vite PWA client
-scripts/  Shared deploy scripts (ops-scripts submodule)
 ```
 
 ## Domain
@@ -96,11 +95,14 @@ Environment variables carry the `KRATOS_` prefix — see `.env.example`.
 
 ## Deploy
 
-Pushing to `main` deploys to the Gaia swarm. To deploy by hand:
+Deployments follow the centralized GitOps workflow via GitHub Actions using `yggdrasil-os` deployment scripts (no git submodules). Host paths are provisioned via `yggdrasil-os/hosts/setup_gaia.sh`.
+
+To deploy manually on Gaia:
 
 ```bash
-./setup_host.sh
-./scripts/deploy.sh "kratos" docker-compose.yml
+curl -fsSL https://raw.githubusercontent.com/yggdrasil-lab/yggdrasil-os/main/deploy/deploy.sh -o /tmp/deploy.sh
+chmod +x /tmp/deploy.sh
+/tmp/deploy.sh "kratos" docker-compose.yml
 ```
 
 ## Documentation
