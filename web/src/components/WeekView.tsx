@@ -386,38 +386,52 @@ export function WeekView({
             (r) => r.name.toLowerCase().trim() === day.sessionName.toLowerCase().trim()
           )
 
-          // Check completed lift session
-          const completedLiftSession = daySessions.find(
-            (s) =>
-              s.extra?.status !== 'skipped' &&
-              ((s.extra?.routine_name as string)?.toLowerCase() === day.sessionName.toLowerCase() ||
-                s.items.length > 0 ||
-                s.extra?.session_type === 'lift')
-          )
+          // Check completed lift session (only if day type is 'lift' and not an unplanned activity)
+          const completedLiftSession = day.type === 'lift'
+            ? daySessions.find(
+                (s) =>
+                  !s.extra?.is_unplanned &&
+                  s.extra?.status !== 'skipped' &&
+                  ((matchingRoutine && s.routine_id === matchingRoutine.id) ||
+                    (s.extra?.routine_name as string)?.toLowerCase() === day.sessionName.toLowerCase() ||
+                    s.items.length > 0 ||
+                    s.extra?.session_type === 'lift')
+              )
+            : undefined
 
           // Check skipped lift session
-          const skippedLiftSession = daySessions.find(
-            (s) =>
-              s.extra?.status === 'skipped' &&
-              ((s.extra?.routine_name as string)?.toLowerCase() === day.sessionName.toLowerCase() ||
-                s.extra?.session_type === 'lift')
-          )
+          const skippedLiftSession = day.type === 'lift'
+            ? daySessions.find(
+                (s) =>
+                  !s.extra?.is_unplanned &&
+                  s.extra?.status === 'skipped' &&
+                  ((matchingRoutine && s.routine_id === matchingRoutine.id) ||
+                    (s.extra?.routine_name as string)?.toLowerCase() === day.sessionName.toLowerCase() ||
+                    s.extra?.session_type === 'lift')
+              )
+            : undefined
 
-          // Check sport attended session
-          const attendedSportSession = daySessions.find(
-            (s) =>
-              s.extra?.status === 'completed' &&
-              ((s.extra?.activity_name as string)?.toLowerCase() === day.sessionName.toLowerCase() ||
-                s.extra?.session_type === 'sport')
-          )
+          // Check sport attended session (only if day type is 'sport' and not an unplanned activity)
+          const attendedSportSession = day.type === 'sport'
+            ? daySessions.find(
+                (s) =>
+                  !s.extra?.is_unplanned &&
+                  s.extra?.status === 'completed' &&
+                  ((s.extra?.activity_name as string)?.toLowerCase() === day.sessionName.toLowerCase() ||
+                    s.extra?.session_type === 'sport')
+              )
+            : undefined
 
           // Check sport skipped session
-          const skippedSportSession = daySessions.find(
-            (s) =>
-              s.extra?.status === 'skipped' &&
-              ((s.extra?.activity_name as string)?.toLowerCase() === day.sessionName.toLowerCase() ||
-                s.extra?.session_type === 'sport')
-          )
+          const skippedSportSession = day.type === 'sport'
+            ? daySessions.find(
+                (s) =>
+                  !s.extra?.is_unplanned &&
+                  s.extra?.status === 'skipped' &&
+                  ((s.extra?.activity_name as string)?.toLowerCase() === day.sessionName.toLowerCase() ||
+                    s.extra?.session_type === 'sport')
+              )
+            : undefined
 
           // Separate out unplanned/additional sessions for this day
           const additionalLoggedSessions = daySessions.filter((s) => {
