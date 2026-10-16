@@ -616,7 +616,7 @@ export function WeekView({
                       const actName = (extra.extra?.activity_name as string) || (extra.extra?.routine_name as string) || 'Activity'
                       const isSkipped = extra.extra?.status === 'skipped'
                       const isAttended = extra.extra?.status === 'completed'
-                      const duration = extra.extra?.duration_minutes
+                      const duration = extra.extra?.duration_minutes as number | undefined
 
                       return (
                         <div
@@ -631,7 +631,7 @@ export function WeekView({
                         >
                           <div className="flex-row" style={{ gap: '0.5rem', alignItems: 'center' }}>
                             <span>🏅 {actName}</span>
-                            {duration && <span className="badge-duration">⏱ {duration}m</span>}
+                            {Boolean(duration) && <span className="badge-duration">⏱ {duration}m</span>}
                             {isAttended && <span className="badge-completed">✓ Attended</span>}
                             {isSkipped && <span className="badge-missed">✕ Skipped</span>}
                           </div>
