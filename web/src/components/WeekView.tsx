@@ -107,6 +107,20 @@ function saveExtraActivities(extras: Record<string, PlannedActivity[]>) {
   }
 }
 
+function formatLocalDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function toLocalISOString(isoDate: string, timeStr: string): string {
+  const [y, m, d] = isoDate.split('-').map(Number)
+  const [h, min, s = 0] = timeStr.split(':').map(Number)
+  return new Date(y, m - 1, d, h, min, s).toISOString()
+}
+
+function getSessionLocalDate(isoString: string): string {
+  return formatLocalDate(new Date(isoString))
+}
+
 export function getCurrentWeekPlan(): WeekDayPlan[] {
   const now = new Date()
   const dayIndex = (now.getDay() + 6) % 7 // Monday = 0
@@ -121,7 +135,7 @@ export function getCurrentWeekPlan(): WeekDayPlan[] {
     const d = new Date(monday)
     d.setDate(monday.getDate() + idx)
     const isToday = d.toDateString() === now.toDateString()
-    const isoDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    const isoDate = formatLocalDate(d)
     const dateStr = `${d.getDate()} ${MONTHS[d.getMonth()]}`
 
     const config = overrides[idx] || defaultConfig
@@ -229,8 +243,8 @@ export function WeekView({
         const newSession: SessionPayload = {
           id: crypto.randomUUID(),
           routine_id: null,
-          started_at: `${addingActivityDay.isoDate}T12:00:00.000Z`,
-          ended_at: activityStatus === 'completed' ? `${addingActivityDay.isoDate}T13:00:00.000Z` : null,
+          started_at: toLocalISOString(addingActivityDay.isoDate, '12:00:00'),
+          ended_at: activityStatus === 'completed' ? toLocalISOString(addingActivityDay.isoDate, '13:00:00') : null,
           notes: activityNotes.trim() || null,
           extra: {
             session_type: activityType,
@@ -277,7 +291,10 @@ export function WeekView({
 
   // Helper: Find sessions for a given date
   const getDaySessions = (isoDate: string) => {
-    return sessions.filter((s) => s.started_at && s.started_at.slice(0, 10) === isoDate)
+    return sessions.filter((s) => {
+      if (!s.started_at) return false
+      return getSessionLocalDate(s.started_at) === isoDate
+    })
   }
 
   // Log sport attendance
@@ -287,8 +304,8 @@ export function WeekView({
       const newSession: SessionPayload = {
         id: crypto.randomUUID(),
         routine_id: null,
-        started_at: `${day.isoDate}T19:00:00.000Z`,
-        ended_at: `${day.isoDate}T21:00:00.000Z`,
+        started_at: toLocalISOString(day.isoDate, '19:00:00'),
+        ended_at: toLocalISOString(day.isoDate, '21:00:00'),
         notes: null,
         extra: {
           session_type: 'sport',
@@ -310,7 +327,7 @@ export function WeekView({
       const newSession: SessionPayload = {
         id: crypto.randomUUID(),
         routine_id: null,
-        started_at: `${day.isoDate}T19:00:00.000Z`,
+        started_at: toLocalISOString(day.isoDate, '19:00:00'),
         ended_at: null,
         notes: 'Skipped planned sport activity',
         extra: {
@@ -333,7 +350,7 @@ export function WeekView({
       const newSession: SessionPayload = {
         id: crypto.randomUUID(),
         routine_id: matchingRoutine?.id || null,
-        started_at: `${day.isoDate}T12:00:00.000Z`,
+        started_at: toLocalISOString(day.isoDate, '12:00:00'),
         ended_at: null,
         notes: 'Skipped planned workout for the day',
         extra: {
