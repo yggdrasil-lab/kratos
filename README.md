@@ -95,11 +95,13 @@ Environment variables carry the `KRATOS_` prefix — see `.env.example`.
 
 ## Deploy
 
-Pushing to `main` deploys to the Gaia swarm via GitHub Actions using centralized deploy scripts from `yggdrasil-os`. To deploy manually on Gaia:
+Deployments follow the centralized GitOps workflow via GitHub Actions using `yggdrasil-os` deployment scripts (no git submodules). Host paths are provisioned via `yggdrasil-os/hosts/setup_gaia.sh`.
+
+To deploy manually on Gaia:
 
 ```bash
-./setup_host.sh
-curl -fsSL https://raw.githubusercontent.com/yggdrasil-lab/yggdrasil-os/main/deploy/deploy.sh -o /tmp/deploy.sh && chmod +x /tmp/deploy.sh
+curl -fsSL https://raw.githubusercontent.com/yggdrasil-lab/yggdrasil-os/main/deploy/deploy.sh -o /tmp/deploy.sh
+chmod +x /tmp/deploy.sh
 /tmp/deploy.sh "kratos" docker-compose.yml
 ```
 
