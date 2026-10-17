@@ -25,6 +25,11 @@
   padding: 0;
 }
 
+html {
+  overflow-x: hidden;
+  overscroll-behavior-y: none;
+}
+
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   background-color: var(--bg-color);
@@ -32,6 +37,8 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
+  min-height: 100dvh;
+  overscroll-behavior-y: none;
   /* Add a subtle radial gradient background */
   background-image: 
     radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.15), transparent 25%),
@@ -339,6 +346,12 @@ input::placeholder {
   border-top: 1px solid var(--surface-border);
   box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
   padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  /* iOS PWA scroll & bounce stability */
+  -webkit-transform: translate3d(0, 0, 0);
+  transform: translate3d(0, 0, 0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  will-change: transform;
 }
 
 .bottom-nav-container {
@@ -456,6 +469,16 @@ input::placeholder {
   background: rgba(16, 185, 129, 0.15);
   color: var(--success-color);
   border: 1px solid rgba(16, 185, 129, 0.3);
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.15rem 0.55rem;
+  border-radius: 9999px;
+}
+
+.badge-missed {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--danger-color);
+  border: 1px solid rgba(239, 68, 68, 0.3);
   font-size: 0.75rem;
   font-weight: 500;
   padding: 0.15rem 0.55rem;

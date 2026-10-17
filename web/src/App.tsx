@@ -12,7 +12,7 @@ type Status = { kind: 'idle' | 'busy' | 'error'; message?: string }
 const DRAFT_KEY = 'current'
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<ActiveTab>('train')
+  const [activeTab, setActiveTab] = useState<ActiveTab>('week')
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
   const [queued, setQueued] = useState<number>(0)
   const [exercises, setExercises] = useState<Exercise[]>([])
@@ -272,7 +272,8 @@ export function App() {
     : exercises
 
   return (
-    <main className="animate-fade-in app-main-layout">
+    <>
+      <main className="animate-fade-in app-main-layout">
       <header className="header-area">
         <h1>Kratos</h1>
         <div className="flex-row" style={{ justifyContent: 'center', marginTop: '0.5rem' }}>
@@ -546,12 +547,14 @@ export function App() {
         </div>
       )}
 
+      </main>
+
       {/* Bottom Navigation */}
       <BottomNav
         activeTab={activeTab}
         onChangeTab={setActiveTab}
         hasActiveWorkout={session !== null}
       />
-    </main>
+    </>
   )
 }

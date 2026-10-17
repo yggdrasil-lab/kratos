@@ -44,7 +44,7 @@ export function HistoryView({
   }
 
   const calculateDuration = (startedAt: string, endedAt: string | null) => {
-    if (!endedAt) return 'In progress'
+    if (!endedAt) return null
     try {
       const start = new Date(startedAt).getTime()
       const end = new Date(endedAt).getTime()
@@ -54,6 +54,75 @@ export function HistoryView({
     } catch {
       return null
     }
+  }
+
+  const getActivityLabel = (sess: SessionPayload): string => {
+    const extra = sess.extra || {}
+    if (typeof extra.activity_name === 'string' && extra.activity_name.trim()) {
+      return extra.activity_name.trim()
+    }
+    if (typeof extra.routine_name === 'string' && extra.routine_name.trim()) {
+      return extra.routine_name.trim()
+    }
+    if (extra.session_type === 'sport') {
+      return 'Sports Activity'
+    }
+    return 'Free Workout'
+  }
+
+  const getActivityIcon = (sess: SessionPayload): string => {
+    const extra = sess.extra || {}
+    const sessionType = extra.session_type as string | undefined
+    const name = (
+      (typeof extra.activity_name === 'string' ? extra.activity_name : '') ||
+      (typeof extra.routine_name === 'string' ? extra.routine_name : '')
+    ).toLowerCase()
+
+    if (
+      sessionType === 'sport' ||
+      name.includes('badminton') ||
+      name.includes('sport') ||
+      name.includes('run') ||
+      name.includes('swim') ||
+      name.includes('bike') ||
+      name.includes('cycl')
+    ) {
+      if (name.includes('badminton')) return '🏸'
+      if (name.includes('run') || name.includes('jog')) return '🏃'
+      if (name.includes('swim')) return '🏊'
+      if (name.includes('cycl') || name.includes('bike')) return '🚴'
+      return '🏅'
+    }
+
+    if (sess.routine_id || extra.routine_name || sessionType === 'lift') {
+      return '🏋️'
+    }
+
+    return '⚡'
+  }
+
+  type WorkoutStatus = 'completed' | 'attended' | 'skipped' | 'in_progress'
+
+  const getSessionStatus = (sess: SessionPayload): WorkoutStatus => {
+    const extraStatus = sess.extra?.status as string | undefined
+    if (extraStatus === 'skipped') return 'skipped'
+    if (extraStatus === 'completed') {
+      return sess.extra?.session_type === 'sport' ? 'attended' : 'completed'
+    }
+    if (sess.notes?.toLowerCase().startsWith('skipped')) {
+      return 'skipped'
+    }
+    if (!sess.ended_at) {
+      return 'in_progress'
+    }
+    const totalDoneSets = sess.items.reduce(
+      (acc, it) => acc + it.sets.filter((s) => s.status === 'done').length,
+      0
+    )
+    if (sess.items.length > 0 && totalDoneSets === 0) {
+      return 'skipped'
+    }
+    return sess.extra?.session_type === 'sport' ? 'attended' : 'completed'
   }
 
   // --- Edit handlers ---
@@ -220,18 +289,64 @@ export function HistoryView({
       ) : (
         <div className="flex-col" style={{ gap: '1rem' }}>
           {sessions.map((sess) => {
-            const routineName = (sess.extra?.routine_name as string) || 'Free Workout'
-            const duration = calculateDuration(sess.started_at, sess.ended_at)
-            const totalSets = sess.items.reduce((acc, it) => acc + it.sets.filter((s) => s.status === 'done').length, 0)
+            const label = getActivityLabel(sess)
+            const icon = getActivityIcon(sess)
+            const status = getSessionStatus(sess)
+            const duration =
+              (sess.extra?.duration_minutes ? `${sess.extra.duration_minutes} min` : null) ||
+              calculateDuration(sess.started_at, sess.ended_at)
+            const totalSets = sess.items.reduce(
+              (acc, it) => acc + it.sets.filter((s) => s.status === 'done').length,
+              0
+            )
+            const isSport = sess.extra?.session_type === 'sport'
 
             return (
               <div key={sess.id} className="glass-panel history-card" style={{ margin: 0, padding: '1.25rem' }}>
                 <div className="flex-between" style={{ alignItems: 'flex-start', marginBottom: '0.75rem' }}>
-                  <div>
-                    <h3 style={{ fontSize: '1.2rem', color: '#fff', margin: 0 }}>{routineName}</h3>
-                    <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
-                      {formatDateTime(sess.started_at)}
-                    </p>
+                  <div className="flex-row" style={{ gap: '0.75rem', alignItems: 'center' }}>
+                    <div
+                      style={{
+                        width: '42px',
+                        height: '42px',
+                        borderRadius: '10px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '1.35rem',
+                        background:
+                          status === 'skipped'
+                            ? 'rgba(239, 68, 68, 0.12)'
+                            : isSport
+                            ? 'rgba(16, 185, 129, 0.12)'
+                            : 'rgba(59, 130, 246, 0.12)',
+                        border:
+                          status === 'skipped'
+                            ? '1px solid rgba(239, 68, 68, 0.25)'
+                            : isSport
+                            ? '1px solid rgba(16, 185, 129, 0.25)'
+                            : '1px solid rgba(59, 130, 246, 0.25)',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {icon}
+                    </div>
+                    <div>
+                      <div className="flex-row" style={{ gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <h3 style={{ fontSize: '1.15rem', color: '#fff', margin: 0 }}>{label}</h3>
+                        {status === 'completed' && <span className="badge-completed">✓ Completed</span>}
+                        {status === 'attended' && <span className="badge-completed">✓ Attended</span>}
+                        {status === 'skipped' && <span className="badge-missed">✕ Skipped</span>}
+                        {status === 'in_progress' && (
+                          <span className="badge-duration" style={{ color: 'var(--primary-color)' }}>
+                            In Progress
+                          </span>
+                        )}
+                      </div>
+                      <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                        {formatDateTime(sess.started_at)}
+                      </p>
+                    </div>
                   </div>
 
                   <div className="flex-row" style={{ gap: '0.5rem', alignItems: 'center' }}>
