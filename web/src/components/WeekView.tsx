@@ -14,10 +14,10 @@ const STORAGE_KEY_EXTRA_ACTIVITIES = 'kratos_extra_activities'
 
 const DEFAULT_SCHEDULE_CONFIG: DayScheduleConfig[] = [
   {
-    sessionName: 'Lower Body A',
+    sessionName: 'Upper Body A',
     type: 'lift',
-    emphasis: 'Squat emphasis • 4 exercises × 2 sets to failure',
-    notes: 'Goblet Squat (depth > weight), DB Deadlift, Calf Raise, Plank',
+    emphasis: 'Push emphasis • 4 exercises × 2 sets to failure',
+    notes: 'Incline DB Bench, Overhead Press, Seated Machine Row, Cable Face Pull',
   },
   {
     sessionName: 'Badminton',
@@ -26,10 +26,10 @@ const DEFAULT_SCHEDULE_CONFIG: DayScheduleConfig[] = [
     notes: 'Fixed sport session. High intensity cardio & agility. No lifting.',
   },
   {
-    sessionName: 'Upper Body A',
+    sessionName: 'Lower Body A',
     type: 'lift',
-    emphasis: 'Push emphasis • 4 exercises × 2 sets to failure',
-    notes: 'Incline DB Bench, Overhead Press, Seated Machine Row, Cable Face Pull',
+    emphasis: 'Squat emphasis • 4 exercises × 2 sets to failure',
+    notes: 'Goblet Squat (depth > weight), DB Deadlift, Calf Raise, Plank',
   },
   {
     sessionName: 'Badminton',
@@ -46,13 +46,13 @@ const DEFAULT_SCHEDULE_CONFIG: DayScheduleConfig[] = [
   {
     sessionName: 'Lower Body B',
     type: 'lift',
-    emphasis: 'Hinge emphasis • 4 exercises × 2 sets to failure',
+    emphasis: 'Hinge emphasis • Floating weekend session • 4 exercises × 2 sets',
     notes: 'Primary DB Deadlift, Bodyweight Lunge, Lying Leg Curl, Leg Extension',
   },
   {
     sessionName: 'Upper Body B',
     type: 'lift',
-    emphasis: 'Pull emphasis • 4 exercises × 2 sets to failure',
+    emphasis: 'Pull emphasis • Floating weekend session • 4 exercises × 2 sets',
     notes: 'Wide Lat Pulldown, DB Bench Press, Bent-Over One Arm Row, Triceps Pushdown',
   },
 ]
@@ -766,8 +766,34 @@ export function WeekView({
                   type="text"
                   value={editSessionName}
                   onChange={(e) => setEditSessionName(e.target.value)}
-                  placeholder="e.g. Lower Body A, Badminton, Rest"
+                  placeholder="e.g. Upper Body A, Badminton, Rest"
                 />
+                {editType === 'lift' && routines.length > 0 && (
+                  <div className="flex-row" style={{ gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.45rem' }}>
+                    {routines.map((r) => (
+                      <button
+                        key={r.id}
+                        type="button"
+                        className="btn-secondary"
+                        style={{
+                          fontSize: '0.78rem',
+                          padding: '0.25rem 0.55rem',
+                          borderRadius: '4px',
+                          borderColor: editSessionName.toLowerCase().trim() === r.name.toLowerCase().trim() ? 'var(--primary)' : undefined,
+                          color: editSessionName.toLowerCase().trim() === r.name.toLowerCase().trim() ? 'var(--primary)' : undefined,
+                        }}
+                        onClick={() => {
+                          setEditSessionName(r.name)
+                          if (!editEmphasis) {
+                            setEditEmphasis(`${r.name.includes('Upper') ? 'Upper body' : 'Lower body'} • 4 exercises × 2 sets`)
+                          }
+                        }}
+                      >
+                        {r.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div>
