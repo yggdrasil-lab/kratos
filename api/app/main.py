@@ -33,6 +33,7 @@ app.add_middleware(
 
 app.include_router(catalogue.router)
 app.include_router(plan.router)
+app.include_router(plan.weekly_plan_router)
 app.include_router(log.router)
 app.include_router(stats.router)
 

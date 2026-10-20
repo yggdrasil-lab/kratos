@@ -38,6 +38,7 @@ from fastapi import FastAPI, HTTPException
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.applications import Starlette
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -45,7 +46,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from app.config import settings
-from app.models import Exercise, Routine, RoutineItem
+from app.models import Exercise, Routine, RoutineItem, WeeklyPlan
 from app.routers.catalogue import (
     create_exercise as _create_exercise,
 )
@@ -378,6 +379,67 @@ def build_mcp_server() -> MCPServer:
                 payload[key] = value
         with mcp_session() as db:
             return _serialise_item(_add_item(uuid.UUID(routine_id), payload, db=db))
+
+    @server.tool(
+        name="weekly_plan_get",
+        description="Get the scheduled weekly workout plan for an ISO week (e.g. '2026-W43').",
+    )
+    def weekly_plan_get(iso_week: str) -> dict:
+        with mcp_session() as db:
+            plan = db.scalar(
+                select(WeeklyPlan).where(
+                    WeeklyPlan.iso_week == iso_week, WeeklyPlan.deleted_at.is_(None)
+                )
+            )
+            if plan is None:
+                return {"iso_week": iso_week, "days": [], "notes": None, "exists": False}
+            return {
+                "id": str(plan.id),
+                "iso_week": plan.iso_week,
+                "days": plan.days,
+                "notes": plan.notes,
+                "extra": plan.extra,
+                "exists": True,
+            }
+
+    @server.tool(
+        name="weekly_plan_set",
+        description="Set or replace the scheduled weekly workout plan for an ISO week. days is a list of day configs (dayIndex, sessionName, type, emphasis, notes, extraActivities).",
+    )
+    def weekly_plan_set(
+        iso_week: str,
+        days: list[dict],
+        notes: str | None = None,
+    ) -> dict:
+        with mcp_session() as db:
+            plan = db.scalar(
+                select(WeeklyPlan).where(
+                    WeeklyPlan.iso_week == iso_week, WeeklyPlan.deleted_at.is_(None)
+                )
+            )
+            if plan is None:
+                plan = WeeklyPlan(
+                    iso_week=iso_week,
+                    days=days,
+                    notes=notes,
+                    extra=_with_source(None),
+                )
+                db.add(plan)
+            else:
+                plan.days = days
+                if notes is not None:
+                    plan.notes = notes
+                plan.extra = _with_source(plan.extra)
+            db.commit()
+            db.refresh(plan)
+            return {
+                "id": str(plan.id),
+                "iso_week": plan.iso_week,
+                "days": plan.days,
+                "notes": plan.notes,
+                "extra": plan.extra,
+                "status": "saved",
+            }
 
     return server
 

@@ -27,6 +27,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -208,3 +209,19 @@ class SetEntry(TimestampMixin, Base):
         ),
         Index("set_entry_item_idx", "session_item_id"),
     )
+
+
+class WeeklyPlan(TimestampMixin, Base):
+    """Weekly schedule plan for an ISO week (e.g. '2026-W43')."""
+
+    __tablename__ = "weekly_plan"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    iso_week: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    days: Mapped[list[dict]] = mapped_column(JSONB, nullable=False, server_default="[]")
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        Index("weekly_plan_iso_week_alive_idx", "iso_week", postgresql_where=text("deleted_at is null")),
+    )
+

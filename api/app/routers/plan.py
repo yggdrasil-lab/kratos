@@ -7,10 +7,19 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
-from app.models import Routine, RoutineItem
-from app.schemas import RoutineCreate, RoutineItemRead, RoutineRead, RoutineUpdate
+from app.models import Routine, RoutineItem, WeeklyPlan
+from app.schemas import (
+    RoutineCreate,
+    RoutineItemRead,
+    RoutineRead,
+    RoutineUpdate,
+    WeeklyPlanCreate,
+    WeeklyPlanRead,
+    WeeklyPlanUpdate,
+)
 
 router = APIRouter(prefix="/routines", tags=["plan"])
+weekly_plan_router = APIRouter(prefix="/plans", tags=["weekly_plan"])
 
 
 def _get_or_404(db: Session, routine_id: uuid.UUID) -> Routine:
@@ -99,3 +108,46 @@ def remove_item(routine_id: uuid.UUID, item_id: uuid.UUID, db: Session = Depends
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Routine item not found")
     item.deleted_at = datetime.now(timezone.utc)
     db.commit()
+
+
+# ----------------------------------------------------------------- weekly plans
+@weekly_plan_router.get("/week/{iso_week}", response_model=WeeklyPlanRead)
+def get_weekly_plan(iso_week: str, db: Session = Depends(get_db)) -> WeeklyPlan:
+    """Fetch the weekly plan for an ISO week (e.g. '2026-W43')."""
+    stmt = (
+        select(WeeklyPlan)
+        .where(WeeklyPlan.iso_week == iso_week, WeeklyPlan.deleted_at.is_(None))
+    )
+    plan = db.scalar(stmt)
+    if plan is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"Weekly plan for {iso_week} not found")
+    return plan
+
+
+@weekly_plan_router.put("/week/{iso_week}", response_model=WeeklyPlanRead)
+def upsert_weekly_plan(
+    iso_week: str, payload: WeeklyPlanCreate, db: Session = Depends(get_db)
+) -> WeeklyPlan:
+    """Create or replace the weekly schedule plan for an ISO week."""
+    stmt = (
+        select(WeeklyPlan)
+        .where(WeeklyPlan.iso_week == iso_week, WeeklyPlan.deleted_at.is_(None))
+    )
+    plan = db.scalar(stmt)
+    if plan is None:
+        plan = WeeklyPlan(
+            iso_week=iso_week,
+            days=payload.days,
+            notes=payload.notes,
+            extra=payload.extra,
+        )
+        db.add(plan)
+    else:
+        plan.days = payload.days
+        plan.notes = payload.notes
+        if payload.extra:
+            plan.extra = {**plan.extra, **payload.extra}
+    db.commit()
+    db.refresh(plan)
+    return plan
+

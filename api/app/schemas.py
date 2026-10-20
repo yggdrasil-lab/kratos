@@ -240,3 +240,28 @@ class ExerciseLastRead(ORMModel):
 class HealthRead(BaseModel):
     status: Literal["ok"] = "ok"
     database: Literal["ok", "unreachable"] = "ok"
+
+
+# ----------------------------------------------------------------- weekly plan
+class WeeklyPlanCreate(BaseModel):
+    iso_week: str
+    days: list[dict] = Field(default_factory=list)
+    notes: str | None = None
+    extra: dict = Field(default_factory=dict)
+
+
+class WeeklyPlanUpdate(BaseModel):
+    days: list[dict] | None = None
+    notes: str | None = None
+    extra: dict | None = None
+
+
+class WeeklyPlanRead(ORMModel):
+    id: uuid.UUID
+    iso_week: str
+    days: list[dict]
+    notes: str | None
+    extra: dict
+    created_at: datetime
+    updated_at: datetime
+
