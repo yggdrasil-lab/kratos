@@ -2,7 +2,7 @@
 // proxies /api to uvicorn, and in production the reverse proxy routes it too.
 // VITE_API_BASE_URL overrides the prefix for a split deployment.
 
-import type { Exercise, Routine, SessionPayload } from './types'
+import type { Exercise, Routine, SessionPayload, WeeklyPlanPayload, WeeklyPlanRead } from './types'
 
 const BASE = import.meta.env.VITE_API_BASE_URL || '/api'
 
@@ -46,5 +46,19 @@ export const api = {
   deleteSession: (id: string) =>
     request<void>(`/sessions/${id}`, {
       method: 'DELETE',
+    }),
+
+  getWeeklyPlan: async (isoWeek: string): Promise<WeeklyPlanRead | null> => {
+    try {
+      return await request<WeeklyPlanRead>(`/plans/week/${isoWeek}`)
+    } catch {
+      return null
+    }
+  },
+
+  putWeeklyPlan: (payload: WeeklyPlanPayload) =>
+    request<WeeklyPlanRead>(`/plans/week/${payload.iso_week}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
     }),
 }

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import type { DayScheduleConfig, PlannedActivity, Routine, SessionPayload, WeekDayPlan } from '../types'
+import { api } from '../api'
+import type { DayScheduleConfig, PlannedActivity, Routine, SessionPayload, WeekDayPlan, WeeklyPlanRead } from '../types'
 
 interface WeekViewProps {
   routines: Routine[]
@@ -12,50 +13,20 @@ interface WeekViewProps {
 const STORAGE_KEY_OVERRIDES = 'kratos_weekly_plan_overrides'
 const STORAGE_KEY_EXTRA_ACTIVITIES = 'kratos_extra_activities'
 
-const DEFAULT_SCHEDULE_CONFIG: DayScheduleConfig[] = [
-  {
-    sessionName: 'Lower Body A',
-    type: 'lift',
-    emphasis: 'Squat emphasis • 4 exercises × 2 sets to failure',
-    notes: 'Goblet Squat (depth > weight), DB Deadlift, Calf Raise, Plank',
-  },
-  {
-    sessionName: 'Badminton',
-    type: 'sport',
-    emphasis: '7:00 PM – 9:00 PM • Fixed court session',
-    notes: 'Fixed sport session. High intensity cardio & agility. No lifting.',
-  },
-  {
-    sessionName: 'Upper Body A',
-    type: 'lift',
-    emphasis: 'Push emphasis • 4 exercises × 2 sets to failure',
-    notes: 'Incline DB Bench, Overhead Press, Seated Machine Row, Cable Face Pull',
-  },
-  {
-    sessionName: 'Badminton',
-    type: 'sport',
-    emphasis: '7:00 PM – 9:00 PM • Fixed court session',
-    notes: 'Fixed sport session. High intensity cardio & agility. No lifting.',
-  },
-  {
-    sessionName: 'Rest + Long Fast',
-    type: 'rest',
-    emphasis: 'Full recovery & long fast window (18–24h)',
-    notes: 'No training. Fasting protocol per Health vault guide.',
-  },
-  {
-    sessionName: 'Lower Body B',
-    type: 'lift',
-    emphasis: 'Hinge emphasis • 4 exercises × 2 sets to failure',
-    notes: 'Primary DB Deadlift, Bodyweight Lunge, Lying Leg Curl, Leg Extension',
-  },
-  {
-    sessionName: 'Upper Body B',
-    type: 'lift',
-    emphasis: 'Pull emphasis • 4 exercises × 2 sets to failure',
-    notes: 'Wide Lat Pulldown, DB Bench Press, Bent-Over One Arm Row, Triceps Pushdown',
-  },
-]
+export const EMPTY_DAY_CONFIG: DayScheduleConfig = {
+  sessionName: 'No session planned',
+  type: 'none',
+  emphasis: 'Rest / unscheduled day',
+  notes: undefined,
+}
+
+export function getISOWeekString(d: Date = new Date()): string {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
+  date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7))
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1))
+  const weekNo = Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7)
+  return `${date.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`
+}
 
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 const DAY_SHORTS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -121,7 +92,7 @@ function getSessionLocalDate(isoString: string): string {
   return formatLocalDate(new Date(isoString))
 }
 
-export function getCurrentWeekPlan(): WeekDayPlan[] {
+export function getCurrentWeekPlan(backendDays?: DayScheduleConfig[]): WeekDayPlan[] {
   const now = new Date()
   const dayIndex = (now.getDay() + 6) % 7 // Monday = 0
   const monday = new Date(now)
@@ -131,14 +102,15 @@ export function getCurrentWeekPlan(): WeekDayPlan[] {
   const overrides = loadPlanOverrides()
   const extras = loadExtraActivities()
 
-  return DEFAULT_SCHEDULE_CONFIG.map((defaultConfig, idx) => {
+  return DAY_NAMES.map((_, idx) => {
     const d = new Date(monday)
     d.setDate(monday.getDate() + idx)
     const isToday = d.toDateString() === now.toDateString()
     const isoDate = formatLocalDate(d)
     const dateStr = `${d.getDate()} ${MONTHS[d.getMonth()]}`
 
-    const config = overrides[idx] || defaultConfig
+    const backendConfig = backendDays && backendDays[idx] ? backendDays[idx] : EMPTY_DAY_CONFIG
+    const config = overrides[idx] || backendConfig
     const dayExtras = extras[isoDate] || []
 
     return {
@@ -164,12 +136,15 @@ export function WeekView({
   onSaveSession,
   onDeleteSession,
 }: WeekViewProps) {
+  const [backendPlan, setBackendPlan] = useState<WeeklyPlanRead | null>(null)
   const [weekPlan, setWeekPlan] = useState<WeekDayPlan[]>(() => getCurrentWeekPlan())
   const [editingDay, setEditingDay] = useState<WeekDayPlan | null>(null)
   const [editSessionName, setEditSessionName] = useState('')
-  const [editType, setEditType] = useState<'lift' | 'sport' | 'rest'>('lift')
+  const [editType, setEditType] = useState<'lift' | 'sport' | 'rest' | 'none'>('lift')
   const [editEmphasis, setEditEmphasis] = useState('')
   const [editNotes, setEditNotes] = useState('')
+
+  const currentIsoWeek = getISOWeekString(new Date())
 
   // Modal for adding unplanned / additional sport activity
   const [addingActivityDay, setAddingActivityDay] = useState<WeekDayPlan | null>(null)
@@ -180,9 +155,22 @@ export function WeekView({
   const [activityNotes, setActivityNotes] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const refreshWeekPlan = () => {
-    setWeekPlan(getCurrentWeekPlan())
+  const refreshWeekPlan = (backendDays?: DayScheduleConfig[]) => {
+    setWeekPlan(getCurrentWeekPlan(backendDays || backendPlan?.days))
   }
+
+  useEffect(() => {
+    let active = true
+    api.getWeeklyPlan(currentIsoWeek).then((plan) => {
+      if (active && plan) {
+        setBackendPlan(plan)
+        setWeekPlan(getCurrentWeekPlan(plan.days))
+      }
+    })
+    return () => {
+      active = false
+    }
+  }, [currentIsoWeek])
 
   useEffect(() => {
     refreshWeekPlan()
@@ -194,33 +182,90 @@ export function WeekView({
   // Open edit day modal
   const openEditDayModal = (day: WeekDayPlan) => {
     setEditingDay(day)
-    setEditSessionName(day.sessionName)
+    setEditSessionName(day.sessionName === 'No session planned' ? '' : day.sessionName)
     setEditType(day.type)
-    setEditEmphasis(day.emphasis)
+    setEditEmphasis(day.emphasis === 'Rest / unscheduled day' ? '' : day.emphasis)
     setEditNotes(day.notes || '')
   }
 
-  const handleSaveDayEdit = () => {
+  const handleSaveDayEdit = async () => {
     if (!editingDay) return
     const overrides = loadPlanOverrides()
-    overrides[editingDay.dayIndex] = {
-      sessionName: editSessionName.trim() || editingDay.sessionName,
+    const newConfig: DayScheduleConfig = {
+      dayIndex: editingDay.dayIndex,
+      sessionName: editSessionName.trim() || (editType === 'none' ? 'No session planned' : editingDay.sessionName),
       type: editType,
-      emphasis: editEmphasis.trim(),
+      emphasis: editEmphasis.trim() || (editType === 'none' ? 'Rest / unscheduled day' : ''),
       notes: editNotes.trim() || undefined,
     }
+    overrides[editingDay.dayIndex] = newConfig
     savePlanOverrides(overrides)
     setEditingDay(null)
-    refreshWeekPlan()
+
+    const updatedDays = weekPlan.map((d) =>
+      d.dayIndex === editingDay.dayIndex
+        ? newConfig
+        : {
+            dayIndex: d.dayIndex,
+            sessionName: d.sessionName,
+            type: d.type,
+            emphasis: d.emphasis,
+            notes: d.notes,
+          }
+    )
+
+    try {
+      const saved = await api.putWeeklyPlan({
+        iso_week: currentIsoWeek,
+        days: updatedDays,
+      })
+      if (saved) {
+        setBackendPlan(saved)
+      }
+    } catch {
+      // fallback to local
+    }
+    refreshWeekPlan(updatedDays)
   }
 
-  const handleResetDayToDefault = () => {
+  const handleResetDayToDefault = async () => {
     if (!editingDay) return
     const overrides = loadPlanOverrides()
     delete overrides[editingDay.dayIndex]
     savePlanOverrides(overrides)
     setEditingDay(null)
-    refreshWeekPlan()
+
+    const fallbackConfig = backendPlan?.days?.[editingDay.dayIndex] || EMPTY_DAY_CONFIG
+    const updatedDays = weekPlan.map((d) =>
+      d.dayIndex === editingDay.dayIndex
+        ? {
+            dayIndex: d.dayIndex,
+            sessionName: fallbackConfig.sessionName,
+            type: fallbackConfig.type,
+            emphasis: fallbackConfig.emphasis,
+            notes: fallbackConfig.notes,
+          }
+        : {
+            dayIndex: d.dayIndex,
+            sessionName: d.sessionName,
+            type: d.type,
+            emphasis: d.emphasis,
+            notes: d.notes,
+          }
+    )
+
+    try {
+      const saved = await api.putWeeklyPlan({
+        iso_week: currentIsoWeek,
+        days: updatedDays,
+      })
+      if (saved) {
+        setBackendPlan(saved)
+      }
+    } catch {
+      // fallback
+    }
+    refreshWeekPlan(updatedDays)
   }
 
   // Open add unplanned / custom activity modal
@@ -481,6 +526,9 @@ export function WeekView({
                   {day.type === 'sport' && !attendedSportSession && skippedSportSession && (
                     <span className="badge-missed">✕ Skipped</span>
                   )}
+                  {day.type === 'none' && (
+                    <span className="badge-rest" style={{ opacity: 0.65 }}>Unscheduled</span>
+                  )}
                 </div>
 
                 <div className="flex-row" style={{ gap: '0.4rem', alignItems: 'center' }}>
@@ -493,7 +541,7 @@ export function WeekView({
                     ✎ Edit
                   </button>
                   <span className={`type-tag type-${day.type}`}>
-                    {day.type === 'lift' ? '🏋️ Lift' : day.type === 'sport' ? '🏸 Sport' : '☕ Rest & Fast'}
+                    {day.type === 'lift' ? '🏋️ Lift' : day.type === 'sport' ? '🏸 Sport' : day.type === 'rest' ? '☕ Rest & Fast' : '⚪ Unscheduled'}
                   </span>
                 </div>
               </div>
@@ -501,10 +549,10 @@ export function WeekView({
               {/* Primary Activity Info & Actions */}
               <div className="flex-between" style={{ alignItems: 'center', marginTop: '0.4rem', gap: '1rem', flexWrap: 'wrap' }}>
                 <div style={{ flex: 1, minWidth: '200px' }}>
-                  <h3 style={{ fontSize: '1.15rem', fontWeight: 600, color: '#fff', marginBottom: '0.2rem' }}>
+                  <h3 style={{ fontSize: '1.15rem', fontWeight: 600, color: day.type === 'none' ? 'var(--text-secondary)' : '#fff', marginBottom: '0.2rem' }}>
                     {day.sessionName}
                   </h3>
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-primary)', opacity: 0.9, margin: 0 }}>
+                  <p style={{ fontSize: '0.85rem', color: day.type === 'none' ? 'var(--text-muted)' : 'var(--text-primary)', opacity: day.type === 'none' ? 0.75 : 0.9, margin: 0 }}>
                     {day.emphasis}
                   </p>
                   {day.notes && (
@@ -516,6 +564,20 @@ export function WeekView({
 
                 {/* Action buttons based on day type */}
                 <div className="flex-row" style={{ gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  {/* Unscheduled Day Action */}
+                  {day.type === 'none' && (
+                    <button
+                      className="btn-secondary"
+                      style={{
+                        padding: '0.5rem 0.85rem',
+                        fontSize: '0.82rem',
+                        whiteSpace: 'nowrap',
+                      }}
+                      onClick={() => openEditDayModal(day)}
+                    >
+                      + Plan Day
+                    </button>
+                  )}
                   {/* Lift Day Actions */}
                   {day.type === 'lift' && (
                     <>
@@ -766,8 +828,34 @@ export function WeekView({
                   type="text"
                   value={editSessionName}
                   onChange={(e) => setEditSessionName(e.target.value)}
-                  placeholder="e.g. Lower Body A, Badminton, Rest"
+                  placeholder="e.g. Upper Body A, Badminton, Rest"
                 />
+                {editType === 'lift' && routines.length > 0 && (
+                  <div className="flex-row" style={{ gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.45rem' }}>
+                    {routines.map((r) => (
+                      <button
+                        key={r.id}
+                        type="button"
+                        className="btn-secondary"
+                        style={{
+                          fontSize: '0.78rem',
+                          padding: '0.25rem 0.55rem',
+                          borderRadius: '4px',
+                          borderColor: editSessionName.toLowerCase().trim() === r.name.toLowerCase().trim() ? 'var(--primary)' : undefined,
+                          color: editSessionName.toLowerCase().trim() === r.name.toLowerCase().trim() ? 'var(--primary)' : undefined,
+                        }}
+                        onClick={() => {
+                          setEditSessionName(r.name)
+                          if (!editEmphasis) {
+                            setEditEmphasis(`${r.name.includes('Upper') ? 'Upper body' : 'Lower body'} • 4 exercises × 2 sets`)
+                          }
+                        }}
+                      >
+                        {r.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div>
@@ -775,15 +863,21 @@ export function WeekView({
                   Session Type
                 </label>
                 <div className="flex-row" style={{ gap: '0.5rem' }}>
-                  {(['lift', 'sport', 'rest'] as const).map((t) => (
+                  {(['lift', 'sport', 'rest', 'none'] as const).map((t) => (
                     <button
                       key={t}
                       type="button"
                       className={editType === t ? 'btn-primary' : 'btn-secondary'}
                       style={{ flex: 1, padding: '0.5rem', textTransform: 'capitalize' }}
-                      onClick={() => setEditType(t)}
+                      onClick={() => {
+                        setEditType(t)
+                        if (t === 'none') {
+                          setEditSessionName('No session planned')
+                          setEditEmphasis('Rest / unscheduled day')
+                        }
+                      }}
                     >
-                      {t === 'lift' ? '🏋️ Lift' : t === 'sport' ? '🏸 Sport' : '☕ Rest'}
+                      {t === 'lift' ? '🏋️ Lift' : t === 'sport' ? '🏸 Sport' : t === 'rest' ? '☕ Rest' : '⚪ None'}
                     </button>
                   ))}
                 </div>
