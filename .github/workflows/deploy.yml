@@ -27,6 +27,10 @@ jobs:
         env:
           KRATOS_MCP_TOKEN: ${{ secrets.KRATOS_MCP_TOKEN }}
         run: |
+          if [ -z "${KRATOS_MCP_TOKEN}" ]; then
+            echo "Error: KRATOS_MCP_TOKEN secret is required" >&2
+            exit 1
+          fi
           curl -fsSL https://raw.githubusercontent.com/yggdrasil-lab/yggdrasil-os/main/deploy/ensure_secret.sh -o /tmp/ensure_secret.sh
           chmod +x /tmp/ensure_secret.sh
           echo "KRATOS_MCP_TOKEN_NAME=$(echo "$KRATOS_MCP_TOKEN" | /tmp/ensure_secret.sh kratos_mcp_token)" >> $GITHUB_ENV
@@ -57,7 +61,8 @@ jobs:
         env:
           REGISTRY_PREFIX: ${{ vars.REGISTRY_PREFIX }}
           DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
-          KRATOS_DB_MOUNT_PATH: ${{ vars.KRATOS_DB_MOUNT_PATH }}
+          KRATOS_DB_MOUNT_PATH: ${{ vars.KRATOS_DB_MOUNT_PATH || '/opt/kratos/data' }}
+          IMAGE_TAG: kratos
         run: |
           curl -fsSL https://raw.githubusercontent.com/yggdrasil-lab/yggdrasil-os/main/deploy/deploy.sh -o /tmp/deploy.sh
           chmod +x /tmp/deploy.sh
