@@ -11,6 +11,10 @@ services:
       - ${KRATOS_DB_MOUNT_PATH}:/var/lib/postgresql/data
     networks:
       - aether-net
+    # Service root, not deploy.labels: the container is what dashboards
+    # group by, and only root labels reach it.
+    labels:
+      - "com.docker.compose.project=${STACK_NAME}"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U kratos -d kratos"]
       interval: 10s
@@ -52,6 +56,8 @@ services:
       - kratos_mcp_token
     networks:
       - aether-net
+    labels:
+      - "com.docker.compose.project=${STACK_NAME}"
     deploy:
       mode: replicated
       replicas: 1
@@ -96,6 +102,8 @@ services:
       - TZ=Pacific/Auckland
     networks:
       - aether-net
+    labels:
+      - "com.docker.compose.project=${STACK_NAME}"
     deploy:
       mode: replicated
       replicas: 1
