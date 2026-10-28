@@ -8,24 +8,33 @@ services:
       - TZ=Pacific/Auckland
     volumes:
       # Bind mount, not a relative path: Swarm cannot resolve those.
-      - ${KRATOS_DB_MOUNT_PATH:-/opt/kratos/data}:/var/lib/postgresql/data
+      - ${KRATOS_DB_MOUNT_PATH}:/var/lib/postgresql/data
     networks:
       - aether-net
-    # Service root, not deploy.labels: -- the container is what dashboards
-    # group by, and only root labels reach it.
-    labels:
-      - "com.docker.compose.project=${STACK_NAME}"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kratos -d kratos"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     deploy:
       mode: replicated
       replicas: 1
       placement:
         constraints:
           - node.role == manager
+      update_config:
+        parallelism: 1
+        order: stop-first
       restart_policy:
         condition: on-failure
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
 
   kratos-api:
-    image: ${REGISTRY_PREFIX}kratos-api:${STACK_NAME:-latest}
+    image: ${REGISTRY_PREFIX}kratos-api:${IMAGE_TAG}
     build: ./api
     environment:
       # The database is reachable only on the internal aether-net network and
@@ -43,8 +52,6 @@ services:
       - kratos_mcp_token
     networks:
       - aether-net
-    labels:
-      - "com.docker.compose.project=${STACK_NAME}"
     deploy:
       mode: replicated
       replicas: 1
@@ -53,15 +60,20 @@ services:
           - node.role == manager
       restart_policy:
         condition: on-failure
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
       labels:
         - "traefik.enable=true"
         # PathPrefix makes /api more specific than the web catch-all, so the API
         # wins for /api/* and everything else falls through to the client.
-        - "traefik.http.routers.kratos-api.rule=Host(`kratos.${DOMAIN_NAME:?DOMAIN_NAME is required}`) && PathPrefix(`/api`)"
+        - "traefik.http.routers.kratos-api.rule=Host(`kratos.${DOMAIN_NAME}`) && PathPrefix(`/api`)"
         - "traefik.http.routers.kratos-api.entrypoints=websecure"
         - "traefik.http.routers.kratos-api.tls=true"
         - "traefik.http.routers.kratos-api.tls.certresolver=cloudflare"
-        - "traefik.http.routers.kratos-api.middlewares=authelia,kratos-api-strip"
+        - "traefik.http.routers.kratos-api.middlewares=authentik@docker,kratos-api-strip"
         # The client calls /api/*; the service itself serves unprefixed routes.
         - "traefik.http.middlewares.kratos-api-strip.stripprefix.prefixes=/api"
         # The MCP endpoint is machine-to-machine: an agent presents a bearer
@@ -69,7 +81,7 @@ services:
         # router on the same service with no auth middleware and no prefix strip
         # (the API serves /mcp itself). The longer path prefix outranks the web
         # catch-all, so /mcp reaches the API instead of the client.
-        - "traefik.http.routers.kratos-mcp.rule=Host(`kratos.${DOMAIN_NAME:?DOMAIN_NAME is required}`) && PathPrefix(`/mcp`)"
+        - "traefik.http.routers.kratos-mcp.rule=Host(`kratos.${DOMAIN_NAME}`) && PathPrefix(`/mcp`)"
         - "traefik.http.routers.kratos-mcp.entrypoints=websecure"
         - "traefik.http.routers.kratos-mcp.tls=true"
         - "traefik.http.routers.kratos-mcp.tls.certresolver=cloudflare"
@@ -78,14 +90,12 @@ services:
         - "traefik.docker.network=aether-net"
 
   kratos-web:
-    image: ${REGISTRY_PREFIX}kratos-web:${STACK_NAME:-latest}
+    image: ${REGISTRY_PREFIX}kratos-web:${IMAGE_TAG}
     build: ./web
     environment:
       - TZ=Pacific/Auckland
     networks:
       - aether-net
-    labels:
-      - "com.docker.compose.project=${STACK_NAME}"
     deploy:
       mode: replicated
       replicas: 1
@@ -94,13 +104,18 @@ services:
           - node.role == manager
       restart_policy:
         condition: on-failure
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 64M
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.kratos-web.rule=Host(`kratos.${DOMAIN_NAME:?DOMAIN_NAME is required}`)"
+        - "traefik.http.routers.kratos-web.rule=Host(`kratos.${DOMAIN_NAME}`)"
         - "traefik.http.routers.kratos-web.entrypoints=websecure"
         - "traefik.http.routers.kratos-web.tls=true"
         - "traefik.http.routers.kratos-web.tls.certresolver=cloudflare"
-        - "traefik.http.routers.kratos-web.middlewares=authelia"
+        - "traefik.http.routers.kratos-web.middlewares=authentik@docker"
         - "traefik.http.services.kratos-web.loadbalancer.server.port=8080"
         - "traefik.docker.network=aether-net"
 
