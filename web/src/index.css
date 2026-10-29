@@ -193,6 +193,18 @@ input {
   width: 100%;
 }
 
+/* Suppress native spin buttons on number inputs for clean mobile touch */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 input:focus {
   outline: none;
   border-color: var(--primary-color);
@@ -274,6 +286,11 @@ input::placeholder {
   margin-top: 0.5rem;
 }
 
+.set-row input {
+  text-align: center;
+  padding: 0.65rem 0.5rem;
+}
+
 .set-number {
   color: var(--text-muted);
   font-size: 0.85rem;
@@ -312,7 +329,7 @@ input::placeholder {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 50;
+  z-index: 1000;
   padding: 1rem;
 }
 

@@ -346,9 +346,13 @@ export function App() {
                         <stop offset="100%" stopColor="#c084fc" />
                       </linearGradient>
                     </defs>
-                    <path d="M6 18h12"></path>
-                    <path d="M6 14h12"></path>
-                    <rect width="18" height="8" x="3" y="2" rx="2"></rect>
+                    <path d="m6.5 6.5 11 11"></path>
+                    <path d="m21 21-1-1"></path>
+                    <path d="m3 3 1 1"></path>
+                    <path d="m18 22 4-4"></path>
+                    <path d="m2 6 4-4"></path>
+                    <path d="m3 10 7-7"></path>
+                    <path d="m14 21 7-7"></path>
                   </svg>
                 </div>
                 <h2>Ready to train?</h2>
@@ -361,7 +365,7 @@ export function App() {
                           key={routine.id}
                           className="btn-primary"
                           onClick={() => startSession(routine)}
-                          style={{ padding: '0.9rem 1.25rem', fontSize: '1rem', width: '100%' }}
+                          style={{ padding: '0.9rem 1.25rem', fontSize: '1rem', width: '100%', flexDirection: 'column' }}
                         >
                           <span style={{ display: 'block', fontWeight: 600 }}>{routine.name}</span>
                           {routine.items.length > 0 && (
@@ -423,8 +427,8 @@ export function App() {
                             {item.sets.length > 0 && (
                               <div className="set-row" style={{ color: 'var(--text-muted)', fontSize: '0.8rem', paddingBottom: '0.25rem' }}>
                                 <div style={{ textAlign: 'center' }}>SET</div>
-                                <div>KG</div>
-                                <div>REPS</div>
+                                <div style={{ textAlign: 'center' }}>KG</div>
+                                <div style={{ textAlign: 'center' }}>REPS</div>
                                 <div></div>
                               </div>
                             )}
@@ -500,6 +504,7 @@ export function App() {
           loading={loadingHistory}
         />
       )}
+      </main>
 
       {/* Exercise Picker Modal */}
       {showExercisePicker && (
@@ -546,8 +551,6 @@ export function App() {
           </div>
         </div>
       )}
-
-      </main>
 
       {/* Bottom Navigation */}
       <BottomNav

@@ -303,8 +303,8 @@ export function HistoryView({
 
             return (
               <div key={sess.id} className="glass-panel history-card" style={{ margin: 0, padding: '1.25rem' }}>
-                <div className="flex-between" style={{ alignItems: 'flex-start', marginBottom: '0.75rem' }}>
-                  <div className="flex-row" style={{ gap: '0.75rem', alignItems: 'center' }}>
+                <div className="flex-between" style={{ alignItems: 'flex-start', marginBottom: '0.75rem', gap: '0.5rem' }}>
+                  <div className="flex-row" style={{ gap: '0.75rem', alignItems: 'center', flex: 1, minWidth: 0 }}>
                     <div
                       style={{
                         width: '42px',
@@ -331,7 +331,7 @@ export function HistoryView({
                     >
                       {icon}
                     </div>
-                    <div>
+                    <div style={{ minWidth: 0 }}>
                       <div className="flex-row" style={{ gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                         <h3 style={{ fontSize: '1.15rem', color: '#fff', margin: 0 }}>{label}</h3>
                         {status === 'completed' && <span className="badge-completed">✓ Completed</span>}
@@ -349,7 +349,7 @@ export function HistoryView({
                     </div>
                   </div>
 
-                  <div className="flex-row" style={{ gap: '0.5rem', alignItems: 'center' }}>
+                  <div className="flex-row" style={{ gap: '0.35rem', alignItems: 'center', flexWrap: 'nowrap', flexShrink: 0 }}>
                     {duration && <span className="badge-duration">{duration}</span>}
                     <button
                       className="btn-icon btn-secondary"
