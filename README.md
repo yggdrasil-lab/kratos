@@ -77,8 +77,10 @@ The dev server proxies `/api` to `http://localhost:8000`.
 
 ## Tests
 
+### API Tests
+
 The API tests need a real Postgres, because the value of this schema is in its
-views and its constraints — a SQLite substitute would verify neither.
+views and its constraints: a SQLite substitute would verify neither.
 
 ```bash
 cd api
@@ -88,6 +90,18 @@ pytest
 The suite starts a throwaway Postgres server and applies the migrations to it, so
 no service needs to be running first. Point it at an existing instance instead
 with `KRATOS_TEST_DATABASE_URL`.
+
+### End-to-End Tests (Playwright)
+
+The web client includes end-to-end tests using Playwright covering PWA app shell,
+workout flows, routine pre-population, history views, and offline persistence.
+
+```bash
+cd web
+npm install
+npx playwright install --with-deps chromium
+npm run test:e2e
+```
 
 ## Configuration
 

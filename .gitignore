@@ -28,3 +28,7 @@ dist-ssr/
 # Generated
 coverage.xml
 htmlcov/
+test-results/
+playwright-report/
+blob-report/
+.cache/
