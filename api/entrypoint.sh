@@ -6,11 +6,14 @@ set -e
 # here; see "The database password" in
 # Areas/90-Infrastructure/Kratos/Kratos Stack.md.
 
-# Swarm delivers the MCP token as a file, but the app reads KRATOS_MCP_TOKEN
-# from the environment (pydantic-settings). Bridge the two here.
+# Swarm delivers secrets as files, but the app reads them from the environment.
 if [ -n "${KRATOS_MCP_TOKEN_FILE:-}" ]; then
     KRATOS_MCP_TOKEN=$(cat "$KRATOS_MCP_TOKEN_FILE")
     export KRATOS_MCP_TOKEN
+fi
+if [ -n "${KRATOS_WEBHOOK_SECRET_FILE:-}" ]; then
+    KRATOS_WEBHOOK_SECRET=$(cat "$KRATOS_WEBHOOK_SECRET_FILE")
+    export KRATOS_WEBHOOK_SECRET
 fi
 
 # Swarm starts services independently, so the database may not be accepting

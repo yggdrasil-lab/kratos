@@ -92,6 +92,14 @@ services:
         - "traefik.http.routers.kratos-mcp.tls=true"
         - "traefik.http.routers.kratos-mcp.tls.certresolver=cloudflare"
         - "traefik.http.routers.kratos-mcp.service=kratos-api"
+        # The integrations endpoint receives machine-to-machine webhooks from
+        # Withings Cloud and iOS Shortcuts. Like /mcp, it authenticates via its
+        # own bearer token / webhook secret rather than interactive Authentik SSO.
+        - "traefik.http.routers.kratos-integrations.rule=Host(`kratos.${DOMAIN_NAME}`) && PathPrefix(`/integrations`)"
+        - "traefik.http.routers.kratos-integrations.entrypoints=websecure"
+        - "traefik.http.routers.kratos-integrations.tls=true"
+        - "traefik.http.routers.kratos-integrations.tls.certresolver=cloudflare"
+        - "traefik.http.routers.kratos-integrations.service=kratos-api"
         - "traefik.http.services.kratos-api.loadbalancer.server.port=8000"
         - "traefik.docker.network=aether-net"
 

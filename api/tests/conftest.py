@@ -62,7 +62,7 @@ def _clean_database(engine) -> Iterator[None]:
     with engine.begin() as connection:
         connection.execute(
             text(
-                "truncate set_entry, session_item, session, routine_item, routine, exercise "
+                "truncate set_entry, session_item, session, routine_item, routine, exercise, weekly_plan, biometric_measurement "
                 "restart identity cascade"
             )
         )

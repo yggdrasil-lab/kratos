@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     cors_origins: str = "http://localhost:5173"
     mcp_token: str | None = None
+    webhook_secret: str | None = None
 
     @property
     def cors_origin_list(self) -> list[str]:
