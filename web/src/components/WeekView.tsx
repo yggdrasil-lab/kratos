@@ -526,20 +526,19 @@ export function WeekView({
                   {day.type === 'sport' && !attendedSportSession && skippedSportSession && (
                     <span className="badge-missed">✕ Skipped</span>
                   )}
-                  {day.type === 'none' && (
-                    <span className="badge-rest" style={{ opacity: 0.65 }}>Unscheduled</span>
-                  )}
                 </div>
 
                 <div className="flex-row" style={{ gap: '0.4rem', alignItems: 'center' }}>
-                  <button
-                    className="btn-icon btn-secondary"
-                    title="Edit this day's plan"
-                    onClick={() => openEditDayModal(day)}
-                    style={{ padding: '0.25rem 0.5rem', fontSize: '0.78rem' }}
-                  >
-                    ✎ Edit
-                  </button>
+                  {day.type !== 'none' && (
+                    <button
+                      className="btn-icon btn-secondary"
+                      title="Edit this day's plan"
+                      onClick={() => openEditDayModal(day)}
+                      style={{ padding: '0.25rem 0.5rem', fontSize: '0.78rem' }}
+                    >
+                      ✎ Edit
+                    </button>
+                  )}
                   <span className={`type-tag type-${day.type}`}>
                     {day.type === 'lift' ? '🏋️ Lift' : day.type === 'sport' ? '🏸 Sport' : day.type === 'rest' ? '☕ Rest & Fast' : '⚪ Unscheduled'}
                   </span>

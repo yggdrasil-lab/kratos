@@ -17,9 +17,13 @@ export function BottomNav({ activeTab, onChangeTab, hasActiveWorkout }: BottomNa
         >
           <div className="nav-icon-wrapper">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M6 18h12"></path>
-              <path d="M6 14h12"></path>
-              <rect width="18" height="8" x="3" y="2" rx="2"></rect>
+              <path d="m6.5 6.5 11 11"></path>
+              <path d="m21 21-1-1"></path>
+              <path d="m3 3 1 1"></path>
+              <path d="m18 22 4-4"></path>
+              <path d="m2 6 4-4"></path>
+              <path d="m3 10 7-7"></path>
+              <path d="m14 21 7-7"></path>
             </svg>
             {hasActiveWorkout && <span className="active-workout-dot" title="Workout in progress" />}
           </div>
