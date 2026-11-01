@@ -17,6 +17,7 @@ import { EffortDebriefModal } from './components/EffortDebriefModal'
 import { ProgressView } from './components/ProgressView'
 import { TodayView } from './components/TodayView'
 import { getCircadianDate, getCircadianDayOfWeek } from './utils/circadian'
+import { usePwaUpdate } from './utils/pwa'
 
 type Status = { kind: 'idle' | 'busy' | 'error'; message?: string }
 
@@ -38,6 +39,14 @@ export function App() {
 
   const circadianDate = getCircadianDate()
   const dayOfWeek = getCircadianDayOfWeek()
+  const {
+    needRefresh,
+    checkingForUpdate,
+    updateCheckMessage,
+    checkForUpdates,
+    applyUpdate,
+    dismissUpdate,
+  } = usePwaUpdate()
 
   const sync = async () => {
     setStatus({ kind: 'busy', message: 'Syncing…' })
@@ -196,9 +205,9 @@ export function App() {
         effort_tags: tags,
       },
     }
-    await enqueue(finalSession)
     updateSession(null)
     setShowDebriefModal(false)
+    await enqueue(finalSession)
 
     // Bridge workout debrief feedback to Eir
     try {
@@ -246,9 +255,9 @@ export function App() {
     if (!session) return
     const ended_at = new Date().toISOString()
     const finalSession = { ...session, ended_at }
-    await enqueue(finalSession)
     updateSession(null)
     setShowDebriefModal(false)
+    await enqueue(finalSession)
     await sync()
     await loadSessions()
     setActiveTab('today')
@@ -401,9 +410,55 @@ export function App() {
                 Force Sync
               </button>
             )}
+            <button
+              type="button"
+              className="btn-secondary"
+              style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem', borderRadius: '9999px' }}
+              onClick={checkForUpdates}
+              disabled={checkingForUpdate}
+              aria-label="Check for updates"
+            >
+              {checkingForUpdate ? 'Checking...' : updateCheckMessage ?? 'Check for updates'}
+            </button>
           </div>
           {status.kind === 'error' && status.message && (
             <p style={{ color: 'var(--danger-color)', marginTop: '0.5rem' }}>{status.message}</p>
+          )}
+          {needRefresh && (
+            <div
+              role="status"
+              data-testid="pwa-update-banner"
+              className="glass-panel flex-between animate-slide-up"
+              style={{
+                marginTop: '1rem',
+                marginBottom: 0,
+                padding: '0.75rem 1rem',
+                borderColor: 'rgba(59, 130, 246, 0.45)',
+                background: 'rgba(30, 41, 59, 0.85)',
+              }}
+            >
+              <span style={{ fontSize: '0.88rem', fontWeight: 500, color: 'var(--text-primary)' }}>
+                New version available
+              </span>
+              <div className="flex-row" style={{ gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  style={{ padding: '0.35rem 0.85rem', fontSize: '0.8rem' }}
+                  onClick={applyUpdate}
+                >
+                  Reload to update
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  style={{ padding: '0.35rem 0.7rem', fontSize: '0.8rem' }}
+                  onClick={dismissUpdate}
+                >
+                  Later
+                </button>
+              </div>
+            </div>
           )}
         </header>
 
