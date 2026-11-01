@@ -218,7 +218,7 @@ export function TodayView({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
           <div>
             <div style={{ fontSize: '0.75rem', color: 'var(--primary-hover)', fontWeight: 600, textTransform: 'uppercase' }}>
-              Today&rsquo;s Training
+              Today's Training
             </div>
             <h3 style={{ fontSize: '1.2rem', fontWeight: 700, margin: '0.2rem 0' }}>
               {activeRoutine ? activeRoutine.name : dayHeadline}

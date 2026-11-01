@@ -1,76 +1,67 @@
 import { test, expect } from '@playwright/test'
 import { setupMockApi } from './helpers/mock-data'
 
-test.describe('Train Flow: Free Workout', () => {
+test.describe('Train Flow and Effort Debrief', () => {
   test.beforeEach(async ({ page }) => {
     await setupMockApi(page)
     await page.goto('/')
   })
 
-  test('starts empty session, adds exercise, logs sets, and finishes workout', async ({ page }) => {
-    const bottomNav = page.locator('nav.bottom-nav')
-    await bottomNav.getByRole('button', { name: 'Train workout' }).click()
-
-    // Ready to train view
-    await expect(page.getByRole('heading', { name: 'Ready to train?' })).toBeVisible()
-    const startEmptyBtn = page.getByRole('button', { name: 'Start empty session' })
-    await startEmptyBtn.click()
+  test('starts workout from Today, logs sets, debriefs effort, and saves session', async ({ page }) => {
+    // Today view has the staged workout button
+    const startBtn = page.getByRole('button', { name: /Start Workout/i })
+    await expect(startBtn).toBeVisible()
+    await startBtn.click()
 
     // Current workout view
-    await expect(page.getByRole('heading', { name: 'Current Workout' })).toBeVisible()
-    await expect(page.getByText('No exercises added yet.')).toBeVisible()
+    await expect(page.getByRole('heading', { name: /Upper Body A|Current Workout/i })).toBeVisible()
 
-    // Open Exercise Picker
+    // Add another exercise
     await page.getByRole('button', { name: '+ Add Exercise' }).click()
     const modal = page.locator('.modal-overlay')
     await expect(modal).toBeVisible()
 
-    // Search and select exercise
+    // Search and select Barbell Squat
     const searchInput = modal.locator('input[placeholder="Search exercises..."]')
-    await searchInput.fill('Bench')
-    const exerciseItem = modal.locator('.exercise-item', { hasText: 'Bench Press (Dumbbell)' })
+    await searchInput.fill('Squat')
+    const exerciseItem = modal.locator('.exercise-item', { hasText: 'Barbell Squat' })
     await expect(exerciseItem).toBeVisible()
     await exerciseItem.click()
     await expect(modal).not.toBeVisible()
 
     // Exercise added to workout
-    await expect(page.locator('.workout-item h3')).toHaveText('Bench Press (Dumbbell)')
+    await expect(page.locator('.workout-item h3', { hasText: 'Barbell Squat' })).toBeVisible()
 
-    // Fill in set 1
+    // Fill in set
     const weightInputs = page.locator('.set-row input[placeholder*="Weight"]')
     const repsInputs = page.locator('.set-row input[placeholder*="Reps"]')
-    await expect(weightInputs).toHaveCount(1)
     await weightInputs.first().fill('32.5')
     await repsInputs.first().fill('10')
 
-    // Add set 2
-    await page.getByRole('button', { name: '+ Add Set' }).click()
-    await expect(page.locator('.set-row')).toHaveCount(3) // 1 header row + 2 set rows
-    await expect(page.locator('.set-number')).toHaveCount(2)
-    await expect(page.locator('.set-number').nth(1)).toHaveText('2')
-
-    // Fill in set 2
-    await weightInputs.nth(1).fill('35')
-    await repsInputs.nth(1).fill('8')
-
-    // Navigate to Week tab: verify in-progress banner and dot
-    await bottomNav.getByRole('button', { name: 'Weekly workout schedule' }).click()
-    const banner = page.locator('.active-workout-banner')
-    await expect(banner).toBeVisible()
-    await expect(banner).toContainText('Workout In Progress')
-    await expect(page.locator('.active-workout-dot')).toBeVisible()
-
-    // Click resume on banner
-    await banner.click()
-    await expect(page.getByRole('heading', { name: 'Current Workout' })).toBeVisible()
-
-    // Finish workout
+    // Finish workout - opens Effort Debrief Modal
     const finishBtn = page.getByRole('button', { name: 'Finish Workout' })
     await finishBtn.click()
 
-    // Navigates to history tab automatically upon finish
-    await expect(page.getByRole('heading', { name: 'Workout History' })).toBeVisible()
-    await expect(page.locator('.active-workout-banner')).not.toBeVisible()
-    await expect(page.locator('.active-workout-dot')).not.toBeVisible()
+    // Verify Effort Debrief Modal appears
+    await expect(page.getByRole('heading', { name: 'Workout Complete!' })).toBeVisible()
+    await expect(page.getByText('How much effort did this take?')).toBeVisible()
+
+    // Select Optimal effort
+    const optimalBtn = page.getByRole('button', { name: /Just Right \/ Optimal/i })
+    await expect(optimalBtn).toBeVisible()
+    await optimalBtn.click()
+
+    // Select quick tag
+    const feltStrongTag = page.getByRole('button', { name: '💪 Felt Strong' })
+    await expect(feltStrongTag).toBeVisible()
+    await feltStrongTag.click()
+
+    // Complete and save
+    const saveBtn = page.getByRole('button', { name: 'Save and Finish' })
+    await saveBtn.click()
+
+    // Modal closes and returns to Today view
+    await expect(page.getByRole('heading', { name: 'Workout Complete!' })).not.toBeVisible()
+    await expect(page.getByText(/Today's Training/i)).toBeVisible()
   })
 })

@@ -8,11 +8,8 @@ test.describe('Offline and Persistence (IndexedDB)', () => {
   })
 
   test('restores workout in progress from IndexedDB draft upon page reload', async ({ page }) => {
-    const bottomNav = page.locator('nav.bottom-nav')
-    await bottomNav.getByRole('button', { name: 'Train workout' }).click()
-
-    // Start empty workout
-    await page.getByRole('button', { name: 'Start empty session' }).click()
+    // Start workout
+    await page.getByRole('button', { name: /Start Workout/i }).click()
 
     // Add Barbell Squat
     await page.getByRole('button', { name: '+ Add Exercise' }).click()
@@ -29,16 +26,12 @@ test.describe('Offline and Persistence (IndexedDB)', () => {
     // Reload the page
     await page.reload()
 
-    // After reload, verify draft persistence
-    // Either banner is shown (if default tab is week) or active dot is present
+    // After reload, verify draft persistence and active dot
     await expect(page.locator('.active-workout-dot')).toBeVisible()
 
-    // Navigate to Train tab
-    await bottomNav.getByRole('button', { name: 'Train workout' }).click()
-
     // Current workout with Barbell Squat and inputs preserved
-    await expect(page.getByRole('heading', { name: 'Current Workout' })).toBeVisible()
-    await expect(page.locator('.workout-item h3')).toHaveText('Barbell Squat')
+    await expect(page.getByRole('heading', { name: /Upper Body A|Current Workout/i })).toBeVisible()
+    await expect(page.locator('.workout-item h3', { hasText: 'Barbell Squat' })).toBeVisible()
     await expect(page.locator('.set-row input[placeholder*="Weight"]').first()).toHaveValue('100')
     await expect(page.locator('.set-row input[placeholder*="Reps"]').first()).toHaveValue('5')
   })
@@ -53,21 +46,15 @@ test.describe('Offline and Persistence (IndexedDB)', () => {
       await route.continue()
     })
 
-    const bottomNav = page.locator('nav.bottom-nav')
-    await bottomNav.getByRole('button', { name: 'Train workout' }).click()
-    await page.getByRole('button', { name: 'Start empty session' }).click()
-
-    // Add exercise
-    await page.getByRole('button', { name: '+ Add Exercise' }).click()
-    const modal = page.locator('.modal-overlay')
-    await modal.locator('.exercise-item', { hasText: 'Barbell Squat' }).click()
+    await page.getByRole('button', { name: /Start Workout/i }).click()
 
     // Finish session while network is failing
     await page.getByRole('button', { name: 'Finish Workout' }).click()
+    await expect(page.getByRole('heading', { name: 'Workout Complete!' })).toBeVisible()
+    await page.getByRole('button', { name: 'Save and Finish' }).click()
 
     // Should indicate pending / offline in header badge
     await expect(page.locator('.status-badge')).toBeVisible()
-    // Verify Force Sync or pending count is rendered
     await expect(page.locator('header')).toContainText(/pending|Offline/i)
   })
 })

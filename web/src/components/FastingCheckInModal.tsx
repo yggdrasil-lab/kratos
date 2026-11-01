@@ -79,7 +79,7 @@ export function FastingCheckInModal({ date, targetWindow, onSave, onClose }: Fas
         {/* Adherence Selection */}
         <div style={{ marginBottom: '1.25rem' }}>
           <label style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.5rem' }}>
-            Did you follow today&rsquo;s fasting window?
+            Did you follow today's fasting window?
           </label>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             <button

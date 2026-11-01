@@ -556,7 +556,7 @@ export function App() {
             {exercises.length === 0 ? (
               status.kind === 'error' ? (
                 <p style={{ textAlign: 'center', padding: '2rem' }}>
-                  Couldn&rsquo;t load exercises - check your connection and try again.
+                  Couldn't load exercises - check your connection and try again.
                 </p>
               ) : (
                 <p style={{ textAlign: 'center', padding: '2rem' }}>

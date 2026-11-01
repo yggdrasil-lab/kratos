@@ -12,28 +12,29 @@ test.describe('App Shell and Navigation', () => {
     await expect(page.locator('.status-badge')).toBeVisible()
   })
 
-  test('switches tabs between Week, Train, and History', async ({ page }) => {
+  test('switches tabs between Today and Progress', async ({ page }) => {
     const bottomNav = page.locator('nav.bottom-nav')
     await expect(bottomNav).toBeVisible()
 
-    const trainBtn = bottomNav.getByRole('button', { name: 'Train workout' })
-    const weekBtn = bottomNav.getByRole('button', { name: 'Weekly workout schedule' })
-    const historyBtn = bottomNav.getByRole('button', { name: 'Workout history' })
+    const todayBtn = bottomNav.getByRole('button', { name: 'Today dashboard and workout' })
+    const progressBtn = bottomNav.getByRole('button', { name: 'Progress, 80kg Goal and Activity' })
 
-    // Default tab is Week
-    await expect(weekBtn).toHaveClass(/active/)
-    await expect(page.getByRole('heading', { name: 'Weekly Schedule' })).toBeVisible()
+    // Default tab is Today
+    await expect(todayBtn).toHaveClass(/active/)
+    await expect(page.getByText(/Today's Training/i)).toBeVisible()
+    await expect(page.getByText(/Fasting and Fueling/i)).toBeVisible()
 
-    // Switch to Train tab
-    await trainBtn.click()
-    await expect(trainBtn).toHaveClass(/active/)
-    await expect(weekBtn).not.toHaveClass(/active/)
-    await expect(page.getByRole('heading', { name: 'Ready to train?' })).toBeVisible()
+    // Switch to Progress tab
+    await progressBtn.click()
+    await expect(progressBtn).toHaveClass(/active/)
+    await expect(todayBtn).not.toHaveClass(/active/)
+    await expect(page.getByRole('heading', { name: 'Progress and Momentum' })).toBeVisible()
+    await expect(page.getByText('Goal: Reach 80 kg')).toBeVisible()
 
-    // Switch to History tab
-    await historyBtn.click()
-    await expect(historyBtn).toHaveClass(/active/)
-    await expect(trainBtn).not.toHaveClass(/active/)
-    await expect(page.getByRole('heading', { name: 'Workout History' })).toBeVisible()
+    // Switch back to Today tab
+    await todayBtn.click()
+    await expect(todayBtn).toHaveClass(/active/)
+    await expect(progressBtn).not.toHaveClass(/active/)
+    await expect(page.getByText(/Today's Training/i)).toBeVisible()
   })
 })
