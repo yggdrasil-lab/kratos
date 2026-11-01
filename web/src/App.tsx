@@ -199,6 +199,44 @@ export function App() {
     await enqueue(finalSession)
     updateSession(null)
     setShowDebriefModal(false)
+
+    // Bridge workout debrief feedback to Eir
+    try {
+      const routine = routines.find((r) => r.id === session.routine_id)
+      const duration = session.started_at
+        ? Math.round((new Date(ended_at).getTime() - new Date(session.started_at).getTime()) / 60000)
+        : undefined
+      const totalVolume = session.items.reduce((sum, item) => {
+        return (
+          sum +
+          item.sets.reduce(
+            (setSum, s) =>
+              setSum + (s.status === 'done' && s.reps && s.weight_kg ? s.reps * s.weight_kg : 0),
+            0
+          )
+        )
+      }, 0)
+      const completedSets = session.items.reduce(
+        (sum, item) => sum + item.sets.filter((s) => s.status === 'done').length,
+        0
+      )
+      const sessionDate = (session.started_at || ended_at).split('T')[0]
+
+      api.saveWorkoutFeedback({
+        date: sessionDate,
+        routine_name: routine?.name,
+        duration_minutes: duration,
+        total_volume_kg: totalVolume,
+        completed_sets: completedSets,
+        effort_rating: effort,
+        tags,
+        notes: notes || undefined,
+        logged_at: ended_at,
+      })
+    } catch {
+      // Best-effort bridge forward
+    }
+
     await sync()
     await loadSessions()
     setActiveTab('today')
