@@ -31,4 +31,5 @@ htmlcov/
 test-results/
 playwright-report/
 blob-report/
+screenshots/
 .cache/

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { FastingCheckIn } from '../types'
 
 interface FastingCheckInModalProps {
@@ -28,7 +29,7 @@ export function FastingCheckInModal({ date, targetWindow, onSave, onClose }: Fas
     onSave(payload)
   }
 
-  return (
+  return createPortal(
     <div className="modal-backdrop animate-fade-in" style={{
       position: 'fixed',
       top: 0,
@@ -44,13 +45,15 @@ export function FastingCheckInModal({ date, targetWindow, onSave, onClose }: Fas
       padding: '1rem',
       overflowY: 'auto',
     }}>
-      <div className="glass-panel animate-scale-up" style={{
+      <div className="animate-scale-up" style={{
         maxWidth: '480px',
         width: '100%',
         maxHeight: '90vh',
         overflowY: 'auto',
-        border: '1px solid var(--surface-border)',
-        boxShadow: '0 20px 50px rgba(0,0,0,0.6)',
+        backgroundColor: '#1e293b',
+        borderRadius: '16px',
+        border: '1px solid rgba(255, 255, 255, 0.15)',
+        boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.9)',
         padding: '1.5rem',
       }}>
         {/* Header */}
@@ -251,6 +254,7 @@ export function FastingCheckInModal({ date, targetWindow, onSave, onClose }: Fas
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
