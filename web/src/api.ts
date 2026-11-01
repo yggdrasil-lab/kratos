@@ -2,7 +2,7 @@
 // proxies /api to uvicorn, and in production the reverse proxy routes it too.
 // VITE_API_BASE_URL overrides the prefix for a split deployment.
 
-import type { Exercise, Routine, SessionPayload, WeeklyPlanPayload, WeeklyPlanRead } from './types'
+import type { DailyBiometrics, Exercise, FastingCheckIn, Routine, SessionPayload, WeeklyPlanPayload, WeeklyPlanRead } from './types'
 
 const BASE = import.meta.env.VITE_API_BASE_URL || '/api'
 
@@ -61,4 +61,23 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(payload),
     }),
+
+  getBiometricsToday: async (): Promise<DailyBiometrics | null> => {
+    try {
+      return await request<DailyBiometrics>('/biometrics/today')
+    } catch {
+      return null
+    }
+  },
+
+  saveFastingCheckIn: async (payload: FastingCheckIn): Promise<void> => {
+    try {
+      await request<void>('/biometrics/fasting', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })
+    } catch {
+      // Offline fallback: saved to IndexedDB
+    }
+  },
 }

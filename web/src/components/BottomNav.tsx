@@ -7,33 +7,16 @@ interface BottomNavProps {
 }
 
 export function BottomNav({ activeTab, onChangeTab, hasActiveWorkout }: BottomNavProps) {
+  const isTodayActive = activeTab === 'today' || activeTab === 'train' || activeTab === 'week'
+  const isProgressActive = activeTab === 'progress' || activeTab === 'history'
+
   return (
     <nav className="bottom-nav" aria-label="Main navigation">
       <div className="bottom-nav-container">
         <button
-          className={`bottom-nav-item ${activeTab === 'train' ? 'active' : ''}`}
-          onClick={() => onChangeTab('train')}
-          aria-label="Train workout"
-        >
-          <div className="nav-icon-wrapper">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="m6.5 6.5 11 11"></path>
-              <path d="m21 21-1-1"></path>
-              <path d="m3 3 1 1"></path>
-              <path d="m18 22 4-4"></path>
-              <path d="m2 6 4-4"></path>
-              <path d="m3 10 7-7"></path>
-              <path d="m14 21 7-7"></path>
-            </svg>
-            {hasActiveWorkout && <span className="active-workout-dot" title="Workout in progress" />}
-          </div>
-          <span className="nav-label">Train</span>
-        </button>
-
-        <button
-          className={`bottom-nav-item ${activeTab === 'week' ? 'active' : ''}`}
-          onClick={() => onChangeTab('week')}
-          aria-label="Weekly workout schedule"
+          className={`bottom-nav-item ${isTodayActive ? 'active' : ''}`}
+          onClick={() => onChangeTab('today')}
+          aria-label="Today dashboard and workout"
         >
           <div className="nav-icon-wrapper">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -42,22 +25,23 @@ export function BottomNav({ activeTab, onChangeTab, hasActiveWorkout }: BottomNa
               <line x1="8" y1="2" x2="8" y2="6"></line>
               <line x1="3" y1="10" x2="21" y2="10"></line>
             </svg>
+            {hasActiveWorkout && <span className="active-workout-dot" title="Workout in progress" />}
           </div>
-          <span className="nav-label">Week</span>
+          <span className="nav-label">Today</span>
         </button>
 
         <button
-          className={`bottom-nav-item ${activeTab === 'history' ? 'active' : ''}`}
-          onClick={() => onChangeTab('history')}
-          aria-label="Workout history"
+          className={`bottom-nav-item ${isProgressActive ? 'active' : ''}`}
+          onClick={() => onChangeTab('progress')}
+          aria-label="Progress, 80kg Goal and Activity"
         >
           <div className="nav-icon-wrapper">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10"></circle>
-              <polyline points="12 6 12 12 16 14"></polyline>
+              <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+              <polyline points="17 6 23 6 23 12"></polyline>
             </svg>
           </div>
-          <span className="nav-label">History</span>
+          <span className="nav-label">Progress</span>
         </button>
       </div>
     </nav>
