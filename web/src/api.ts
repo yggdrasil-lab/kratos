@@ -80,4 +80,25 @@ export const api = {
       // Offline fallback: saved to IndexedDB
     }
   },
+
+  saveWorkoutFeedback: async (payload: {
+    date: string
+    routine_name?: string
+    duration_minutes?: number
+    total_volume_kg?: number
+    completed_sets?: number
+    effort_rating: string
+    tags?: string[]
+    notes?: string
+    logged_at?: string
+  }): Promise<void> => {
+    try {
+      await request<void>('/biometrics/workout-feedback', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })
+    } catch {
+      // Offline fallback
+    }
+  },
 }

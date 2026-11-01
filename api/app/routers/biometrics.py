@@ -32,6 +32,18 @@ class FastingCheckInPayload(BaseModel):
     logged_at: str
 
 
+class WorkoutFeedbackPayload(BaseModel):
+    date: str
+    routine_name: str | None = None
+    duration_minutes: int | None = None
+    total_volume_kg: float | None = None
+    completed_sets: int | None = None
+    effort_rating: str  # 'too_easy', 'optimal', 'hard', 'too_hard'
+    tags: list[str] = []
+    notes: str | None = None
+    logged_at: str | None = None
+
+
 def _get_auckland_today() -> str:
     # Pacific/Auckland is UTC+12 or UTC+13 (NZDT). Use +13 as conservative local or circadian
     now_utc = datetime.now(timezone.utc)
@@ -72,17 +84,34 @@ def get_latest_biometrics() -> dict[str, Any] | None:
 @router.post("/fasting")
 def save_fasting_checkin(payload: FastingCheckInPayload) -> dict[str, str]:
     """Records fasting feedback and forwards to Eir when available."""
-    # Attempt to forward to Eir
     try:
         data = json.dumps(payload.model_dump()).encode("utf-8")
         req = urllib.request.Request(
-            f"{EIR_INTERNAL_URL}/biometrics",
+            f"{EIR_INTERNAL_URL}/feedback/fasting",
             data=data,
             headers={"Content-Type": "application/json", "User-Agent": "Kratos-Bridge/1.0"},
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=2.0):
             pass
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Failed forwarding fasting feedback to Eir: %s", exc)
+    return {"status": "ok"}
+
+
+@router.post("/workout-feedback")
+def save_workout_feedback(payload: WorkoutFeedbackPayload) -> dict[str, str]:
+    """Records workout feedback and forwards to Eir when available."""
+    try:
+        data = json.dumps(payload.model_dump()).encode("utf-8")
+        req = urllib.request.Request(
+            f"{EIR_INTERNAL_URL}/feedback/workout",
+            data=data,
+            headers={"Content-Type": "application/json", "User-Agent": "Kratos-Bridge/1.0"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=2.0):
+            pass
+    except Exception as exc:
+        logger.debug("Failed forwarding workout feedback to Eir: %s", exc)
     return {"status": "ok"}
