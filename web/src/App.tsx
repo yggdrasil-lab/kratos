@@ -2,26 +2,42 @@ import { useEffect, useState } from 'react'
 import { api } from './api'
 import { db, requestPersistence } from './db'
 import { enqueue, flush, newId, pending } from './outbox'
-import type { ActiveTab, Exercise, Routine, SessionItemPayload, SessionPayload } from './types'
-import { WeekView } from './components/WeekView'
-import { HistoryView } from './components/HistoryView'
+import type {
+  ActiveTab,
+  DailyBiometrics,
+  EffortRating,
+  Exercise,
+  FastingCheckIn,
+  Routine,
+  SessionItemPayload,
+  SessionPayload,
+} from './types'
 import { BottomNav } from './components/BottomNav'
+import { EffortDebriefModal } from './components/EffortDebriefModal'
+import { ProgressView } from './components/ProgressView'
+import { TodayView } from './components/TodayView'
+import { getCircadianDate, getCircadianDayOfWeek } from './utils/circadian'
 
 type Status = { kind: 'idle' | 'busy' | 'error'; message?: string }
 
 const DRAFT_KEY = 'current'
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<ActiveTab>('week')
+  const [activeTab, setActiveTab] = useState<ActiveTab>('today')
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
   const [queued, setQueued] = useState<number>(0)
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [routines, setRoutines] = useState<Routine[]>([])
   const [sessions, setSessions] = useState<SessionPayload[]>([])
-  const [loadingHistory, setLoadingHistory] = useState<boolean>(false)
+  const [biometrics, setBiometrics] = useState<DailyBiometrics | null>(null)
+  const [fastingLogs, setFastingLogs] = useState<FastingCheckIn[]>([])
   const [session, setSession] = useState<SessionPayload | null>(null)
   const [showExercisePicker, setShowExercisePicker] = useState<boolean>(false)
+  const [showDebriefModal, setShowDebriefModal] = useState<boolean>(false)
   const [search, setSearch] = useState<string>('')
+
+  const circadianDate = getCircadianDate()
+  const dayOfWeek = getCircadianDayOfWeek()
 
   const sync = async () => {
     setStatus({ kind: 'busy', message: 'Syncing…' })
@@ -31,7 +47,7 @@ export function App() {
       setStatus(
         left === 0
           ? { kind: 'idle', message: 'Up to date.' }
-          : { kind: 'error', message: `${left} still queued — will sync when online.` }
+          : { kind: 'error', message: `${left} still queued - will sync when online.` }
       )
     } catch (err) {
       setStatus({
@@ -51,18 +67,29 @@ export function App() {
   }
 
   const loadSessions = async () => {
-    setLoadingHistory(true)
     try {
       const data = await api.sessions(50, 0)
       setSessions(data)
     } catch {
-      // Offline fallback: check outbox sessions
       const queuedSessions = await pending()
       if (queuedSessions.length > 0) {
         setSessions(queuedSessions.map((q) => q.payload))
       }
-    } finally {
-      setLoadingHistory(false)
+    }
+  }
+
+  const loadBiometrics = async () => {
+    const data = await api.getBiometricsToday()
+    if (data) setBiometrics(data)
+  }
+
+  const loadFastingLogs = async () => {
+    try {
+      const logs = await db.fastingLogs.toArray()
+      logs.sort((a, b) => b.logged_at.localeCompare(a.logged_at))
+      setFastingLogs(logs)
+    } catch {
+      // ignore
     }
   }
 
@@ -77,13 +104,16 @@ export function App() {
     api.exercises().then(setExercises).catch(() => {
       setStatus({ kind: 'error', message: 'Failed to fetch catalogue' })
     })
-    api.routines().then(setRoutines).catch(() => {
-      // Non-fatal: user can still start an empty session.
-    })
+    api.routines().then(setRoutines).catch(() => {})
     loadSessions()
+    loadBiometrics()
+    loadFastingLogs()
 
     const onVisible = () => {
-      if (document.visibilityState === 'visible') void sync()
+      if (document.visibilityState === 'visible') {
+        void sync()
+        void loadBiometrics()
+      }
     }
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
@@ -105,7 +135,7 @@ export function App() {
       .slice()
       .sort((a, b) => a.position - b.position)
       .map((it, idx) => {
-        const targetSets = it.target_sets ?? 1
+        const targetSets = it.target_sets ?? 2
         return {
           id: newId(),
           exercise_id: it.exercise_id,
@@ -140,27 +170,50 @@ export function App() {
       extra: routine ? { routine_name: routine.name } : {},
       items,
     })
+    setActiveTab('today')
   }
 
-  const finishSession = async () => {
+  const promptFinishSession = () => {
+    if (!session) return
+    setShowDebriefModal(true)
+  }
+
+  const completeDebriefAndSave = async (
+    effort: EffortRating,
+    tags: string[],
+    notes: string
+  ) => {
+    if (!session) return
+    const ended_at = new Date().toISOString()
+    const existingExtra = session.extra || {}
+    const finalSession: SessionPayload = {
+      ...session,
+      ended_at,
+      notes: notes || session.notes,
+      extra: {
+        ...existingExtra,
+        effort_rating: effort,
+        effort_tags: tags,
+      },
+    }
+    await enqueue(finalSession)
+    updateSession(null)
+    setShowDebriefModal(false)
+    await sync()
+    await loadSessions()
+    setActiveTab('today')
+  }
+
+  const skipDebriefAndSave = async () => {
     if (!session) return
     const ended_at = new Date().toISOString()
     const finalSession = { ...session, ended_at }
     await enqueue(finalSession)
     updateSession(null)
+    setShowDebriefModal(false)
     await sync()
     await loadSessions()
-    setActiveTab('history')
-  }
-
-  const handleUpdateSession = async (updated: SessionPayload) => {
-    try {
-      await api.putSession(updated)
-    } catch {
-      await enqueue(updated)
-    }
-    await loadSessions()
-    await sync()
+    setActiveTab('today')
   }
 
   const handleDeleteSession = async (sessionId: string) => {
@@ -173,14 +226,13 @@ export function App() {
     await refreshQueueCount()
   }
 
-  const handleSaveCustomSession = async (customSession: SessionPayload) => {
+  const handleSaveFastingCheckIn = async (checkIn: FastingCheckIn) => {
     try {
-      await enqueue(customSession)
-      await sync()
-      await loadSessions()
+      await db.fastingLogs.put(checkIn)
+      setFastingLogs((prev) => [checkIn, ...prev.filter((c) => c.id !== checkIn.id)])
+      await api.saveFastingCheckIn(checkIn)
     } catch {
-      setSessions((prev) => [customSession, ...prev.filter((s) => s.id !== customSession.id)])
-      await refreshQueueCount()
+      // Offline fallback
     }
   }
 
@@ -192,18 +244,20 @@ export function App() {
       position: session.items.length,
       notes: null,
       extra: {},
-      sets: [{
-        id: newId(),
-        set_number: 1,
-        status: 'skipped',
-        reps: null,
-        weight_kg: null,
-        duration_s: null,
-        distance_m: null,
-        rpe: null,
-        notes: null,
-        extra: {},
-      }],
+      sets: [
+        {
+          id: newId(),
+          set_number: 1,
+          status: 'skipped',
+          reps: null,
+          weight_kg: null,
+          duration_s: null,
+          distance_m: null,
+          rpe: null,
+          notes: null,
+          extra: {},
+        },
+      ],
     }
     updateSession({ ...session, items: [...session.items, newItem] })
     setShowExercisePicker(false)
@@ -214,7 +268,7 @@ export function App() {
     if (!session) return
     updateSession({
       ...session,
-      items: session.items.filter(it => it.id !== itemId)
+      items: session.items.filter((it) => it.id !== itemId),
     })
   }
 
@@ -242,7 +296,12 @@ export function App() {
     updateSession({ ...session, items: newItems })
   }
 
-  const updateSet = (itemIndex: number, setIndex: number, field: 'weight_kg' | 'reps', value: number | null) => {
+  const updateSet = (
+    itemIndex: number,
+    setIndex: number,
+    field: 'weight_kg' | 'reps',
+    value: number | null
+  ) => {
     if (!session) return
     const newItems = [...session.items]
     const sets = [...newItems[itemIndex].sets]
@@ -268,255 +327,224 @@ export function App() {
   }
 
   const filteredExercises = search.trim()
-    ? exercises.filter((e) => e.name.toLowerCase().includes(search.trim().toLowerCase()))
+    ? exercises.filter((e) =>
+        e.name.toLowerCase().includes(search.trim().toLowerCase())
+      )
     : exercises
+
+  const todayFastingCheckIn = fastingLogs.find((f) => f.date === circadianDate)
 
   return (
     <>
       <main className="animate-fade-in app-main-layout">
-      <header className="header-area">
-        <h1>Kratos</h1>
-        <div className="flex-row" style={{ justifyContent: 'center', marginTop: '0.5rem' }}>
-          <span className={`status-badge ${status.kind === 'busy' ? 'syncing' : status.kind === 'error' ? 'error' : ''}`}>
-            {status.kind === 'busy'
-              ? 'Syncing...'
-              : status.kind === 'error'
-                ? 'Offline — data saved locally'
+        <header className="header-area">
+          <h1>Kratos</h1>
+          <div className="flex-row" style={{ justifyContent: 'center', marginTop: '0.5rem' }}>
+            <span
+              className={`status-badge ${
+                status.kind === 'busy' ? 'syncing' : status.kind === 'error' ? 'error' : ''
+              }`}
+            >
+              {status.kind === 'busy'
+                ? 'Syncing...'
+                : status.kind === 'error'
+                ? 'Offline - data saved locally'
                 : queued === 0
-                  ? 'All synced'
-                  : `${queued} pending`}
-          </span>
-          {queued > 0 && (
-            <button className="btn-secondary" style={{ padding: '0.2rem 0.6rem', fontSize: '0.8rem' }} onClick={sync} disabled={status.kind === 'busy'}>
-              Force Sync
-            </button>
-          )}
-        </div>
-        {status.kind === 'error' && status.message && (
-          <p style={{ color: 'var(--danger-color)', marginTop: '0.5rem' }}>{status.message}</p>
-        )}
-      </header>
-
-      {/* In-progress Banner when not on Train tab */}
-      {session && activeTab !== 'train' && (
-        <div
-          className="glass-panel active-workout-banner animate-slide-up"
-          onClick={() => setActiveTab('train')}
-          style={{ cursor: 'pointer', marginBottom: '1.25rem', borderColor: 'var(--primary-color)' }}
-        >
-          <div className="flex-between">
-            <div className="flex-row" style={{ gap: '0.75rem', alignItems: 'center' }}>
-              <span className="pulsing-green-dot" />
-              <div>
-                <strong style={{ fontSize: '0.95rem', color: '#fff', display: 'block' }}>
-                  Workout In Progress
-                </strong>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                  {(session.extra?.routine_name as string) || 'Free Workout'} • Tap to resume
-                </span>
-              </div>
-            </div>
-            <button className="btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.82rem' }}>
-              Resume →
-            </button>
+                ? 'All synced'
+                : `${queued} pending`}
+            </span>
+            {queued > 0 && (
+              <button
+                className="btn-secondary"
+                style={{ padding: '0.2rem 0.6rem', fontSize: '0.8rem' }}
+                onClick={sync}
+                disabled={status.kind === 'busy'}
+              >
+                Force Sync
+              </button>
+            )}
           </div>
-        </div>
-      )}
+          {status.kind === 'error' && status.message && (
+            <p style={{ color: 'var(--danger-color)', marginTop: '0.5rem' }}>{status.message}</p>
+          )}
+        </header>
 
-      {/* View: Train */}
-      {activeTab === 'train' && (
-        <>
-          {!session ? (
-            <section className="glass-panel animate-slide-up">
-              <div className="flex-col" style={{ alignItems: 'center', textAlign: 'center', padding: '2rem 0' }}>
-                <div style={{
-                  width: '64px',
-                  height: '64px',
-                  borderRadius: '50%',
-                  background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(139, 92, 246, 0.2))',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  marginBottom: '1rem'
-                }}>
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="url(#gradient)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <defs>
-                      <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor="#60a5fa" />
-                        <stop offset="100%" stopColor="#c084fc" />
-                      </linearGradient>
-                    </defs>
-                    <path d="m6.5 6.5 11 11"></path>
-                    <path d="m21 21-1-1"></path>
-                    <path d="m3 3 1 1"></path>
-                    <path d="m18 22 4-4"></path>
-                    <path d="m2 6 4-4"></path>
-                    <path d="m3 10 7-7"></path>
-                    <path d="m14 21 7-7"></path>
-                  </svg>
-                </div>
-                <h2>Ready to train?</h2>
-                {routines.length > 0 ? (
-                  <>
-                    <p style={{ marginBottom: '1.25rem' }}>Pick today&rsquo;s planned workout, then log your actuals.</p>
-                    <div className="flex-col" style={{ gap: '0.75rem', width: '100%', maxWidth: '420px' }}>
-                      {routines.map((routine) => (
-                        <button
-                          key={routine.id}
-                          className="btn-primary"
-                          onClick={() => startSession(routine)}
-                          style={{ padding: '0.9rem 1.25rem', fontSize: '1rem', width: '100%', flexDirection: 'column' }}
-                        >
-                          <span style={{ display: 'block', fontWeight: 600 }}>{routine.name}</span>
-                          {routine.items.length > 0 && (
-                            <span style={{ display: 'block', fontSize: '0.8rem', opacity: 0.85, marginTop: '0.15rem' }}>
-                              {routine.items.length} exercises planned
-                            </span>
-                          )}
-                        </button>
-                      ))}
-                      <button
-                        className="btn-secondary"
-                        onClick={() => startSession()}
-                        style={{ padding: '0.6rem 1rem', fontSize: '0.85rem' }}
-                      >
-                        Start empty session
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <p style={{ marginBottom: '1.5rem' }}>Start an empty session and log as you go.</p>
-                    <button className="btn-primary" onClick={() => startSession()} style={{ padding: '1rem 2rem', fontSize: '1.1rem' }}>
-                      Start Workout
-                    </button>
-                  </>
-                )}
-              </div>
-            </section>
-          ) : (
-            <section className="animate-slide-up">
-              <div className="flex-between" style={{ marginBottom: '1.5rem' }}>
-                <h2>Current Workout</h2>
-                <div className="status-badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: 'var(--success-color)' }}>
+        {/* ACTIVE WORKOUT LOGGING SCREEN */}
+        {session ? (
+          <section className="animate-slide-up">
+            <div className="flex-between" style={{ marginBottom: '1.5rem' }}>
+              <div>
+                <h2>{(session.extra?.routine_name as string) || 'Current Workout'}</h2>
+                <div
+                  className="status-badge"
+                  style={{ background: 'rgba(16, 185, 129, 0.15)', color: 'var(--success-color)' }}
+                >
                   In progress
                 </div>
               </div>
-              
-              <div className="glass-panel">
-                {session.items.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '2rem 1rem', color: 'var(--text-muted)' }}>
-                    <p>No exercises added yet.</p>
-                  </div>
-                ) : (
-                  <div className="flex-col" style={{ gap: '2rem' }}>
-                    {session.items.map((item, itemIdx) => {
-                      const exercise = exercises.find(e => e.id === item.exercise_id)
-                      const targetReps = (item.extra?.target_reps as number | null) ?? null
-                      const targetWeight = (item.extra?.target_weight_kg as number | null) ?? null
-                      return (
-                        <div key={item.id} className="workout-item">
-                          <div className="flex-between" style={{ marginBottom: '1rem' }}>
-                            <h3 style={{ fontSize: '1.2rem', color: '#fff' }}>{exercise?.name || 'Unknown Exercise'}</h3>
-                            <button className="btn-icon btn-danger" onClick={() => removeExercise(item.id)} title="Remove Exercise">
-                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                            </button>
-                          </div>
-                          
-                          <div className="flex-col" style={{ gap: '0.75rem' }}>
-                            {item.sets.length > 0 && (
-                              <div className="set-row" style={{ color: 'var(--text-muted)', fontSize: '0.8rem', paddingBottom: '0.25rem' }}>
-                                <div style={{ textAlign: 'center' }}>SET</div>
-                                <div style={{ textAlign: 'center' }}>KG</div>
-                                <div style={{ textAlign: 'center' }}>REPS</div>
-                                <div></div>
-                              </div>
-                            )}
-                            
-                            {item.sets.map((set, setIdx) => (
-                              <div key={set.id} className="set-row">
-                                <div className="set-number">{set.set_number}</div>
-                                <input 
-                                  type="number" 
-                                  step="0.5"
-                                  placeholder={targetWeight !== null ? String(targetWeight) : 'Weight'} 
-                                  value={set.weight_kg !== null ? set.weight_kg : ''} 
-                                  onChange={(e) => updateSet(itemIdx, setIdx, 'weight_kg', e.target.value ? parseFloat(e.target.value) : null)}
-                                />
-                                <input 
-                                  type="number" 
-                                  placeholder={targetReps !== null ? String(targetReps) : 'Reps'} 
-                                  value={set.reps !== null ? set.reps : ''} 
-                                  onChange={(e) => updateSet(itemIdx, setIdx, 'reps', e.target.value ? parseInt(e.target.value) : null)}
-                                />
-                                <button className="btn-icon btn-secondary" onClick={() => removeSet(itemIdx, setIdx)}>
-                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                          
-                          <button className="btn-secondary" style={{ width: '100%', marginTop: '1rem' }} onClick={() => addSet(itemIdx)}>
-                            + Add Set
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => updateSession(null)}
+                style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem' }}
+              >
+                Discard
+              </button>
+            </div>
+
+            <div className="glass-panel">
+              {session.items.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '2rem 1rem', color: 'var(--text-muted)' }}>
+                  <p>No exercises added yet.</p>
+                </div>
+              ) : (
+                <div className="flex-col" style={{ gap: '2rem' }}>
+                  {session.items.map((item, itemIdx) => {
+                    const exercise = exercises.find((e) => e.id === item.exercise_id)
+                    const targetReps = (item.extra?.target_reps as number | null) ?? null
+                    const targetWeight = (item.extra?.target_weight_kg as number | null) ?? null
+                    return (
+                      <div key={item.id} className="workout-item">
+                        <div className="flex-between" style={{ marginBottom: '1rem' }}>
+                          <h3 style={{ fontSize: '1.2rem', color: '#fff' }}>
+                            {exercise?.name || 'Unknown Exercise'}
+                          </h3>
+                          <button
+                            className="btn-icon btn-danger"
+                            onClick={() => removeExercise(item.id)}
+                            title="Remove Exercise"
+                          >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <line x1="18" y1="6" x2="6" y2="18"></line>
+                              <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
                           </button>
                         </div>
-                      )
-                    })}
-                  </div>
-                )}
-                
-                <div className="flex-col" style={{ gap: '1rem', marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--surface-border)' }}>
-                  <button className="btn-secondary" onClick={() => setShowExercisePicker(true)} style={{ padding: '1rem' }}>
-                    + Add Exercise
-                  </button>
-                  <button className="btn-primary" onClick={finishSession} style={{ padding: '1rem' }}>
-                    Finish Workout
-                  </button>
+
+                        <div className="flex-col" style={{ gap: '0.75rem' }}>
+                          {item.sets.length > 0 && (
+                            <div className="set-row" style={{ color: 'var(--text-muted)', fontSize: '0.8rem', paddingBottom: '0.25rem' }}>
+                              <div style={{ textAlign: 'center' }}>SET</div>
+                              <div style={{ textAlign: 'center' }}>KG</div>
+                              <div style={{ textAlign: 'center' }}>REPS</div>
+                              <div></div>
+                            </div>
+                          )}
+
+                          {item.sets.map((set, setIdx) => (
+                            <div key={set.id} className="set-row">
+                              <div className="set-number">{set.set_number}</div>
+                              <input
+                                type="number"
+                                step="0.5"
+                                placeholder={targetWeight !== null ? String(targetWeight) : 'Weight'}
+                                value={set.weight_kg !== null ? set.weight_kg : ''}
+                                onChange={(e) =>
+                                  updateSet(itemIdx, setIdx, 'weight_kg', e.target.value ? parseFloat(e.target.value) : null)
+                                }
+                              />
+                              <input
+                                type="number"
+                                placeholder={targetReps !== null ? String(targetReps) : 'Reps'}
+                                value={set.reps !== null ? set.reps : ''}
+                                onChange={(e) =>
+                                  updateSet(itemIdx, setIdx, 'reps', e.target.value ? parseInt(e.target.value) : null)
+                                }
+                              />
+                              <button
+                                className="btn-icon btn-secondary"
+                                onClick={() => removeSet(itemIdx, setIdx)}
+                              >
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M3 6h18"></path>
+                                  <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                                  <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                                </svg>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+
+                        <button className="btn-secondary" style={{ width: '100%', marginTop: '1rem' }} onClick={() => addSet(itemIdx)}>
+                          + Add Set
+                        </button>
+                      </div>
+                    )
+                  })}
                 </div>
+              )}
+
+              <div className="flex-col" style={{ gap: '1rem', marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--surface-border)' }}>
+                <button className="btn-secondary" onClick={() => setShowExercisePicker(true)} style={{ padding: '1rem' }}>
+                  + Add Exercise
+                </button>
+                <button
+                  className="btn-primary"
+                  onClick={promptFinishSession}
+                  style={{ padding: '1rem', fontSize: '1.05rem', fontWeight: 700 }}
+                >
+                  Finish Workout
+                </button>
               </div>
-            </section>
-          )}
-        </>
-      )}
-
-      {/* View: Week */}
-      {activeTab === 'week' && (
-        <WeekView
-          routines={routines}
-          sessions={sessions}
-          onStartRoutine={(routine) => {
-            startSession(routine)
-            setActiveTab('train')
-          }}
-          onSaveSession={handleSaveCustomSession}
-          onDeleteSession={handleDeleteSession}
-        />
-      )}
-
-      {/* View: History */}
-      {activeTab === 'history' && (
-        <HistoryView
-          sessions={sessions}
-          exercises={exercises}
-          onUpdateSession={handleUpdateSession}
-          onDeleteSession={handleDeleteSession}
-          onRefresh={loadSessions}
-          loading={loadingHistory}
-        />
-      )}
+            </div>
+          </section>
+        ) : (
+          /* DASHBOARD TABS (WHEN NOT IN WORKOUT) */
+          <>
+            {activeTab === 'progress' || activeTab === 'history' ? (
+              <ProgressView
+                sessions={sessions}
+                exercises={exercises}
+                fastingLogs={fastingLogs}
+                biometrics={biometrics}
+                onDeleteSession={handleDeleteSession}
+              />
+            ) : (
+              <TodayView
+                circadianDate={circadianDate}
+                dayOfWeek={dayOfWeek}
+                biometrics={biometrics}
+                routines={routines}
+                exercises={exercises}
+                sessions={sessions}
+                latestFastingCheckIn={todayFastingCheckIn}
+                onStartRoutine={startSession}
+                onSaveFastingCheckIn={handleSaveFastingCheckIn}
+              />
+            )}
+          </>
+        )}
       </main>
+
+      {/* Post-Workout Effort Debrief Modal */}
+      {showDebriefModal && session && (
+        <EffortDebriefModal
+          session={session}
+          exercises={exercises}
+          onSave={completeDebriefAndSave}
+          onSkip={skipDebriefAndSave}
+        />
+      )}
 
       {/* Exercise Picker Modal */}
       {showExercisePicker && (
-        <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowExercisePicker(false) }}>
+        <div
+          className="modal-overlay"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowExercisePicker(false)
+          }}
+        >
           <div className="modal-content animate-slide-up">
             <div className="flex-between" style={{ marginBottom: '1.5rem' }}>
               <h2 style={{ margin: 0 }}>Select Exercise</h2>
               <button className="btn-icon btn-secondary" onClick={() => setShowExercisePicker(false)}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
               </button>
             </div>
-            
+
             <input
               type="text"
               placeholder="Search exercises..."
@@ -524,18 +552,22 @@ export function App() {
               onChange={(e) => setSearch(e.target.value)}
               style={{ marginBottom: '1rem' }}
             />
-            
+
             {exercises.length === 0 ? (
               status.kind === 'error' ? (
-                <p style={{ textAlign: 'center', padding: '2rem' }}>Couldn't load exercises — check your connection and try again.</p>
+                <p style={{ textAlign: 'center', padding: '2rem' }}>
+                  Couldn't load exercises - check your connection and try again.
+                </p>
               ) : (
-                <p style={{ textAlign: 'center', padding: '2rem' }}>No exercises found. Add some to the database first.</p>
+                <p style={{ textAlign: 'center', padding: '2rem' }}>
+                  No exercises found. Add some to the database first.
+                </p>
               )
             ) : filteredExercises.length === 0 ? (
               <p style={{ textAlign: 'center', padding: '2rem' }}>No exercises match your search.</p>
             ) : (
               <ul className="exercise-list">
-                {filteredExercises.map(exercise => (
+                {filteredExercises.map((exercise) => (
                   <li key={exercise.id} className="exercise-item" onClick={() => addExerciseToSession(exercise)}>
                     <div>
                       <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{exercise.name}</div>
@@ -543,7 +575,10 @@ export function App() {
                         {exercise.primary_muscles.join(', ')}
                       </div>
                     </div>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--primary-color)" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--primary-color)" strokeWidth="2">
+                      <line x1="12" y1="5" x2="12" y2="19"></line>
+                      <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
                   </li>
                 ))}
               </ul>

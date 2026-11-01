@@ -82,10 +82,10 @@ export const MOCK_SESSIONS = [
   {
     id: 'sess-history-1',
     routine_id: 'routine-upper-a',
-    started_at: '2026-10-25T08:00:00.000Z',
-    ended_at: '2026-10-25T08:45:00.000Z',
+    started_at: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
+    ended_at: new Date(Date.now() - 23 * 3600 * 1000).toISOString(),
     notes: 'Solid session',
-    extra: { routine_name: 'Upper Body A' },
+    extra: { routine_name: 'Upper Body A', effort_rating: 'optimal', effort_tags: ['Felt Strong'] },
     items: [
       {
         id: 'si-1',
@@ -191,6 +191,25 @@ export async function setupMockApi(page: Page): Promise<MockApiState> {
     }
 
     await route.continue()
+  })
+
+  await page.route('**/api/biometrics/today**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        date: '2026-11-01',
+        latest_weight_kg: 86.65,
+        latest_body_fat_pct: 25.31,
+        resting_hr_bpm: 64,
+        hrv_ms: 50.26,
+        sleep_duration_hours: 8.11,
+        sleep_deep_hours: 1.25,
+        step_count: 966,
+        active_energy_kcal: 40,
+        readiness_notes: ['Apple Health rollup for 2026-11-01'],
+      }),
+    })
   })
 
   await page.route('**/api/plans/week/**', async (route) => {

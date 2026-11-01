@@ -2,7 +2,7 @@
 // exists. Dexie over IndexedDB, per the accepted stack.
 
 import Dexie, { type Table } from 'dexie'
-import type { SessionPayload } from './types'
+import type { FastingCheckIn, SessionPayload } from './types'
 
 export interface QueuedSession {
   id: string
@@ -23,6 +23,7 @@ export interface DraftSession {
 class KratosDb extends Dexie {
   outbox!: Table<QueuedSession, string>
   drafts!: Table<DraftSession, string>
+  fastingLogs!: Table<FastingCheckIn, string>
 
   constructor() {
     super('kratos')
@@ -31,6 +32,9 @@ class KratosDb extends Dexie {
     })
     this.version(2).stores({
       drafts: 'id, savedAt',
+    })
+    this.version(3).stores({
+      fastingLogs: 'id, date, logged_at',
     })
   }
 }

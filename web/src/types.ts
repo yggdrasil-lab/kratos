@@ -79,7 +79,34 @@ export interface SessionItemPayload {
   sets: SetEntry[]
 }
 
-export type ActiveTab = 'train' | 'week' | 'history'
+export type ActiveTab = 'today' | 'progress' | 'train' | 'week' | 'history'
+
+export type EffortRating = 'too_easy' | 'optimal' | 'hard' | 'too_hard'
+
+export interface FastingCheckIn {
+  id: string
+  date: string
+  target_window: string
+  adherence: 'completed' | 'early' | 'off_plan'
+  energy: 'high' | 'normal' | 'low'
+  headache: 'none' | 'mild' | 'sugar_spike'
+  notes?: string | null
+  logged_at: string
+}
+
+export interface DailyBiometrics {
+  date: string
+  latest_weight_kg?: number | string | null
+  latest_body_fat_pct?: number | string | null
+  resting_hr_bpm?: number | null
+  hrv_ms?: number | string | null
+  sleep_duration_hours?: number | null
+  sleep_deep_hours?: number | null
+  sleep_score?: number | null
+  step_count?: number | null
+  active_energy_kcal?: number | null
+  readiness_notes?: string[]
+}
 
 export interface PlannedActivity {
   id: string
