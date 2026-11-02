@@ -79,4 +79,42 @@ test.describe('Fasting Check-In Flow', () => {
     await expect(page.getByRole('heading', { name: /Fasting History/i })).toBeVisible()
     await expect(page.getByText(/Energy: high • Headache: none • "Smooth 16h fast"/i)).toBeVisible()
   })
+
+  test('hydrates fasting check-in from server biometrics across devices', async ({ page }) => {
+    // Override /api/biometrics/today to return server-side fasting feedback
+    const todayStr = new Date().toISOString().split('T')[0]
+    await page.route('**/api/biometrics/today**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          date: todayStr,
+          latest_weight_kg: 86.02,
+          fasting: {
+            id: 'fb-server-123',
+            date: todayStr,
+            feedback_type: 'fasting',
+            rating: 'completed',
+            score: 5.0,
+            tags: ['energy:high'],
+            payload: {
+              target_window: '16:8',
+              energy: 'high',
+              headache: 'none',
+            },
+            notes: 'Logged remotely from PC browser',
+            logged_at: new Date().toISOString(),
+          },
+        }),
+      })
+    })
+
+    // Reload page simulating fresh device opening app
+    await page.goto('/')
+
+    // FastingCard should immediately reflect the server-synced fast
+    await expect(page.getByText('✓ Completed')).toBeVisible()
+    await expect(page.getByText(/Logged: Energy high • Headache none • "Logged remotely from PC browser"/i)).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Edit' })).toBeVisible()
+  })
 })

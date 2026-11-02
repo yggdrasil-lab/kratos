@@ -94,6 +94,18 @@ export interface FastingCheckIn {
   logged_at: string
 }
 
+export interface HealthFeedback {
+  id?: string
+  date: string
+  feedback_type: string
+  rating?: string | null
+  score?: number | null
+  tags?: string[]
+  payload?: Record<string, unknown>
+  notes?: string | null
+  logged_at?: string
+}
+
 export interface DailyBiometrics {
   date: string
   latest_weight_kg?: number | string | null
@@ -106,6 +118,9 @@ export interface DailyBiometrics {
   step_count?: number | null
   active_energy_kcal?: number | null
   readiness_notes?: string[]
+  fasting?: HealthFeedback | null
+  workout?: HealthFeedback | null
+  wellness?: HealthFeedback | null
 }
 
 export interface PlannedActivity {
