@@ -157,8 +157,12 @@ export function FastingCard({
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
+            gap: '0.5rem',
           }}>
-            <span>Logged: Energy {latestCheckIn.energy} • Headache {latestCheckIn.headache}</span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              Logged: Energy {latestCheckIn.energy} • Headache {latestCheckIn.headache}
+              {latestCheckIn.notes ? ` • "${latestCheckIn.notes}"` : ''}
+            </span>
             <button
               type="button"
               onClick={() => setShowModal(true)}
@@ -169,6 +173,7 @@ export function FastingCard({
                 textDecoration: 'underline',
                 fontSize: '0.75rem',
                 cursor: 'pointer',
+                flexShrink: 0,
               }}
             >
               Edit
@@ -181,6 +186,7 @@ export function FastingCard({
         <FastingCheckInModal
           date={circadianDate}
           targetWindow={targetWindow}
+          initialCheckIn={latestCheckIn}
           onSave={(checkIn) => {
             onSaveCheckIn(checkIn)
             setShowModal(false)

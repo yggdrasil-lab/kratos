@@ -228,7 +228,7 @@ export function ProgressView({
                   </div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                     Energy: {f.energy} • Headache: {f.headache}
-                    {f.notes ? ` • &quot;${f.notes}&quot;` : ''}
+                    {f.notes ? ` • "${f.notes}"` : ''}
                   </div>
                 </div>
 

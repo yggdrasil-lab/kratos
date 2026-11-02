@@ -5,19 +5,32 @@ import type { FastingCheckIn } from '../types'
 interface FastingCheckInModalProps {
   date: string
   targetWindow: string
+  initialCheckIn?: FastingCheckIn
   onSave: (checkIn: FastingCheckIn) => void
   onClose: () => void
 }
 
-export function FastingCheckInModal({ date, targetWindow, onSave, onClose }: FastingCheckInModalProps) {
-  const [adherence, setAdherence] = useState<'completed' | 'early' | 'off_plan'>('completed')
-  const [energy, setEnergy] = useState<'high' | 'normal' | 'low'>('normal')
-  const [headache, setHeadache] = useState<'none' | 'mild' | 'sugar_spike'>('none')
-  const [notes, setNotes] = useState<string>('')
+export function FastingCheckInModal({
+  date,
+  targetWindow,
+  initialCheckIn,
+  onSave,
+  onClose,
+}: FastingCheckInModalProps) {
+  const [adherence, setAdherence] = useState<'completed' | 'early' | 'off_plan'>(
+    initialCheckIn?.adherence ?? 'completed'
+  )
+  const [energy, setEnergy] = useState<'high' | 'normal' | 'low'>(
+    initialCheckIn?.energy ?? 'normal'
+  )
+  const [headache, setHeadache] = useState<'none' | 'mild' | 'sugar_spike'>(
+    initialCheckIn?.headache ?? 'none'
+  )
+  const [notes, setNotes] = useState<string>(initialCheckIn?.notes ?? '')
 
   const handleSave = () => {
     const payload: FastingCheckIn = {
-      id: crypto.randomUUID(),
+      id: initialCheckIn?.id ?? crypto.randomUUID(),
       date,
       target_window: targetWindow,
       adherence,
