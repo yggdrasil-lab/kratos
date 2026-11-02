@@ -118,6 +118,7 @@ export interface MockApiState {
   sessions: typeof MOCK_SESSIONS
   savedSessions: unknown[]
   deletedSessionIds: string[]
+  savedFastingCheckIns: unknown[]
 }
 
 export async function setupMockApi(page: Page): Promise<MockApiState> {
@@ -127,6 +128,7 @@ export async function setupMockApi(page: Page): Promise<MockApiState> {
     sessions: [...MOCK_SESSIONS],
     savedSessions: [],
     deletedSessionIds: [],
+    savedFastingCheckIns: [],
   }
 
   await page.route('**/api/exercises**', async (route) => {
@@ -210,6 +212,32 @@ export async function setupMockApi(page: Page): Promise<MockApiState> {
         readiness_notes: ['Apple Health rollup for 2026-11-01'],
       }),
     })
+  })
+
+  await page.route('**/api/biometrics/fasting**', async (route) => {
+    if (route.request().method() === 'POST') {
+      const payload = JSON.parse(route.request().postData() || '{}')
+      state.savedFastingCheckIns.push(payload)
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'ok' }),
+      })
+      return
+    }
+    await route.continue()
+  })
+
+  await page.route('**/api/biometrics/workout-feedback**', async (route) => {
+    if (route.request().method() === 'POST') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'ok' }),
+      })
+      return
+    }
+    await route.continue()
   })
 
   await page.route('**/api/plans/week/**', async (route) => {
