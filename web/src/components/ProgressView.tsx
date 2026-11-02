@@ -196,6 +196,13 @@ export function ProgressView({
                       </span>
                     ))}
                   </div>
+
+                  {/* Reflection Notes */}
+                  {s.notes && (
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '0.5rem', fontStyle: 'italic' }}>
+                      &ldquo;{s.notes}&rdquo;
+                    </div>
+                  )}
                 </div>
               )
             })}

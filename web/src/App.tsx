@@ -23,6 +23,21 @@ type Status = { kind: 'idle' | 'busy' | 'error'; message?: string }
 
 const DRAFT_KEY = 'current'
 
+function parseServerFasting(fb?: DailyBiometrics['fasting']): FastingCheckIn | undefined {
+  if (!fb || !fb.date) return undefined
+  const payload = fb.payload || {}
+  return {
+    id: fb.id || `server-${fb.date}`,
+    date: fb.date,
+    target_window: (payload.target_window as string) || '16:8',
+    adherence: (fb.rating as 'completed' | 'early' | 'off_plan') || 'completed',
+    energy: (payload.energy as 'high' | 'normal' | 'low') || 'normal',
+    headache: (payload.headache as 'none' | 'mild' | 'sugar_spike') || 'none',
+    notes: fb.notes || null,
+    logged_at: fb.logged_at || new Date().toISOString(),
+  }
+}
+
 export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('today')
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
@@ -89,7 +104,23 @@ export function App() {
 
   const loadBiometrics = async () => {
     const data = await api.getBiometricsToday()
-    if (data) setBiometrics(data)
+    if (data) {
+      setBiometrics(data)
+      if (data.fasting) {
+        const serverCheckIn = parseServerFasting(data.fasting)
+        if (serverCheckIn) {
+          try {
+            await db.fastingLogs.put(serverCheckIn)
+            setFastingLogs((prev) => [
+              serverCheckIn,
+              ...prev.filter((c) => c.date !== serverCheckIn.date),
+            ])
+          } catch {
+            // Ignore IndexedDB put failure
+          }
+        }
+      }
+    }
   }
 
   const loadFastingLogs = async () => {
@@ -379,7 +410,10 @@ export function App() {
       )
     : exercises
 
-  const todayFastingCheckIn = fastingLogs.find((f) => f.date === circadianDate)
+  const serverFastingToday = parseServerFasting(biometrics?.fasting)
+  const todayFastingCheckIn =
+    fastingLogs.find((f) => f.date === circadianDate) ||
+    (serverFastingToday?.date === circadianDate ? serverFastingToday : undefined)
 
   return (
     <>
