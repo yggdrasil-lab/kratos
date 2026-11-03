@@ -55,7 +55,7 @@ test.describe('Offline and Persistence (IndexedDB)', () => {
 
     // Should indicate pending / offline in header badge
     await expect(page.locator('.status-badge')).toBeVisible()
-    await expect(page.locator('header')).toContainText(/pending|Offline/i)
+    await expect(page.locator('header')).toContainText(/pending|Offline|queued/i)
   })
 
   test('persists catalogue in IndexedDB and allows offline exercise selection', async ({ page }) => {

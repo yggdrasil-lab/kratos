@@ -82,8 +82,8 @@ export const MOCK_SESSIONS = [
   {
     id: 'sess-history-1',
     routine_id: 'routine-upper-a',
-    started_at: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
-    ended_at: new Date(Date.now() - 23 * 3600 * 1000).toISOString(),
+    started_at: '2026-11-01T10:00:00.000Z',
+    ended_at: '2026-11-01T11:00:00.000Z',
     notes: 'Solid session',
     extra: { routine_name: 'Upper Body A', effort_rating: 'optimal', effort_tags: ['Felt Strong'] },
     items: [
@@ -123,6 +123,9 @@ export interface MockApiState {
 }
 
 export async function setupMockApi(page: Page): Promise<MockApiState> {
+  // Pin browser date/clock to a scheduled lifting day (Monday) so tests are calendar-invariant
+  await page.clock.setFixedTime('2026-11-02T10:00:00Z')
+
   const state: MockApiState = {
     exercises: [...MOCK_EXERCISES],
     routines: [...MOCK_ROUTINES],
