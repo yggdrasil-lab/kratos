@@ -108,6 +108,35 @@ test.describe('Offline and Persistence (IndexedDB)', () => {
       await route.abort('failed')
     })
 
+    // Clear IndexedDB cache before navigating to ensure empty cache
+    await page.evaluate(async () => {
+      await new Promise<void>((resolve) => {
+        const req = indexedDB.open('kratos')
+        req.onsuccess = () => {
+          const idb = req.result
+          const names = Array.from(idb.objectStoreNames)
+          if (!names.length) {
+            idb.close()
+            resolve()
+            return
+          }
+          const tx = idb.transaction(names, 'readwrite')
+          for (const name of names) {
+            tx.objectStore(name).clear()
+          }
+          tx.oncomplete = () => {
+            idb.close()
+            resolve()
+          }
+          tx.onerror = () => {
+            idb.close()
+            resolve()
+          }
+        }
+        req.onerror = () => resolve()
+      })
+    })
+
     await page.goto('/')
 
     // Should report error telemetry and show error status when no cache is available

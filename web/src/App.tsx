@@ -486,7 +486,7 @@ export function App() {
               {status.kind === 'busy'
                 ? 'Syncing...'
                 : status.kind === 'error'
-                ? 'Offline - data saved locally'
+                ? status.message ?? 'Offline - data saved locally'
                 : queued === 0
                 ? 'All synced'
                 : `${queued} pending`}
