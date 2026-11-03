@@ -150,8 +150,12 @@ export function usePwaUpdate() {
   useEffect(() => {
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
     let refreshing = false
+    // With registerType 'autoUpdate' + skipWaiting/clientsClaim, a new worker takes
+    // control on its own. Reload when that replaces an existing controller (an update,
+    // not the first install) so the page never keeps running stale bundles.
+    const hadController = navigator.serviceWorker.controller !== null
     const onControllerChange = () => {
-      if (!updateRequestedRef.current || refreshing) return
+      if ((!updateRequestedRef.current && !hadController) || refreshing) return
       refreshing = true
       window.location.reload()
     }

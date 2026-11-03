@@ -8,6 +8,9 @@ const BASE = import.meta.env.VITE_API_BASE_URL || '/api'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${BASE}${path}`, {
+    // Never let the browser/WebKit heuristically cache API responses; standalone
+    // home-screen PWAs otherwise serve stale GETs (e.g. /biometrics/today).
+    cache: 'no-store',
     headers: { 'Content-Type': 'application/json' },
     ...init,
   })

@@ -9,6 +9,8 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+from starlette.datastructures import MutableHeaders
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app import __version__
 from app.config import settings
@@ -23,6 +25,35 @@ app = FastAPI(
     summary="Workout catalogue, plans, and logged sessions on Postgres.",
 )
 
+
+class NoCacheMiddleware:
+    """Stamp every HTTP response with no-store headers.
+
+    Without an explicit Cache-Control, mobile WebKit in a standalone home-screen
+    PWA heuristically caches GETs (e.g. /biometrics/today) across sessions and
+    serves stale data. Pure ASGI (not BaseHTTPMiddleware) so streaming responses
+    such as the MCP endpoint are not buffered.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_no_cache(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+                headers["Pragma"] = "no-cache"
+                headers["Expires"] = "0"
+            await send(message)
+
+        await self.app(scope, receive, send_with_no_cache)
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
@@ -30,6 +61,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(NoCacheMiddleware)
 
 app.include_router(catalogue.router)
 app.include_router(plan.router)
