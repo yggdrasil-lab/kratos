@@ -119,6 +119,7 @@ export interface MockApiState {
   savedSessions: unknown[]
   deletedSessionIds: string[]
   savedFastingCheckIns: unknown[]
+  clientErrors: unknown[]
 }
 
 export async function setupMockApi(page: Page): Promise<MockApiState> {
@@ -129,7 +130,22 @@ export async function setupMockApi(page: Page): Promise<MockApiState> {
     savedSessions: [],
     deletedSessionIds: [],
     savedFastingCheckIns: [],
+    clientErrors: [],
   }
+
+  await page.route('**/api/client-errors**', async (route) => {
+    if (route.request().method() === 'POST') {
+      const payload = JSON.parse(route.request().postData() || '{}')
+      state.clientErrors.push(payload)
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'ok' }),
+      })
+      return
+    }
+    await route.continue()
+  })
 
   await page.route('**/api/exercises**', async (route) => {
     await route.fulfill({

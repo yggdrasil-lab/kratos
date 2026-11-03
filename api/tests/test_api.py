@@ -13,7 +13,7 @@ def test_health_reports_the_database(client) -> None:
 def test_openapi_schema_is_served(client) -> None:
     schema = client.get("/openapi.json").json()
     assert schema["info"]["title"] == "Kratos API"
-    for path in ("/exercises", "/routines", "/sessions", "/stats/volume"):
+    for path in ("/exercises", "/routines", "/sessions", "/stats/volume", "/client-errors"):
         assert path in schema["paths"], path
 
 
@@ -163,3 +163,29 @@ def test_renaming_onto_an_existing_name_is_a_conflict(client) -> None:
     response = client.patch(f"/exercises/{second['id']}", json={"name": "Overhead Press"})
     assert response.status_code == 409
     assert "already exists" in response.json()["detail"]
+
+
+def test_client_errors_endpoint(client) -> None:
+    """Verifies client error telemetry captures frontend errors."""
+    payload = {
+        "message": "Failed to fetch catalogue",
+        "source": "catalogue_fetch",
+        "lineno": 145,
+        "colno": 12,
+        "error_type": "TypeError",
+        "stack": "TypeError: Failed to fetch\n  at api.exercises (api.ts:28)",
+        "url": "https://kratos.tienzo.net/",
+        "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)",
+        "timestamp": "2026-11-03T03:00:00Z",
+        "extra": {"component": "App"},
+    }
+    # Direct endpoint /client-errors
+    res1 = client.post("/client-errors", json=payload)
+    assert res1.status_code == 200
+    assert res1.json() == {"status": "ok"}
+
+    # Prefixed endpoint /api/client-errors
+    res2 = client.post("/api/client-errors", json=payload)
+    assert res2.status_code == 200
+    assert res2.json() == {"status": "ok"}
+

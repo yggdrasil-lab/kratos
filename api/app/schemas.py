@@ -242,6 +242,24 @@ class HealthRead(BaseModel):
     database: Literal["ok", "unreachable"] = "ok"
 
 
+# ---------------------------------------------------------------- client errors
+class ClientErrorCreate(BaseModel):
+    message: str
+    source: str | None = None
+    lineno: int | None = None
+    colno: int | None = None
+    error_type: str | None = None
+    stack: str | None = None
+    url: str | None = None
+    user_agent: str | None = None
+    timestamp: str | None = None
+    extra: dict = Field(default_factory=dict)
+
+
+class ClientErrorResponse(BaseModel):
+    status: Literal["ok"] = "ok"
+
+
 # ----------------------------------------------------------------- weekly plan
 class WeeklyPlanCreate(BaseModel):
     iso_week: str

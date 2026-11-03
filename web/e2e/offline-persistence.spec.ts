@@ -57,4 +57,63 @@ test.describe('Offline and Persistence (IndexedDB)', () => {
     await expect(page.locator('.status-badge')).toBeVisible()
     await expect(page.locator('header')).toContainText(/pending|Offline/i)
   })
+
+  test('persists catalogue in IndexedDB and allows offline exercise selection', async ({ page }) => {
+    // Start workout while online to verify initial state
+    await page.getByRole('button', { name: /Start Workout/i }).click()
+    await page.getByRole('button', { name: '+ Add Exercise' }).click()
+    const modal = page.locator('.modal-overlay')
+    await expect(modal.locator('.exercise-item', { hasText: 'Barbell Squat' })).toBeVisible()
+    await page.keyboard.press('Escape')
+
+    // Now simulate offline / network failure for catalogue
+    await page.route('**/api/exercises**', async (route) => {
+      await route.abort('failed')
+    })
+    await page.route('**/api/routines**', async (route) => {
+      await route.abort('failed')
+    })
+
+    // Reload page under offline conditions
+    await page.reload()
+
+    // Header should NOT show 'Failed to fetch catalogue' because IndexedDB has cached exercises
+    await expect(page.locator('header')).not.toContainText('Failed to fetch catalogue')
+
+    // Exercise picker should still open with cached exercises from IndexedDB
+    await page.getByRole('button', { name: '+ Add Exercise' }).click()
+    await expect(page.locator('.modal-overlay .exercise-item', { hasText: 'Barbell Squat' })).toBeVisible()
+  })
+
+  test('reports catalogue fetch failure to /api/client-errors when offline with empty cache', async ({ page }) => {
+    let clientErrorCaptured = false
+    let reportedPayload: Record<string, unknown> | null = null
+
+    await page.route('**/api/client-errors**', async (route) => {
+      if (route.request().method() === 'POST') {
+        clientErrorCaptured = true
+        reportedPayload = JSON.parse(route.request().postData() || '{}')
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'ok' }),
+        })
+        return
+      }
+      await route.continue()
+    })
+
+    // Simulate network failure on initial load
+    await page.route('**/api/exercises**', async (route) => {
+      await route.abort('failed')
+    })
+
+    await page.goto('/')
+
+    // Should report error telemetry and show error status when no cache is available
+    await expect(page.locator('header')).toContainText('Failed to fetch catalogue')
+    expect(clientErrorCaptured).toBe(true)
+    expect(reportedPayload).not.toBeNull()
+    expect((reportedPayload as Record<string, unknown> | null)?.message).toBeTruthy()
+  })
 })

@@ -173,3 +173,17 @@ export interface WeeklyPlanPayload {
   extra?: Record<string, unknown>
 }
 
+export interface ClientErrorPayload {
+  message: string
+  source?: string
+  lineno?: number
+  colno?: number
+  error_type?: string
+  stack?: string
+  url?: string
+  user_agent?: string
+  timestamp?: string
+  extra?: Record<string, unknown>
+}
+
+
