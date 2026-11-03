@@ -18,6 +18,7 @@ import { ProgressView } from './components/ProgressView'
 import { TodayView } from './components/TodayView'
 import { getCircadianDate, getCircadianDayOfWeek } from './utils/circadian'
 import { usePwaUpdate } from './utils/pwa'
+import { reportClientError } from './utils/telemetry'
 
 type Status = { kind: 'idle' | 'busy' | 'error'; message?: string }
 
@@ -133,6 +134,62 @@ export function App() {
     }
   }
 
+  const loadCatalogue = async () => {
+    try {
+      const cached = await db.exercises.toArray()
+      if (cached.length > 0) {
+        setExercises(cached)
+      }
+    } catch {
+      // Ignore IndexedDB read failure
+    }
+
+    try {
+      const fresh = await api.exercises()
+      setExercises(fresh)
+      try {
+        await db.transaction('rw', db.exercises, async () => {
+          await db.exercises.clear()
+          await db.exercises.bulkPut(fresh)
+        })
+      } catch {
+        // Ignore IndexedDB write failure
+      }
+    } catch (err) {
+      const cachedCount = await db.exercises.count().catch(() => 0)
+      if (cachedCount === 0) {
+        setStatus({ kind: 'error', message: 'Failed to fetch catalogue' })
+      }
+      void reportClientError(err, { source: 'catalogue_fetch' })
+    }
+  }
+
+  const loadRoutines = async () => {
+    try {
+      const cached = await db.routines.toArray()
+      if (cached.length > 0) {
+        setRoutines(cached)
+      }
+    } catch {
+      // Ignore IndexedDB read failure
+    }
+
+    try {
+      const fresh = await api.routines()
+      setRoutines(fresh)
+      try {
+        await db.transaction('rw', db.routines, async () => {
+          await db.routines.clear()
+          await db.routines.bulkPut(fresh)
+        })
+      } catch {
+        // Ignore IndexedDB write failure
+      }
+    } catch (err) {
+      void reportClientError(err, { source: 'routines_fetch' })
+    }
+  }
+
   useEffect(() => {
     requestPersistence()
     refreshQueueCount()
@@ -141,10 +198,8 @@ export function App() {
       if (draft) setSession(draft.session)
     })
 
-    api.exercises().then(setExercises).catch(() => {
-      setStatus({ kind: 'error', message: 'Failed to fetch catalogue' })
-    })
-    api.routines().then(setRoutines).catch(() => {})
+    void loadCatalogue()
+    void loadRoutines()
     loadSessions()
     loadBiometrics()
     loadFastingLogs()
@@ -153,6 +208,8 @@ export function App() {
       if (document.visibilityState === 'visible') {
         void sync()
         void loadBiometrics()
+        void loadCatalogue()
+        void loadRoutines()
       }
     }
     document.addEventListener('visibilitychange', onVisible)
@@ -429,7 +486,7 @@ export function App() {
               {status.kind === 'busy'
                 ? 'Syncing...'
                 : status.kind === 'error'
-                ? 'Offline - data saved locally'
+                ? status.message ?? 'Offline - data saved locally'
                 : queued === 0
                 ? 'All synced'
                 : `${queued} pending`}

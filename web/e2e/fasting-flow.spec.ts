@@ -82,7 +82,7 @@ test.describe('Fasting Check-In Flow', () => {
 
   test('hydrates fasting check-in from server biometrics across devices', async ({ page }) => {
     // Override /api/biometrics/today to return server-side fasting feedback
-    const todayStr = new Date().toISOString().split('T')[0]
+    const todayStr = await page.evaluate(() => new Date().toISOString().split('T')[0])
     await page.route('**/api/biometrics/today**', async (route) => {
       await route.fulfill({
         status: 200,
