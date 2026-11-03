@@ -53,8 +53,9 @@ export function App() {
   const [showDebriefModal, setShowDebriefModal] = useState<boolean>(false)
   const [search, setSearch] = useState<string>('')
 
-  const circadianDate = getCircadianDate()
-  const dayOfWeek = getCircadianDayOfWeek()
+  // Held in state (not recomputed per render) so a foreground/rollover can refresh it.
+  const [circadianDate, setCircadianDate] = useState(() => getCircadianDate())
+  const [dayOfWeek, setDayOfWeek] = useState(() => getCircadianDayOfWeek())
   const {
     needRefresh,
     checkingForUpdate,
@@ -190,6 +191,23 @@ export function App() {
     }
   }
 
+  const refreshCircadianClock = () => {
+    setCircadianDate(getCircadianDate())
+    setDayOfWeek(getCircadianDayOfWeek())
+  }
+
+  // Manual refresh (header button): re-evaluate the date and re-pull everything.
+  const refreshAll = async () => {
+    refreshCircadianClock()
+    await Promise.all([
+      sync(),
+      loadBiometrics(),
+      loadSessions(),
+      loadCatalogue(),
+      loadRoutines(),
+    ])
+  }
+
   useEffect(() => {
     requestPersistence()
     refreshQueueCount()
@@ -206,14 +224,22 @@ export function App() {
 
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
+        refreshCircadianClock()
         void sync()
         void loadBiometrics()
+        void loadSessions()
         void loadCatalogue()
         void loadRoutines()
       }
     }
     document.addEventListener('visibilitychange', onVisible)
-    return () => document.removeEventListener('visibilitychange', onVisible)
+    // Catch the circadian rollover while the app stays open (setState bails out on
+    // an unchanged value, so this only re-renders when the date actually changes).
+    const clockTimer = window.setInterval(refreshCircadianClock, 60_000)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      window.clearInterval(clockTimer)
+    }
   }, [])
 
   const updateSession = (next: SessionPayload | null) => {
@@ -501,6 +527,17 @@ export function App() {
                 Force Sync
               </button>
             )}
+            <button
+              type="button"
+              className="btn-secondary"
+              style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem', borderRadius: '9999px' }}
+              onClick={() => void refreshAll()}
+              disabled={status.kind === 'busy'}
+              aria-label="Refresh data"
+              data-testid="refresh-button"
+            >
+              {status.kind === 'busy' ? 'Refreshing...' : 'Refresh'}
+            </button>
             <button
               type="button"
               className="btn-secondary"
