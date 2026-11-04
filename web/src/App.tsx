@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { StatusBadge, PwaUpdateBanner, AppHeader } from '@yggdrasil-lab/ui'
-import { api, SessionExpiredError } from './api'
+import { StatusBadge, PwaUpdateBanner, AppHeader, SessionExpiredBanner, SessionExpiredError } from '@yggdrasil-lab/ui'
+import { api } from './api'
 import { db, requestPersistence } from './db'
 import { enqueue, flush, newId, pending } from './outbox'
 import type {
@@ -593,47 +593,7 @@ export function App() {
 
       <main className="animate-fade-in app-main-layout">
         {sessionExpired && (
-          <div
-            role="alert"
-            onClick={() => window.location.reload()}
-            style={{
-              padding: '0.85rem 1.25rem',
-              marginBottom: '1rem',
-              background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.25), rgba(185, 28, 28, 0.15))',
-              border: '1px solid rgba(239, 68, 68, 0.5)',
-              borderRadius: '0.75rem',
-              color: 'var(--text-primary)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '0.75rem',
-              cursor: 'pointer',
-              fontWeight: 500,
-              boxShadow: '0 4px 12px rgba(239, 68, 68, 0.2)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-              <span style={{ fontSize: '1.25rem', lineHeight: 1 }}>⚠️</span>
-              <span>Authentik session expired - tap to re-authenticate</span>
-            </div>
-            <button
-              type="button"
-              className="btn-primary"
-              style={{
-                fontSize: '0.8rem',
-                padding: '0.35rem 0.75rem',
-                backgroundColor: 'var(--danger-color)',
-                borderColor: 'var(--danger-color)',
-                whiteSpace: 'nowrap',
-              }}
-              onClick={(e) => {
-                e.stopPropagation()
-                window.location.reload()
-              }}
-            >
-              Log in
-            </button>
-          </div>
+          <SessionExpiredBanner className="mb-4" />
         )}
         {status.kind === 'error' && status.message && !sessionExpired && (
           <p style={{ color: 'var(--danger-color)', marginBottom: '1rem', textAlign: 'center' }}>{status.message}</p>

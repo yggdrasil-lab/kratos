@@ -2,37 +2,18 @@
 // proxies /api to uvicorn, and in production the reverse proxy routes it too.
 // VITE_API_BASE_URL overrides the prefix for a split deployment.
 
+import { authFetch, SessionExpiredError } from '@yggdrasil-lab/ui'
 import type { ClientErrorPayload, DailyBiometrics, Exercise, FastingCheckIn, Routine, SessionPayload, WeeklyPlanPayload, WeeklyPlanRead } from './types'
+
+export { SessionExpiredError }
 
 const BASE = import.meta.env.VITE_API_BASE_URL || '/api'
 
-export class SessionExpiredError extends Error {
-  constructor(message = 'Authentik session expired') {
-    super(message)
-    this.name = 'SessionExpiredError'
-  }
-}
-
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${BASE}${path}`, {
-    // Never let the browser/WebKit heuristically cache API responses; standalone
-    // home-screen PWAs otherwise serve stale GETs (e.g. /biometrics/today).
-    cache: 'no-store',
+  const response = await authFetch(`${BASE}${path}`, {
     headers: { 'Content-Type': 'application/json' },
     ...init,
   })
-  const contentType = response.headers.get('content-type') || ''
-  if (
-    response.status === 401 ||
-    response.status === 403 ||
-    (response.status >= 300 && response.status < 400) ||
-    response.redirected ||
-    contentType.includes('text/html')
-  ) {
-    throw new SessionExpiredError(
-      `Authentik session expired (status: ${response.status}, content-type: ${contentType})`
-    )
-  }
   if (!response.ok) {
     const detail = await response.text()
     throw new Error(`${response.status} ${response.statusText}: ${detail}`)
