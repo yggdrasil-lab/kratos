@@ -6,6 +6,13 @@ import type { ClientErrorPayload, DailyBiometrics, Exercise, FastingCheckIn, Rou
 
 const BASE = import.meta.env.VITE_API_BASE_URL || '/api'
 
+export class SessionExpiredError extends Error {
+  constructor(message = 'Authentik session expired') {
+    super(message)
+    this.name = 'SessionExpiredError'
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${BASE}${path}`, {
     // Never let the browser/WebKit heuristically cache API responses; standalone
@@ -14,6 +21,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { 'Content-Type': 'application/json' },
     ...init,
   })
+  const contentType = response.headers.get('content-type') || ''
+  if (
+    response.status === 401 ||
+    response.status === 403 ||
+    (response.status >= 300 && response.status < 400) ||
+    response.redirected ||
+    contentType.includes('text/html')
+  ) {
+    throw new SessionExpiredError(
+      `Authentik session expired (status: ${response.status}, content-type: ${contentType})`
+    )
+  }
   if (!response.ok) {
     const detail = await response.text()
     throw new Error(`${response.status} ${response.statusText}: ${detail}`)
@@ -54,7 +73,10 @@ export const api = {
   getWeeklyPlan: async (isoWeek: string): Promise<WeeklyPlanRead | null> => {
     try {
       return await request<WeeklyPlanRead>(`/plans/week/${isoWeek}`)
-    } catch {
+    } catch (err) {
+      if (err instanceof SessionExpiredError) {
+        throw err
+      }
       return null
     }
   },
@@ -68,7 +90,10 @@ export const api = {
   getBiometricsToday: async (): Promise<DailyBiometrics | null> => {
     try {
       return await request<DailyBiometrics>('/biometrics/today')
-    } catch {
+    } catch (err) {
+      if (err instanceof SessionExpiredError) {
+        throw err
+      }
       return null
     }
   },
@@ -79,7 +104,10 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(payload),
       })
-    } catch {
+    } catch (err) {
+      if (err instanceof SessionExpiredError) {
+        throw err
+      }
       // Offline fallback: saved to IndexedDB
     }
   },
@@ -100,7 +128,10 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(payload),
       })
-    } catch {
+    } catch (err) {
+      if (err instanceof SessionExpiredError) {
+        throw err
+      }
       // Offline fallback
     }
   },
