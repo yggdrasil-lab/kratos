@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { StatusBadge, PwaUpdateBanner } from '@yggdrasil-lab/ui'
+import { StatusBadge, PwaUpdateBanner, AppHeader } from '@yggdrasil-lab/ui'
 import { api } from './api'
 import { db, requestPersistence } from './db'
 import { enqueue, flush, newId, pending } from './outbox'
@@ -498,10 +498,22 @@ export function App() {
 
   return (
     <>
-      <main className="animate-fade-in app-main-layout">
-        <header className="header-area">
-          <h1>Kratos</h1>
-          <div className="flex-row" style={{ justifyContent: 'center', marginTop: '0.5rem' }}>
+      <AppHeader
+        variant="blue"
+        brandIcon={
+          <img
+            src="/favicon.svg"
+            alt="Kratos"
+            className="w-full h-full object-contain rounded-xl"
+          />
+        }
+        brandColor="overflow-hidden p-0 border border-sky-500/30"
+        title="Kratos"
+        subtitle="Strength & Circadian"
+        onRefresh={() => void refreshAll()}
+        isRefreshing={status.kind === 'busy'}
+        actions={
+          <div className="flex items-center space-x-2">
             <StatusBadge
               label={
                 status.kind === 'busy'
@@ -534,52 +546,21 @@ export function App() {
                 Force Sync
               </button>
             )}
-            <button
-              type="button"
-              className="btn-secondary"
-              style={{
-                padding: '0.35rem',
-                borderRadius: '0.5rem',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                lineHeight: 1,
-              }}
-              onClick={() => void refreshAll()}
-              disabled={status.kind === 'busy'}
-              aria-label="Refresh data"
-              title="Refresh data"
-              data-testid="refresh-button"
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className={status.kind === 'busy' ? 'animate-spin' : ''}
-              >
-                <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                <path d="M3 3v5h5" />
-                <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-                <path d="M16 21h5v-5" />
-              </svg>
-            </button>
           </div>
-          {status.kind === 'error' && status.message && (
-            <p style={{ color: 'var(--danger-color)', marginTop: '0.5rem' }}>{status.message}</p>
-          )}
-          {needRefresh && (
-            <PwaUpdateBanner
-              onReload={applyUpdate}
-              onDismiss={dismissUpdate}
-              className="mt-4 mb-0"
-            />
-          )}
-        </header>
+        }
+      />
+
+      <main className="animate-fade-in app-main-layout">
+        {status.kind === 'error' && status.message && (
+          <p style={{ color: 'var(--danger-color)', marginBottom: '1rem', textAlign: 'center' }}>{status.message}</p>
+        )}
+        {needRefresh && (
+          <PwaUpdateBanner
+            onReload={applyUpdate}
+            onDismiss={dismissUpdate}
+            className="mb-4"
+          />
+        )}
 
         {/* ACTIVE WORKOUT LOGGING SCREEN */}
         {session ? (
