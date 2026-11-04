@@ -119,11 +119,21 @@ services:
           memory: 64M
       labels:
         - "traefik.enable=true"
+        # Public PWA assets router for Android WebAPK minting and icon resolution
+        - "traefik.http.routers.kratos-web-pwa.rule=Host(`kratos.${DOMAIN_NAME}`) && (Path(`/manifest.webmanifest`, `/favicon.svg`, `/apple-touch-icon.png`, `/sw.js`, `/registerSW.js`) || PathPrefix(`/pwa-`, `/workbox-`))"
+        - "traefik.http.routers.kratos-web-pwa.entrypoints=websecure"
+        - "traefik.http.routers.kratos-web-pwa.tls=true"
+        - "traefik.http.routers.kratos-web-pwa.tls.certresolver=cloudflare"
+        - "traefik.http.routers.kratos-web-pwa.priority=100"
+        - "traefik.http.routers.kratos-web-pwa.service=kratos-web"
+
+        # Protected Web Router - Authentik SSO
         - "traefik.http.routers.kratos-web.rule=Host(`kratos.${DOMAIN_NAME}`)"
         - "traefik.http.routers.kratos-web.entrypoints=websecure"
         - "traefik.http.routers.kratos-web.tls=true"
         - "traefik.http.routers.kratos-web.tls.certresolver=cloudflare"
         - "traefik.http.routers.kratos-web.middlewares=authentik@docker"
+        - "traefik.http.routers.kratos-web.priority=10"
         - "traefik.http.services.kratos-web.loadbalancer.server.port=8080"
         - "traefik.docker.network=aether-net"
 
