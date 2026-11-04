@@ -58,9 +58,6 @@ export function App() {
   const [dayOfWeek, setDayOfWeek] = useState(() => getCircadianDayOfWeek())
   const {
     needRefresh,
-    checkingForUpdate,
-    updateCheckMessage,
-    checkForUpdates,
     applyUpdate,
     dismissUpdate,
   } = usePwaUpdate()
@@ -560,16 +557,6 @@ export function App() {
                 <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
                 <path d="M16 21h5v-5" />
               </svg>
-            </button>
-            <button
-              type="button"
-              className="btn-secondary"
-              style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem', borderRadius: '9999px' }}
-              onClick={checkForUpdates}
-              disabled={checkingForUpdate}
-              aria-label="Check for updates"
-            >
-              {checkingForUpdate ? 'Checking...' : updateCheckMessage ?? 'Check for updates'}
             </button>
           </div>
           {status.kind === 'error' && status.message && (
