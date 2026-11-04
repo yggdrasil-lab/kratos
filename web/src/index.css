@@ -47,9 +47,9 @@ body {
 }
 
 #root {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 2rem 1rem;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
 }
 
 /* Typography */
@@ -345,9 +345,11 @@ input::placeholder {
   padding: 1.5rem;
 }
 
-/* Layout spacing for bottom nav */
+/* Layout spacing for content and bottom nav */
 .app-main-layout {
-  padding-bottom: 5.5rem;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 5.5rem 1rem;
 }
 
 /* Bottom Navigation Bar */
