@@ -10,10 +10,10 @@ test.describe('App Shell and Navigation', () => {
   test('renders header and sync status badge', async ({ page }) => {
     await expect(page.locator('header h1')).toHaveText('Kratos')
     await expect(page.locator('.status-badge')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Check for updates' })).toBeVisible()
+    await expect(page.getByTestId('refresh-button')).toBeVisible()
   })
 
-  test('checks for PWA updates on demand and on visibilitychange and surfaces update banner', async ({ page }) => {
+  test('checks for PWA updates on visibilitychange and surfaces update banner', async ({ page }) => {
     await page.evaluate(() => {
       const state = {
         updateCalls: 0,
@@ -47,10 +47,6 @@ test.describe('App Shell and Navigation', () => {
         },
       })
     })
-
-    const checkBtn = page.getByRole('button', { name: 'Check for updates' })
-    await checkBtn.click()
-    await expect(checkBtn).toHaveText('Up to date')
 
     // Simulate visibilitychange revalidation finding a waiting SW
     await page.evaluate(() => {
