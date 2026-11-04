@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { StatusBadge, PwaUpdateBanner, AppHeader } from '@yggdrasil-lab/ui'
-import { api } from './api'
+import { api, SessionExpiredError } from './api'
 import { db, requestPersistence } from './db'
 import { enqueue, flush, newId, pending } from './outbox'
 import type {
@@ -43,6 +43,7 @@ function parseServerFasting(fb?: DailyBiometrics['fasting']): FastingCheckIn | u
 export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('today')
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
+  const [sessionExpired, setSessionExpired] = useState<boolean>(false)
   const [queued, setQueued] = useState<number>(0)
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [routines, setRoutines] = useState<Routine[]>([])
@@ -94,32 +95,57 @@ export function App() {
     try {
       const data = await api.sessions(50, 0)
       setSessions(data)
-    } catch {
+    } catch (err) {
+      if (err instanceof SessionExpiredError) {
+        setSessionExpired(true)
+        setStatus({
+          kind: 'error',
+          message: 'Authentik session expired - tap to re-authenticate',
+        })
+      }
       const queuedSessions = await pending()
       if (queuedSessions.length > 0) {
         setSessions(queuedSessions.map((q) => q.payload))
       }
+      void reportClientError(err, { source: 'sessions_fetch' })
     }
   }
 
   const loadBiometrics = async () => {
-    const data = await api.getBiometricsToday()
-    if (data) {
-      setBiometrics(data)
-      if (data.fasting) {
-        const serverCheckIn = parseServerFasting(data.fasting)
-        if (serverCheckIn) {
-          try {
-            await db.fastingLogs.put(serverCheckIn)
-            setFastingLogs((prev) => [
-              serverCheckIn,
-              ...prev.filter((c) => c.date !== serverCheckIn.date),
-            ])
-          } catch {
-            // Ignore IndexedDB put failure
+    try {
+      const data = await api.getBiometricsToday()
+      if (data) {
+        setBiometrics(data)
+        setSessionExpired(false)
+        if (data.fasting) {
+          const serverCheckIn = parseServerFasting(data.fasting)
+          if (serverCheckIn) {
+            try {
+              await db.fastingLogs.put(serverCheckIn)
+              setFastingLogs((prev) => [
+                serverCheckIn,
+                ...prev.filter((c) => c.date !== serverCheckIn.date),
+              ])
+            } catch {
+              // Ignore IndexedDB put failure
+            }
           }
         }
       }
+    } catch (err) {
+      if (err instanceof SessionExpiredError) {
+        setSessionExpired(true)
+        setStatus({
+          kind: 'error',
+          message: 'Authentik session expired - tap to re-authenticate',
+        })
+      } else {
+        setStatus({
+          kind: 'error',
+          message: 'Failed to load biometrics',
+        })
+      }
+      void reportClientError(err, { source: 'biometrics_fetch' })
     }
   }
 
@@ -155,9 +181,17 @@ export function App() {
         // Ignore IndexedDB write failure
       }
     } catch (err) {
+      if (err instanceof SessionExpiredError) {
+        setSessionExpired(true)
+      }
       const cachedCount = await db.exercises.count().catch(() => 0)
       if (cachedCount === 0) {
-        setStatus({ kind: 'error', message: 'Failed to fetch catalogue' })
+        setStatus({
+          kind: 'error',
+          message: err instanceof SessionExpiredError
+            ? 'Authentik session expired - tap to re-authenticate'
+            : 'Failed to fetch catalogue',
+        })
       }
       void reportClientError(err, { source: 'catalogue_fetch' })
     }
@@ -182,9 +216,16 @@ export function App() {
           await db.routines.bulkPut(fresh)
         })
       } catch {
-        // Ignore IndexedDB write failure
+      // Ignore IndexedDB write failure
       }
     } catch (err) {
+      if (err instanceof SessionExpiredError) {
+        setSessionExpired(true)
+        setStatus({
+          kind: 'error',
+          message: 'Authentik session expired - tap to re-authenticate',
+        })
+      }
       void reportClientError(err, { source: 'routines_fetch' })
     }
   }
@@ -551,7 +592,50 @@ export function App() {
       />
 
       <main className="animate-fade-in app-main-layout">
-        {status.kind === 'error' && status.message && (
+        {sessionExpired && (
+          <div
+            role="alert"
+            onClick={() => window.location.reload()}
+            style={{
+              padding: '0.85rem 1.25rem',
+              marginBottom: '1rem',
+              background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.25), rgba(185, 28, 28, 0.15))',
+              border: '1px solid rgba(239, 68, 68, 0.5)',
+              borderRadius: '0.75rem',
+              color: 'var(--text-primary)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '0.75rem',
+              cursor: 'pointer',
+              fontWeight: 500,
+              boxShadow: '0 4px 12px rgba(239, 68, 68, 0.2)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <span style={{ fontSize: '1.25rem', lineHeight: 1 }}>⚠️</span>
+              <span>Authentik session expired - tap to re-authenticate</span>
+            </div>
+            <button
+              type="button"
+              className="btn-primary"
+              style={{
+                fontSize: '0.8rem',
+                padding: '0.35rem 0.75rem',
+                backgroundColor: 'var(--danger-color)',
+                borderColor: 'var(--danger-color)',
+                whiteSpace: 'nowrap',
+              }}
+              onClick={(e) => {
+                e.stopPropagation()
+                window.location.reload()
+              }}
+            >
+              Log in
+            </button>
+          </div>
+        )}
+        {status.kind === 'error' && status.message && !sessionExpired && (
           <p style={{ color: 'var(--danger-color)', marginBottom: '1rem', textAlign: 'center' }}>{status.message}</p>
         )}
         {needRefresh && (
