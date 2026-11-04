@@ -13,7 +13,14 @@ export default defineConfig({
       // autoUpdate: new service workers activate immediately. With 'prompt' they sat in
       // 'waiting' forever in standalone home-screen PWAs, serving stale bundles.
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
+      includeAssets: [
+        'favicon.svg',
+        'apple-touch-icon.png',
+        'apple-touch-icon-precomposed.png',
+        'apple-touch-icon-180x180.png',
+        'apple-touch-icon-180x180-precomposed.png',
+        'apple-touch-icon-120x120.png',
+      ],
       manifest: {
         name: 'Kratos',
         short_name: 'Kratos',
