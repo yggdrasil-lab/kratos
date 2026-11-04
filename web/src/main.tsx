@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client'
 import { App } from './App'
 import { requestPersistence } from './db'
 import { initGlobalErrorReporter } from './utils/telemetry'
+import '@yggdrasil-lab/ui/style.css'
 import './index.css'
 
 // Install global error reporter and unhandled rejection listeners
