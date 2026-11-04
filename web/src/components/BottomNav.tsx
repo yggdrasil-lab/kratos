@@ -41,6 +41,7 @@ export function BottomNav({ activeTab, onChangeTab, hasActiveWorkout }: BottomNa
 
   return (
     <SharedBottomNav
+      variant="blue"
       className="bottom-nav"
       tabs={tabs}
       activeTab={currentTabId}

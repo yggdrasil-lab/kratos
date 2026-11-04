@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { StatusBadge, PwaUpdateBanner } from '@yggdrasil-lab/ui'
 import { api } from './api'
 import { db, requestPersistence } from './db'
 import { enqueue, flush, newId, pending } from './outbox'
@@ -501,19 +502,28 @@ export function App() {
         <header className="header-area">
           <h1>Kratos</h1>
           <div className="flex-row" style={{ justifyContent: 'center', marginTop: '0.5rem' }}>
-            <span
-              className={`status-badge ${
-                status.kind === 'busy' ? 'syncing' : status.kind === 'error' ? 'error' : ''
-              }`}
-            >
-              {status.kind === 'busy'
-                ? 'Syncing...'
-                : status.kind === 'error'
-                ? status.message ?? 'Offline - data saved locally'
-                : queued === 0
-                ? 'All synced'
-                : `${queued} pending`}
-            </span>
+            <StatusBadge
+              label={
+                status.kind === 'busy'
+                  ? 'Syncing...'
+                  : status.kind === 'error'
+                  ? status.message ?? 'Offline - data saved locally'
+                  : queued === 0
+                  ? 'All synced'
+                  : `${queued} pending`
+              }
+              variant={
+                status.kind === 'busy'
+                  ? 'busy'
+                  : status.kind === 'error'
+                  ? 'error'
+                  : queued === 0
+                  ? 'success'
+                  : 'warning'
+              }
+              isPulsing={status.kind === 'busy'}
+              className={status.kind === 'busy' ? 'syncing' : status.kind === 'error' ? 'error' : ''}
+            />
             {queued > 0 && (
               <button
                 className="btn-secondary"
@@ -563,40 +573,11 @@ export function App() {
             <p style={{ color: 'var(--danger-color)', marginTop: '0.5rem' }}>{status.message}</p>
           )}
           {needRefresh && (
-            <div
-              role="status"
-              data-testid="pwa-update-banner"
-              className="glass-panel flex-between animate-slide-up"
-              style={{
-                marginTop: '1rem',
-                marginBottom: 0,
-                padding: '0.75rem 1rem',
-                borderColor: 'rgba(59, 130, 246, 0.45)',
-                background: 'rgba(30, 41, 59, 0.85)',
-              }}
-            >
-              <span style={{ fontSize: '0.88rem', fontWeight: 500, color: 'var(--text-primary)' }}>
-                New version available
-              </span>
-              <div className="flex-row" style={{ gap: '0.5rem' }}>
-                <button
-                  type="button"
-                  className="btn-primary"
-                  style={{ padding: '0.35rem 0.85rem', fontSize: '0.8rem' }}
-                  onClick={applyUpdate}
-                >
-                  Reload to update
-                </button>
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  style={{ padding: '0.35rem 0.7rem', fontSize: '0.8rem' }}
-                  onClick={dismissUpdate}
-                >
-                  Later
-                </button>
-              </div>
-            </div>
+            <PwaUpdateBanner
+              onReload={applyUpdate}
+              onDismiss={dismissUpdate}
+              className="mt-4 mb-0"
+            />
           )}
         </header>
 
