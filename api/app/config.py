@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     llm_base_url: str = "http://muninn:4000/v1"
     llm_api_key: str = "sk-muninn-insecure-master-key"
     llm_model: str = "compress"
+    jev_model: str = "jev-decision"
 
     @property
     def cors_origin_list(self) -> list[str]:

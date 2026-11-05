@@ -283,6 +283,80 @@ export async function setupMockApi(page: Page): Promise<MockApiState> {
     })
   })
 
+  await page.route(/\/api\/biometrics\/workout-recommendation\/synthesize(\?.*)?$/, async (route) => {
+    if (route.request().method() === 'POST') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          date: '2026-11-01',
+          routine_name: 'Upper Body A (Joint-Sparing Autoregulated)',
+          rationale: 'Substituted neutral-grip pressing due to left shoulder friction report.',
+          target_rir: 'RPE 7-8 (2 RIR)',
+          recovery_status: 'fatigued',
+          estimated_duration_min: 35,
+          volume_landmark: 'MEV',
+          readiness_adaptation: 'Fatigue / Joint Deload',
+          exercises: [
+            {
+              exercise_name: 'Bench Press (Dumbbell)',
+              target_sets: 2,
+              target_reps: '10-12',
+              suggested_weight_kg: 28,
+              notes: 'Neutral grip; elbows tucked 45 deg to spare anterior shoulder capsule',
+            },
+            {
+              exercise_name: 'Overhead Press',
+              target_sets: 2,
+              target_reps: '12-15',
+              suggested_weight_kg: 35,
+              notes: 'Controlled eccentric 3s cadence; pause at clavicle',
+            },
+          ],
+          is_llm_generated: true,
+          research_citation: 'Israetel (Volume Landmarks) & McGill (Joint Sparing)',
+        }),
+      })
+      return
+    }
+    await route.continue()
+  })
+
+  await page.route(/\/api\/biometrics\/workout-recommendation(\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        date: '2026-11-01',
+        routine_name: 'Upper Body A (Chest and Vertical Pull)',
+        rationale: 'Recovery score optimal (HRV 50ms, 8.1h sleep). Primed for progressive overload at MAV.',
+        target_rir: 'RPE 8-9 (1-2 RIR)',
+        recovery_status: 'optimal',
+        estimated_duration_min: 45,
+        volume_landmark: 'MAV',
+        readiness_adaptation: 'Progressive Overload',
+        exercises: [
+          {
+            exercise_name: 'Bench Press (Dumbbell)',
+            target_sets: 3,
+            target_reps: '8-10',
+            suggested_weight_kg: 30,
+            notes: 'Progressive overload anchor: push to 1 RIR on set 3',
+          },
+          {
+            exercise_name: 'Overhead Press',
+            target_sets: 3,
+            target_reps: '10-12',
+            suggested_weight_kg: 40,
+            notes: 'Strict press from collarbone, solid core brace',
+          },
+        ],
+        is_llm_generated: true,
+        research_citation: 'Israetel (Volume Landmarks) & Helms (Autoregulation RIR)',
+      }),
+    })
+  })
+
   await page.route(/\/api\/biometrics\/fasting(\?.*)?$/, async (route) => {
     if (route.request().method() === 'POST') {
       const payload = JSON.parse(route.request().postData() || '{}')

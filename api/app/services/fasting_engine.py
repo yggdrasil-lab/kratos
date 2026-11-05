@@ -9,6 +9,7 @@ from typing import Any
 
 from app.models import WeeklyPlan
 from app.schemas import FastingRecommendationRead
+from app.services.jev_client import classify_fasting_window_jev
 
 
 def generate_fasting_recommendation(
@@ -68,7 +69,10 @@ def generate_fasting_recommendation(
     if rhr is not None and rhr >= 78:
         fatigue_flags.append(f"elevated RHR ({rhr} bpm)")
 
-    if len(fatigue_flags) >= 2 or (sleep_h is not None and sleep_h < 5.0) or (hrv is not None and hrv < 20.0):
+    jev_window = classify_fasting_window_jev(f"{activity_name} ({activity_type})", biometrics)
+    if jev_window == "GENTLE_14_10":
+        recovery_status = "fatigued"
+    elif len(fatigue_flags) >= 2 or (sleep_h is not None and sleep_h < 5.0) or (hrv is not None and hrv < 20.0):
         recovery_status = "fatigued"
     elif len(fatigue_flags) == 1:
         recovery_status = "moderate"
@@ -79,7 +83,7 @@ def generate_fasting_recommendation(
 
     # Rule A: High Autonomic Fatigue -> Relax fasting to protect against cortisol spikes
     if recovery_status == "fatigued":
-        flag_summary = ", ".join(fatigue_flags)
+        flag_summary = ", ".join(fatigue_flags) if fatigue_flags else "autonomic recovery deficit"
         return FastingRecommendationRead(
             date=date_str,
             protocol_name="14:10 Autoregulated Recovery Split",

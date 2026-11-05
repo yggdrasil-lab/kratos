@@ -107,6 +107,28 @@ export interface FastingRecommendation {
   research_citation?: string | null
 }
 
+export interface RecommendedExerciseItem {
+  exercise_id?: string | null
+  exercise_name: string
+  target_sets: number
+  target_reps: string
+  suggested_weight_kg?: number | null
+  notes?: string | null
+}
+
+export interface WorkoutRecommendation {
+  date: string
+  routine_name: string
+  readiness_adaptation: string
+  target_rir: string
+  volume_landmark: string
+  rationale: string
+  exercises: RecommendedExerciseItem[]
+  recovery_status: 'optimal' | 'moderate' | 'fatigued'
+  research_citation?: string | null
+  is_llm_generated?: boolean
+}
+
 export interface HealthFeedback {
   id?: string
   date: string

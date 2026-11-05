@@ -1,13 +1,15 @@
 import { useState } from 'react'
-import type { DailyBiometrics, Exercise, FastingCheckIn, FastingRecommendation, Routine, SessionPayload } from '../types'
+import type { DailyBiometrics, Exercise, FastingCheckIn, FastingRecommendation, Routine, SessionPayload, WorkoutRecommendation } from '../types'
 import { DAY_NAMES, DAY_SHORTS, formatFriendlyDate } from '../utils/circadian'
 import { FastingCard } from './FastingCard'
+import { WorkoutAiModal } from './WorkoutAiModal'
 
 interface TodayViewProps {
   circadianDate: string
   dayOfWeek: number
   biometrics: DailyBiometrics | null
   fastingRecommendation?: FastingRecommendation | null
+  workoutRecommendation?: WorkoutRecommendation | null
   routines: Routine[]
   exercises: Exercise[]
   sessions: SessionPayload[]
@@ -15,6 +17,7 @@ interface TodayViewProps {
   onStartRoutine: (routine: Routine) => void
   onSaveFastingCheckIn: (checkIn: FastingCheckIn) => void
   onSynthesizeFastingRecommendation?: (customContext?: string) => Promise<void>
+  onSynthesizeWorkoutRecommendation?: (customContext?: string) => Promise<void>
 }
 
 export function TodayView({
@@ -22,6 +25,7 @@ export function TodayView({
   dayOfWeek,
   biometrics,
   fastingRecommendation,
+  workoutRecommendation,
   routines,
   exercises,
   sessions,
@@ -29,9 +33,12 @@ export function TodayView({
   onStartRoutine,
   onSaveFastingCheckIn,
   onSynthesizeFastingRecommendation,
+  onSynthesizeWorkoutRecommendation,
 }: TodayViewProps) {
   const [selectedRoutineOverride, setSelectedRoutineOverride] = useState<Routine | null>(null)
   const [showRoutinePicker, setShowRoutinePicker] = useState<boolean>(false)
+  const [showWorkoutAiModal, setShowWorkoutAiModal] = useState<boolean>(false)
+  const [showWorkoutResearch, setShowWorkoutResearch] = useState<boolean>(false)
 
   // 1. Calculate readiness from biometrics
   const sleepHours = biometrics?.sleep_duration_hours ?? null
@@ -223,33 +230,109 @@ export function TodayView({
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
           <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--primary-hover)', fontWeight: 600, textTransform: 'uppercase' }}>
-              Today's Training
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--primary-hover)', fontWeight: 600, textTransform: 'uppercase' }}>
+                Today's Training
+              </span>
+              {workoutRecommendation?.is_llm_generated && (
+                <span style={{
+                  fontSize: '0.65rem',
+                  padding: '0.1rem 0.4rem',
+                  borderRadius: '0.4rem',
+                  fontWeight: 600,
+                  backgroundColor: 'rgba(59, 130, 246, 0.25)',
+                  color: '#93c5fd',
+                }}>
+                  ⚡ AI Autoregulated
+                </span>
+              )}
             </div>
             <h3 style={{ fontSize: '1.2rem', fontWeight: 700, margin: '0.2rem 0' }}>
-              {activeRoutine ? activeRoutine.name : dayHeadline}
+              {workoutRecommendation?.routine_name ?? (activeRoutine ? activeRoutine.name : dayHeadline)}
             </h3>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
               {daySubtitle}
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setShowRoutinePicker(!showRoutinePicker)}
-            style={{
-              background: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid var(--surface-border)',
-              borderRadius: '0.5rem',
-              color: 'var(--text-secondary)',
-              padding: '0.35rem 0.65rem',
-              fontSize: '0.75rem',
-              cursor: 'pointer',
-            }}
-          >
-            {showRoutinePicker ? 'Close' : 'Swap Split'}
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            {onSynthesizeWorkoutRecommendation && (
+              <button
+                type="button"
+                onClick={() => setShowWorkoutAiModal(true)}
+                style={{
+                  background: 'rgba(59, 130, 246, 0.15)',
+                  border: '1px solid rgba(59, 130, 246, 0.4)',
+                  borderRadius: '0.5rem',
+                  color: '#93c5fd',
+                  padding: '0.35rem 0.6rem',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.25rem',
+                  cursor: 'pointer',
+                }}
+                title="Autoregulate training with AI sports physiology"
+              >
+                <span>⚡</span>
+                <span>Adapt</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setShowRoutinePicker(!showRoutinePicker)}
+              style={{
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid var(--surface-border)',
+                borderRadius: '0.5rem',
+                color: 'var(--text-secondary)',
+                padding: '0.35rem 0.65rem',
+                fontSize: '0.75rem',
+                cursor: 'pointer',
+              }}
+            >
+              {showRoutinePicker ? 'Close' : 'Swap Split'}
+            </button>
+          </div>
         </div>
+
+        {/* Readiness Adaptation Banner */}
+        {workoutRecommendation && (
+          <div style={{
+            backgroundColor: workoutRecommendation.recovery_status === 'fatigued'
+              ? 'rgba(239, 68, 68, 0.12)'
+              : workoutRecommendation.recovery_status === 'moderate'
+              ? 'rgba(245, 158, 11, 0.12)'
+              : 'rgba(16, 185, 129, 0.12)',
+            border: workoutRecommendation.recovery_status === 'fatigued'
+              ? '1px solid rgba(239, 68, 68, 0.3)'
+              : workoutRecommendation.recovery_status === 'moderate'
+              ? '1px solid rgba(245, 158, 11, 0.3)'
+              : '1px solid rgba(16, 185, 129, 0.3)',
+            borderRadius: '0.5rem',
+            padding: '0.65rem 0.85rem',
+            marginBottom: '1rem',
+            fontSize: '0.78rem',
+            color: workoutRecommendation.recovery_status === 'fatigued' ? '#fca5a5' : workoutRecommendation.recovery_status === 'moderate' ? '#fde68a' : '#a7f3d0',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '0.5rem',
+          }}>
+            <span style={{ fontSize: '0.95rem', lineHeight: 1.2 }}>
+              {workoutRecommendation.recovery_status === 'fatigued' ? '🛡️' : '🎯'}
+            </span>
+            <div style={{ flex: 1, lineHeight: 1.4 }}>
+              <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.15rem' }}>
+                {workoutRecommendation.readiness_adaptation}
+              </div>
+              <div style={{ fontSize: '0.74rem', opacity: 0.9 }}>
+                {workoutRecommendation.rationale} ({workoutRecommendation.volume_landmark} • {workoutRecommendation.target_rir})
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Routine Swap Selector */}
         {showRoutinePicker && (
@@ -290,8 +373,40 @@ export function TodayView({
           </div>
         )}
 
-        {/* Exercise Preview with Ghost Targets */}
-        {activeRoutine && activeRoutine.items && activeRoutine.items.length > 0 && (
+        {/* Exercise Preview with Autoregulated Targets or Ghost Targets */}
+        {workoutRecommendation?.exercises && workoutRecommendation.exercises.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.25rem' }}>
+            {workoutRecommendation.exercises.map((recEx, idx) => (
+              <div
+                key={idx}
+                style={{
+                  backgroundColor: 'rgba(255, 255, 255, 0.02)',
+                  borderRadius: '0.5rem',
+                  padding: '0.65rem 0.85rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.25rem',
+                  border: '1px solid rgba(255, 255, 255, 0.04)',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>{idx + 1}.</span>
+                    <span style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-primary)' }}>{recEx.exercise_name}</span>
+                  </div>
+                  <span style={{ fontSize: '0.75rem', color: '#c084fc', backgroundColor: 'rgba(139, 92, 246, 0.12)', padding: '0.2rem 0.5rem', borderRadius: '0.3rem', fontWeight: 600 }}>
+                    {recEx.suggested_weight_kg ? `${recEx.suggested_weight_kg}kg • ` : ''}{recEx.target_sets} sets x {recEx.target_reps}
+                  </span>
+                </div>
+                {recEx.notes && (
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', paddingLeft: '1.2rem', fontStyle: 'italic' }}>
+                    Cue: {recEx.notes}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : activeRoutine && activeRoutine.items && activeRoutine.items.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.25rem' }}>
             {activeRoutine.items.map((it, idx) => {
               const ex = exercises.find((e) => e.id === it.exercise_id)
@@ -328,6 +443,47 @@ export function TodayView({
                 </div>
               )
             })}
+          </div>
+        ) : null}
+
+        {/* Research Grounding Accordion */}
+        {workoutRecommendation?.research_citation && (
+          <div style={{ marginBottom: '1rem', paddingTop: '0.5rem', borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
+            <button
+              type="button"
+              onClick={() => setShowWorkoutResearch((prev) => !prev)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                padding: 0,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                color: '#60a5fa',
+                fontSize: '0.72rem',
+                cursor: 'pointer',
+              }}
+            >
+              <span>📚</span>
+              <span style={{ textDecoration: 'underline' }}>{workoutRecommendation.research_citation}</span>
+              <span style={{ fontSize: '0.65rem' }}>{showWorkoutResearch ? '▲' : '▼'}</span>
+            </button>
+            {showWorkoutResearch && (
+              <div style={{
+                marginTop: '0.4rem',
+                padding: '0.5rem 0.75rem',
+                borderRadius: '0.4rem',
+                backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                fontSize: '0.72rem',
+                color: 'var(--text-secondary)',
+                lineHeight: 1.45,
+              }}>
+                <div>📊 <strong>Israetel (RP):</strong> Sets scaled between MEV (2 sets deload on fatigue) and MAV (3+ overload sets).</div>
+                <div>🎯 <strong>Helms:</strong> Target RIR dictated by recovery score (RIR 1-2 on primed days; RIR 3-4 on fatigue).</div>
+                <div>🛡️ <strong>McGill / Starrett:</strong> Neutral grips and joint-sparing substitutions when friction is detected.</div>
+                <div>🏸 <strong>Concurrent Interference:</strong> Preserves leg power adjacent to badminton match play.</div>
+              </div>
+            )}
           </div>
         )}
 
@@ -436,6 +592,15 @@ export function TodayView({
           })}
         </div>
       </div>
+
+      {/* 5. Workout AI Modal */}
+      {showWorkoutAiModal && onSynthesizeWorkoutRecommendation && (
+        <WorkoutAiModal
+          currentCitation={workoutRecommendation?.research_citation}
+          onClose={() => setShowWorkoutAiModal(false)}
+          onSynthesize={onSynthesizeWorkoutRecommendation}
+        />
+      )}
     </div>
   )
 }

@@ -249,3 +249,27 @@ class FastingRecommendation(TimestampMixin, Base):
     )
 
 
+class WorkoutRecommendation(TimestampMixin, Base):
+    """Daily workout recommendation synthesizing scheduled plan, biometrics, strain, and exercise science."""
+
+    __tablename__ = "workout_recommendation"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    date: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    routine_name: Mapped[str] = mapped_column(Text, nullable=False)
+    readiness_adaptation: Mapped[str] = mapped_column(Text, nullable=False)
+    target_rir: Mapped[str] = mapped_column(Text, nullable=False)
+    volume_landmark: Mapped[str] = mapped_column(Text, nullable=False)
+    rationale: Mapped[str] = mapped_column(Text, nullable=False)
+    exercises: Mapped[list[dict]] = mapped_column(JSONB, nullable=False, server_default="[]")
+    recovery_status: Mapped[str] = mapped_column(Text, nullable=False)
+    research_citation: Mapped[str | None] = mapped_column(Text, nullable=True)
+    custom_context: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_llm_generated: Mapped[bool] = mapped_column(nullable=False, server_default=text("false"))
+
+    __table_args__ = (
+        Index("workout_recommendation_date_alive_idx", "date", postgresql_where=text("deleted_at is null")),
+    )
+
+
+

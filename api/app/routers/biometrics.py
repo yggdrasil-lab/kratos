@@ -17,10 +17,17 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import FastingRecommendation, WeeklyPlan
-from app.schemas import FastingRecommendationRead, FastingSynthesizeRequest
+from app.models import FastingRecommendation, WeeklyPlan, WorkoutRecommendation
+from app.schemas import (
+    FastingRecommendationRead,
+    FastingSynthesizeRequest,
+    RecommendedExerciseItem,
+    WorkoutRecommendationRead,
+    WorkoutSynthesizeRequest,
+)
 from app.services.fasting_engine import generate_fasting_recommendation
 from app.services.llm_fasting import synthesize_fasting_recommendation_llm
+from app.services.llm_workout import synthesize_workout_recommendation_llm
 
 logger = logging.getLogger(__name__)
 
@@ -244,6 +251,171 @@ def trigger_fasting_synthesis(
     except Exception as exc:
         db.rollback()
         logger.debug("Failed persisting synthesized fasting recommendation: %s", exc)
+
+    return rec
+
+
+@router.get("/workout-recommendation", response_model=WorkoutRecommendationRead)
+def get_workout_recommendation(
+    target_date: str | None = None,
+    db: Session = Depends(get_db),
+) -> WorkoutRecommendationRead:
+    """Returns an autoregulated workout recommendation based on scheduled plan and Eir biometrics."""
+    resolved_date_str = target_date or _get_auckland_today()
+    try:
+        t_date = datetime.strptime(resolved_date_str, "%Y-%m-%d").date()
+    except ValueError:
+        t_date = datetime.now(timezone.utc).date()
+
+    date_str = t_date.isoformat()
+    cached = db.scalar(
+        select(WorkoutRecommendation).where(
+            WorkoutRecommendation.date == date_str,
+            WorkoutRecommendation.deleted_at.is_(None),
+        )
+    )
+    if cached:
+        return WorkoutRecommendationRead(
+            date=cached.date,
+            routine_name=cached.routine_name,
+            readiness_adaptation=cached.readiness_adaptation,
+            target_rir=cached.target_rir,
+            volume_landmark=cached.volume_landmark,
+            rationale=cached.rationale,
+            exercises=[
+                RecommendedExerciseItem(
+                    exercise_name=ex.get("exercise_name", "Exercise"),
+                    target_sets=int(ex.get("target_sets", 2)),
+                    target_reps=str(ex.get("target_reps", "8-10 reps")),
+                    suggested_weight_kg=float(ex["suggested_weight_kg"]) if ex.get("suggested_weight_kg") is not None else None,
+                    notes=ex.get("notes"),
+                )
+                for ex in cached.exercises
+            ],
+            recovery_status=cached.recovery_status,
+            research_citation=cached.research_citation,
+            is_llm_generated=cached.is_llm_generated,
+        )
+
+    iso_year, iso_week, _ = t_date.isocalendar()
+    iso_week_str = f"{iso_year}-W{iso_week:02d}"
+    weekly_plan = db.scalar(
+        select(WeeklyPlan).where(
+            WeeklyPlan.iso_week == iso_week_str,
+            WeeklyPlan.deleted_at.is_(None),
+        )
+    )
+
+    biometrics = None
+    url = f"{EIR_INTERNAL_URL}/biometrics/daily/{date_str}"
+    req = urllib.request.Request(url, headers={"User-Agent": "Kratos-Bridge/1.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=2.0) as resp:
+            if resp.status == 200:
+                biometrics = json.loads(resp.read().decode("utf-8"))
+    except Exception as exc:
+        logger.debug("Failed fetching Eir biometrics for workout recommendation: %s", exc)
+
+    rec = synthesize_workout_recommendation_llm(t_date, weekly_plan, biometrics)
+
+    record = WorkoutRecommendation(
+        date=date_str,
+        routine_name=rec.routine_name,
+        readiness_adaptation=rec.readiness_adaptation,
+        target_rir=rec.target_rir,
+        volume_landmark=rec.volume_landmark,
+        rationale=rec.rationale,
+        exercises=[ex.model_dump() for ex in rec.exercises],
+        recovery_status=rec.recovery_status,
+        research_citation=rec.research_citation,
+        is_llm_generated=rec.is_llm_generated,
+    )
+    db.add(record)
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.debug("Failed saving workout recommendation cache: %s", exc)
+
+    return rec
+
+
+@router.post("/workout-recommendation/synthesize", response_model=WorkoutRecommendationRead)
+def trigger_workout_synthesis(
+    payload: WorkoutSynthesizeRequest,
+    db: Session = Depends(get_db),
+) -> WorkoutRecommendationRead:
+    """Forces on-demand LLM synthesis of workout prescription with optional custom user context."""
+    resolved_date_str = payload.target_date or _get_auckland_today()
+    try:
+        t_date = datetime.strptime(resolved_date_str, "%Y-%m-%d").date()
+    except ValueError:
+        t_date = datetime.now(timezone.utc).date()
+
+    date_str = t_date.isoformat()
+    iso_year, iso_week, _ = t_date.isocalendar()
+    iso_week_str = f"{iso_year}-W{iso_week:02d}"
+    weekly_plan = db.scalar(
+        select(WeeklyPlan).where(
+            WeeklyPlan.iso_week == iso_week_str,
+            WeeklyPlan.deleted_at.is_(None),
+        )
+    )
+
+    biometrics = None
+    url = f"{EIR_INTERNAL_URL}/biometrics/daily/{date_str}"
+    req = urllib.request.Request(url, headers={"User-Agent": "Kratos-Bridge/1.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=2.0) as resp:
+            if resp.status == 200:
+                biometrics = json.loads(resp.read().decode("utf-8"))
+    except Exception as exc:
+        logger.debug("Failed fetching Eir biometrics for workout synthesis: %s", exc)
+
+    rec = synthesize_workout_recommendation_llm(
+        target_date=t_date,
+        weekly_plan=weekly_plan,
+        biometrics=biometrics,
+        custom_context=payload.custom_context,
+    )
+
+    existing = db.scalar(
+        select(WorkoutRecommendation).where(
+            WorkoutRecommendation.date == date_str,
+            WorkoutRecommendation.deleted_at.is_(None),
+        )
+    )
+    if existing:
+        existing.routine_name = rec.routine_name
+        existing.readiness_adaptation = rec.readiness_adaptation
+        existing.target_rir = rec.target_rir
+        existing.volume_landmark = rec.volume_landmark
+        existing.rationale = rec.rationale
+        existing.exercises = [ex.model_dump() for ex in rec.exercises]
+        existing.recovery_status = rec.recovery_status
+        existing.research_citation = rec.research_citation
+        existing.custom_context = payload.custom_context
+        existing.is_llm_generated = rec.is_llm_generated
+    else:
+        new_record = WorkoutRecommendation(
+            date=date_str,
+            routine_name=rec.routine_name,
+            readiness_adaptation=rec.readiness_adaptation,
+            target_rir=rec.target_rir,
+            volume_landmark=rec.volume_landmark,
+            rationale=rec.rationale,
+            exercises=[ex.model_dump() for ex in rec.exercises],
+            recovery_status=rec.recovery_status,
+            research_citation=rec.research_citation,
+            custom_context=payload.custom_context,
+            is_llm_generated=rec.is_llm_generated,
+        )
+        db.add(new_record)
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.debug("Failed persisting synthesized workout recommendation: %s", exc)
 
     return rec
 

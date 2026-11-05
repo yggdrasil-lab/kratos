@@ -303,3 +303,31 @@ class FastingSynthesizeRequest(BaseModel):
     custom_context: str | None = None
 
 
+# ----------------------------------------------------------------- workout recommendation
+class RecommendedExerciseItem(BaseModel):
+    exercise_name: str
+    target_sets: int
+    target_reps: str
+    suggested_weight_kg: float | None = None
+    notes: str | None = None
+
+
+class WorkoutRecommendationRead(BaseModel):
+    date: str
+    routine_name: str
+    readiness_adaptation: str
+    target_rir: str
+    volume_landmark: str
+    rationale: str
+    exercises: list[RecommendedExerciseItem] = Field(default_factory=list)
+    recovery_status: Literal["optimal", "moderate", "fatigued"]
+    research_citation: str | None = None
+    is_llm_generated: bool = False
+
+
+class WorkoutSynthesizeRequest(BaseModel):
+    target_date: str | None = None
+    custom_context: str | None = None
+
+
+

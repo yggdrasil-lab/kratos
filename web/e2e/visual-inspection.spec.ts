@@ -87,6 +87,21 @@ for (const { name: platform, options } of PLATFORMS) {
         path: `screenshots/${platform}/05-progress-view.png`,
         fullPage: true,
       })
+
+      // 6. Workout AI Modal
+      const todayTabBtn = page.locator('nav.bottom-nav').getByRole('button', { name: /Today/i })
+      await todayTabBtn.click()
+      await expect(page.getByText("Today's Training")).toBeVisible()
+      const adaptBtn = page.getByTitle('Autoregulate training with AI sports physiology')
+      if (await adaptBtn.isVisible()) {
+        await adaptBtn.click()
+        await expect(page.getByRole('heading', { name: 'Adaptive Workout Synthesizer' })).toBeVisible()
+        await page.waitForTimeout(350)
+        await page.screenshot({
+          path: `screenshots/${platform}/06-workout-ai-modal.png`,
+        })
+        await page.getByRole('button', { name: 'Cancel' }).click()
+      }
     })
   })
 }
