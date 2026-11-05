@@ -21,8 +21,22 @@ def generate_workout_recommendation(
     weekday_name = target_date.strftime("%a")
 
     # 1. Evaluate recovery state (Jev System One classifier with fallback to biometric thresholds)
-    sleep_h = biometrics.get("sleep_duration_hours") if biometrics else None
-    hrv = biometrics.get("hrv_ms") if biometrics else None
+    sleep_h_raw = biometrics.get("sleep_duration_hours") if biometrics else None
+    hrv_raw = biometrics.get("hrv_ms") if biometrics else None
+
+    sleep_h: float | None = None
+    if sleep_h_raw is not None:
+        try:
+            sleep_h = float(sleep_h_raw)
+        except (ValueError, TypeError):
+            sleep_h = None
+
+    hrv: float | None = None
+    if hrv_raw is not None:
+        try:
+            hrv = float(hrv_raw)
+        except (ValueError, TypeError):
+            hrv = None
 
     jev_verdict = classify_recovery_state_jev(biometrics)
     recovery_status: Literal["optimal", "moderate", "fatigued"] = "optimal"

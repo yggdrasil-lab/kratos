@@ -14,7 +14,7 @@ interface TodayViewProps {
   exercises: Exercise[]
   sessions: SessionPayload[]
   latestFastingCheckIn?: FastingCheckIn
-  onStartRoutine: (routine: Routine) => void
+  onStartRoutine: (routine?: Routine) => void
   onSaveFastingCheckIn: (checkIn: FastingCheckIn) => void
   onSynthesizeFastingRecommendation?: (customContext?: string) => Promise<void>
   onSynthesizeWorkoutRecommendation?: (customContext?: string) => Promise<void>
@@ -488,11 +488,11 @@ export function TodayView({
         )}
 
         {/* Action Button */}
-        {activeRoutine ? (
+        {activeRoutine || (workoutRecommendation?.exercises && workoutRecommendation.exercises.length > 0) ? (
           <button
             type="button"
             className="btn-primary"
-            onClick={() => onStartRoutine(activeRoutine)}
+            onClick={() => onStartRoutine(activeRoutine || undefined)}
             style={{
               width: '100%',
               padding: '0.9rem',
@@ -501,7 +501,7 @@ export function TodayView({
               boxShadow: '0 4px 20px rgba(59, 130, 246, 0.4)',
             }}
           >
-            Start Workout ({activeRoutine.name})
+            Start Workout ({workoutRecommendation?.routine_name || activeRoutine?.name || 'Session'})
           </button>
         ) : dayType === 'sport' ? (
           <div style={{ textAlign: 'center' }}>

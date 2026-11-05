@@ -307,28 +307,26 @@ export function App() {
   const startSession = (routine?: Routine) => {
     const id = newId()
     const started_at = new Date().toISOString()
-    const items: SessionItemPayload[] = (routine?.items ?? [])
-      .slice()
-      .sort((a, b) => a.position - b.position)
-      .map((it, idx) => {
-        const recEx = workoutRecommendation?.exercises?.find((re) => {
-          if (re.exercise_id && re.exercise_id === it.exercise_id) return true
-          const ex = exercises.find((e) => e.id === it.exercise_id)
-          return ex && ex.name.toLowerCase() === re.exercise_name.toLowerCase()
-        })
-        const targetSets = recEx?.target_sets ?? it.target_sets ?? 2
-        const targetReps = recEx?.target_reps ?? it.target_reps ?? null
-        const targetWeight = recEx?.suggested_weight_kg ?? it.target_weight_kg ?? null
+    let items: SessionItemPayload[] = []
+
+    if (workoutRecommendation?.exercises && workoutRecommendation.exercises.length > 0) {
+      items = workoutRecommendation.exercises.map((recEx, idx) => {
+        const matchEx = exercises.find(
+          (e) =>
+            (recEx.exercise_id && e.id === recEx.exercise_id) ||
+            e.name.toLowerCase() === recEx.exercise_name.toLowerCase()
+        )
+        const targetSets = recEx.target_sets ?? 2
         return {
           id: newId(),
-          exercise_id: it.exercise_id,
+          exercise_id: matchEx?.id || recEx.exercise_id || exercises[0]?.id || `rec-${idx}`,
           position: idx,
-          notes: recEx?.notes || it.notes,
+          notes: recEx.notes || null,
           extra: {
             target_sets: targetSets,
-            target_reps: targetReps,
-            target_weight_kg: targetWeight,
-            target_duration_s: it.target_duration_s,
+            target_reps: recEx.target_reps,
+            target_weight_kg: recEx.suggested_weight_kg,
+            custom_name: !matchEx ? recEx.exercise_name : undefined,
           },
           sets: Array.from({ length: targetSets }, (_, setIdx) => ({
             id: newId(),
@@ -344,13 +342,47 @@ export function App() {
           })),
         }
       })
+    } else {
+      items = (routine?.items ?? [])
+        .slice()
+        .sort((a, b) => a.position - b.position)
+        .map((it, idx) => {
+          const targetSets = it.target_sets ?? 2
+          return {
+            id: newId(),
+            exercise_id: it.exercise_id,
+            position: idx,
+            notes: it.notes,
+            extra: {
+              target_sets: it.target_sets,
+              target_reps: it.target_reps,
+              target_weight_kg: it.target_weight_kg,
+              target_duration_s: it.target_duration_s,
+            },
+            sets: Array.from({ length: targetSets }, (_, setIdx) => ({
+              id: newId(),
+              set_number: setIdx + 1,
+              status: 'skipped' as const,
+              reps: null,
+              weight_kg: null,
+              duration_s: null,
+              distance_m: null,
+              rpe: null,
+              notes: null,
+              extra: {},
+            })),
+          }
+        })
+    }
+
+    const sessionRoutineName = workoutRecommendation?.routine_name || routine?.name || 'Current Workout'
     updateSession({
       id,
       routine_id: routine?.id ?? null,
       started_at,
       ended_at: null,
       notes: null,
-      extra: routine ? { routine_name: routine.name } : {},
+      extra: { routine_name: sessionRoutineName },
       items,
     })
     setActiveTab('today')
@@ -468,6 +500,7 @@ export function App() {
         setSessionExpired(true)
       }
       void reportClientError(err, { source: 'fasting_synthesis' })
+      throw err
     }
   }
 
@@ -482,6 +515,7 @@ export function App() {
         setSessionExpired(true)
       }
       void reportClientError(err, { source: 'workout_synthesis' })
+      throw err
     }
   }
 
@@ -693,7 +727,7 @@ export function App() {
                       <div key={item.id} className="workout-item">
                         <div className="flex-between" style={{ marginBottom: '1rem' }}>
                           <h3 style={{ fontSize: '1.2rem', color: '#fff' }}>
-                            {exercise?.name || 'Unknown Exercise'}
+                            {(item.extra?.custom_name as string) || exercise?.name || 'Unknown Exercise'}
                           </h3>
                           <button
                             className="btn-icon btn-danger"

@@ -108,9 +108,15 @@ test.describe('Train Flow and Effort Debrief', () => {
 
     // Modal closes and updated workout is displayed
     await expect(modal).not.toBeVisible()
-    await expect(page.getByText('Upper Body A (Joint-Sparing Autoregulated)')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Upper Body A (Joint-Sparing Autoregulated)' })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Start Workout \(Upper Body A \(Joint-Sparing Autoregulated\)\)/i })).toBeVisible()
     await expect(page.getByText(/Fatigue \/ Joint Deload/i)).toBeVisible()
     await expect(page.getByText(/MEV • RPE 7-8 \(2 RIR\)/i)).toBeVisible()
     await expect(page.getByText(/Neutral grip; elbows tucked 45 deg/i)).toBeVisible()
+
+    // 5. Start workout with the adapted recommendation and verify exercises are populated
+    await page.getByRole('button', { name: /Start Workout/i }).click()
+    await expect(page.getByRole('heading', { name: /Upper Body A \(Joint-Sparing Autoregulated\)/i })).toBeVisible()
+    await expect(page.locator('.workout-item h3', { hasText: 'Bench Press (Dumbbell)' })).toBeVisible()
   })
 })

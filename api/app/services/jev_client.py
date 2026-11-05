@@ -20,6 +20,24 @@ logger = logging.getLogger(__name__)
 USER_AGENT = "Yggdrasil-Kratos/1.0 (KratosApi)"
 
 
+def safe_float(val: object) -> Optional[float]:
+    if val is None:
+        return None
+    try:
+        return float(val)  # type: ignore[arg-type]
+    except (ValueError, TypeError):
+        return None
+
+
+def safe_int(val: object) -> Optional[int]:
+    if val is None:
+        return None
+    try:
+        return int(float(val))  # type: ignore[arg-type]
+    except (ValueError, TypeError):
+        return None
+
+
 def call_jev(
     system_prompt: str,
     user_content: str,
@@ -82,35 +100,38 @@ def classify_recovery_state_jev(biometrics: dict | None) -> Optional[str]:
     if not biometrics:
         return None
 
-    sleep_h = biometrics.get("sleep_duration_hours")
-    deep_sleep_h = biometrics.get("sleep_deep_hours")
-    hrv = biometrics.get("hrv_ms")
-    rhr = biometrics.get("resting_hr_bpm")
+    try:
+        sleep_h = safe_float(biometrics.get("sleep_duration_hours"))
+        deep_sleep_h = safe_float(biometrics.get("sleep_deep_hours"))
+        hrv = safe_float(biometrics.get("hrv_ms"))
+        rhr = safe_int(biometrics.get("resting_hr_bpm"))
 
-    if sleep_h is None and hrv is None and rhr is None:
-        return None
+        if sleep_h is None and hrv is None and rhr is None:
+            return None
 
-    system_prompt = (
-        "Classify recovery state into exactly one category: "
-        "[MAV_OVERLOAD, MAINTENANCE, MEV_DELOAD, ACTIVE_RECOVERY]. "
-        "MAV_OVERLOAD: Optimal sleep >7.5h and high/normal HRV (>45ms). High readiness for volume overload. "
-        "MAINTENANCE: Normal baseline sleep (6.5-7.5h) and normal vitals. "
-        "MEV_DELOAD: Poor sleep (<6.0h), elevated resting HR, or low HRV (<35ms). Needs fatigue deload. "
-        "ACTIVE_RECOVERY: Severe exhaustion (<5.0h sleep), extreme soreness, or rest day."
-    )
-    user_content = (
-        f"Sleep: {sleep_h:.1f}h" if sleep_h is not None else "Sleep: unknown"
-    ) + (
-        f" ({deep_sleep_h:.1f}h deep)" if deep_sleep_h is not None else ""
-    ) + (
-        f", HRV: {hrv:.1f}ms" if hrv is not None else ", HRV: unknown"
-    ) + (
-        f", Resting HR: {rhr}bpm" if rhr is not None else ""
-    )
+        system_prompt = (
+            "Classify recovery state into exactly one category: "
+            "[MAV_OVERLOAD, MAINTENANCE, MEV_DELOAD, ACTIVE_RECOVERY]. "
+            "MAV_OVERLOAD: Optimal sleep >7.5h and high/normal HRV (>45ms). High readiness for volume overload. "
+            "MAINTENANCE: Normal baseline sleep (6.5-7.5h) and normal vitals. "
+            "MEV_DELOAD: Poor sleep (<6.0h), elevated resting HR, or low HRV (<35ms). Needs fatigue deload. "
+            "ACTIVE_RECOVERY: Severe exhaustion (<5.0h sleep), extreme soreness, or rest day."
+        )
+        user_content = (
+            f"Sleep: {sleep_h:.1f}h" if sleep_h is not None else "Sleep: unknown"
+        ) + (
+            f" ({deep_sleep_h:.1f}h deep)" if deep_sleep_h is not None else ""
+        ) + (
+            f", HRV: {hrv:.1f}ms" if hrv is not None else ", HRV: unknown"
+        ) + (
+            f", Resting HR: {rhr}bpm" if rhr is not None else ""
+        )
 
-    verdict, _ = call_jev(system_prompt, user_content)
-    if verdict in ("MAV_OVERLOAD", "MAINTENANCE", "MEV_DELOAD", "ACTIVE_RECOVERY"):
-        return verdict
+        verdict, _ = call_jev(system_prompt, user_content)
+        if verdict in ("MAV_OVERLOAD", "MAINTENANCE", "MEV_DELOAD", "ACTIVE_RECOVERY"):
+            return verdict
+    except Exception as exc:
+        logger.warning("Error in classify_recovery_state_jev (%s); falling back", exc)
     return None
 
 
@@ -123,33 +144,37 @@ def classify_constraints_jev(user_text: str | None) -> Dict[str, str]:
     if not user_text or not user_text.strip():
         return {"joint_focus": "NOMINAL", "time_budget": "TIME_STANDARD_45M"}
 
-    # 1. Joint sparing
-    joint_prompt = (
-        "Classify joint sparing need into exactly one category: "
-        "[SHOULDER_SPARING, LUMBAR_SPARING, KNEE_SPARING, NOMINAL]. "
-        "SHOULDER_SPARING: User mentions shoulder pinch, rotator cuff, or anterior impingement. "
-        "LUMBAR_SPARING: User mentions lower back pain, spinal tightness, or deadlift fatigue. "
-        "KNEE_SPARING: User mentions knee soreness, patellar friction, or quad tendon tightness. "
-        "NOMINAL: No acute joint pain or tendon friction reported."
-    )
-    joint_verdict, _ = call_jev(joint_prompt, user_text.strip())
-    joint_focus = joint_verdict if joint_verdict in ("SHOULDER_SPARING", "LUMBAR_SPARING", "KNEE_SPARING", "NOMINAL") else "NOMINAL"
+    try:
+        # 1. Joint sparing
+        joint_prompt = (
+            "Classify joint sparing need into exactly one category: "
+            "[SHOULDER_SPARING, LUMBAR_SPARING, KNEE_SPARING, NOMINAL]. "
+            "SHOULDER_SPARING: User mentions shoulder pinch, rotator cuff, or anterior impingement. "
+            "LUMBAR_SPARING: User mentions lower back pain, spinal tightness, or deadlift fatigue. "
+            "KNEE_SPARING: User mentions knee soreness, patellar friction, or quad tendon tightness. "
+            "NOMINAL: No acute joint pain or tendon friction reported."
+        )
+        joint_verdict, _ = call_jev(joint_prompt, user_text.strip())
+        joint_focus = joint_verdict if joint_verdict in ("SHOULDER_SPARING", "LUMBAR_SPARING", "KNEE_SPARING", "NOMINAL") else "NOMINAL"
 
-    # 2. Time budget
-    time_prompt = (
-        "Classify session time constraint into exactly one category: "
-        "[TIME_CRUNCH_30M, TIME_STANDARD_45M, TIME_EXTENDED_60M]. "
-        "TIME_CRUNCH_30M: User mentions having only 30-35 mins, rushing, or quick session. "
-        "TIME_STANDARD_45M: Standard training session (~45 mins). "
-        "TIME_EXTENDED_60M: Full unrestricted training session (>60 mins)."
-    )
-    time_verdict, _ = call_jev(time_prompt, user_text.strip())
-    time_budget = time_verdict if time_verdict in ("TIME_CRUNCH_30M", "TIME_STANDARD_45M", "TIME_EXTENDED_60M") else "TIME_STANDARD_45M"
+        # 2. Time budget
+        time_prompt = (
+            "Classify session time constraint into exactly one category: "
+            "[TIME_CRUNCH_30M, TIME_STANDARD_45M, TIME_EXTENDED_60M]. "
+            "TIME_CRUNCH_30M: User mentions having only 30-35 mins, rushing, or quick session. "
+            "TIME_STANDARD_45M: Standard training session (~45 mins). "
+            "TIME_EXTENDED_60M: Full unrestricted training session (>60 mins)."
+        )
+        time_verdict, _ = call_jev(time_prompt, user_text.strip())
+        time_budget = time_verdict if time_verdict in ("TIME_CRUNCH_30M", "TIME_STANDARD_45M", "TIME_EXTENDED_60M") else "TIME_STANDARD_45M"
 
-    return {
-        "joint_focus": joint_focus,
-        "time_budget": time_budget,
-    }
+        return {
+            "joint_focus": joint_focus,
+            "time_budget": time_budget,
+        }
+    except Exception as exc:
+        logger.warning("Error in classify_constraints_jev (%s); falling back", exc)
+        return {"joint_focus": "NOMINAL", "time_budget": "TIME_STANDARD_45M"}
 
 
 def classify_fasting_window_jev(activity_context: str, biometrics: dict | None) -> Optional[str]:
@@ -158,19 +183,22 @@ def classify_fasting_window_jev(activity_context: str, biometrics: dict | None) 
     Returns:
         'EVENING_SPORT_16_8', 'STANDARD_16_8', 'GENTLE_14_10', 'DEEP_FAST_18_6', or None
     """
-    system_prompt = (
-        "Classify daily intermittent fasting window into exactly one category: "
-        "[EVENING_SPORT_16_8, STANDARD_16_8, GENTLE_14_10, DEEP_FAST_18_6]. "
-        "EVENING_SPORT_16_8: Badminton match play (7-9 PM) scheduled. Shift window later for fueling. "
-        "STANDARD_16_8: Lifting or standard athletic day (12:00 PM - 8:00 PM). "
-        "GENTLE_14_10: High fatigue, sleep deficit, or elevated cortisol. Gentler window. "
-        "DEEP_FAST_18_6: Friday reset or non-axial recovery day."
-    )
-    sleep_h = biometrics.get("sleep_duration_hours") if biometrics else None
-    hrv = biometrics.get("hrv_ms") if biometrics else None
+    try:
+        system_prompt = (
+            "Classify daily intermittent fasting window into exactly one category: "
+            "[EVENING_SPORT_16_8, STANDARD_16_8, GENTLE_14_10, DEEP_FAST_18_6]. "
+            "EVENING_SPORT_16_8: Badminton match play (7-9 PM) scheduled. Shift window later for fueling. "
+            "STANDARD_16_8: Lifting or standard athletic day (12:00 PM - 8:00 PM). "
+            "GENTLE_14_10: High fatigue, sleep deficit, or elevated cortisol. Gentler window. "
+            "DEEP_FAST_18_6: Friday reset or non-axial recovery day."
+        )
+        sleep_h = safe_float(biometrics.get("sleep_duration_hours")) if biometrics else None
+        hrv = safe_float(biometrics.get("hrv_ms")) if biometrics else None
 
-    user_content = f"Activity: {activity_context}. Recovery: Sleep={sleep_h}h, HRV={hrv}ms"
-    verdict, _ = call_jev(system_prompt, user_content)
-    if verdict in ("EVENING_SPORT_16_8", "STANDARD_16_8", "GENTLE_14_10", "DEEP_FAST_18_6"):
-        return verdict
+        user_content = f"Activity: {activity_context}. Recovery: Sleep={sleep_h}h, HRV={hrv}ms"
+        verdict, _ = call_jev(system_prompt, user_content)
+        if verdict in ("EVENING_SPORT_16_8", "STANDARD_16_8", "GENTLE_14_10", "DEEP_FAST_18_6"):
+            return verdict
+    except Exception as exc:
+        logger.warning("Error in classify_fasting_window_jev (%s); falling back", exc)
     return None
