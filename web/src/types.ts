@@ -103,6 +103,8 @@ export interface FastingRecommendation {
   fueling_anchors: string[]
   recovery_status: 'optimal' | 'moderate' | 'fatigued'
   activity_context: string
+  is_llm_generated?: boolean
+  research_citation?: string | null
 }
 
 export interface HealthFeedback {

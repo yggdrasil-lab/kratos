@@ -444,6 +444,20 @@ export function App() {
     }
   }
 
+  const handleSynthesizeFastingRecommendation = async (customContext?: string) => {
+    try {
+      const updated = await api.synthesizeFastingRecommendation(customContext, circadianDate)
+      if (updated) {
+        setFastingRecommendation(updated)
+      }
+    } catch (err) {
+      if (err instanceof SessionExpiredError) {
+        setSessionExpired(true)
+      }
+      void reportClientError(err, { source: 'fasting_synthesis' })
+    }
+  }
+
   const addExerciseToSession = (exercise: Exercise) => {
     if (!session) return
     const newItem: SessionItemPayload = {
@@ -756,6 +770,7 @@ export function App() {
                 latestFastingCheckIn={todayFastingCheckIn}
                 onStartRoutine={startSession}
                 onSaveFastingCheckIn={handleSaveFastingCheckIn}
+                onSynthesizeFastingRecommendation={handleSynthesizeFastingRecommendation}
               />
             )}
           </>

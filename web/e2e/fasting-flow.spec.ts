@@ -122,5 +122,32 @@ test.describe('Fasting Check-In Flow', () => {
     await expect(page.getByText('Smart Autoregulation')).toBeVisible()
     await expect(page.getByText(/Court session scheduled/i)).toBeVisible()
     await expect(page.getByText('🟢 Primed')).toBeVisible()
+    await expect(page.getByText('⚡ AI Synthesized')).toBeVisible()
+    await expect(page.getByText(/Panda Lab \(Circadian TRE\)/i)).toBeVisible()
+
+    // Expand research citation
+    await page.getByText(/Panda Lab \(Circadian TRE\)/i).click()
+    await expect(page.getByText(/8-10h feeding window ending 3-4h prior to sleep/i)).toBeVisible()
+  })
+
+  test('adapts protocol with AI modal and custom context', async ({ page }) => {
+    const adaptBtn = page.getByRole('button', { name: /Adapt/i })
+    await expect(adaptBtn).toBeVisible()
+    await adaptBtn.click()
+
+    // FastingAiModal opens
+    const modal = page.locator('.modal-backdrop')
+    await expect(modal).toBeVisible()
+    await expect(modal.getByRole('heading', { name: 'Adaptive Fasting Synthesizer' })).toBeVisible()
+
+    // Type custom context and submit
+    const textarea = modal.locator('textarea')
+    await textarea.fill('Meeting moved, workout shifted to 11am')
+    await modal.getByRole('button', { name: 'Synthesize with AI' }).click()
+
+    // Verify modal closes and updated protocol appears
+    await expect(modal).not.toBeVisible()
+    await expect(page.getByText('14:10 Shifted Schedule Protocol')).toBeVisible()
+    await expect(page.getByText('11:00 AM - 9:00 PM')).toBeVisible()
   })
 })

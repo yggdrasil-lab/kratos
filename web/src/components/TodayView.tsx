@@ -14,6 +14,7 @@ interface TodayViewProps {
   latestFastingCheckIn?: FastingCheckIn
   onStartRoutine: (routine: Routine) => void
   onSaveFastingCheckIn: (checkIn: FastingCheckIn) => void
+  onSynthesizeFastingRecommendation?: (customContext?: string) => Promise<void>
 }
 
 export function TodayView({
@@ -27,6 +28,7 @@ export function TodayView({
   latestFastingCheckIn,
   onStartRoutine,
   onSaveFastingCheckIn,
+  onSynthesizeFastingRecommendation,
 }: TodayViewProps) {
   const [selectedRoutineOverride, setSelectedRoutineOverride] = useState<Routine | null>(null)
   const [showRoutinePicker, setShowRoutinePicker] = useState<boolean>(false)
@@ -210,6 +212,7 @@ export function TodayView({
         latestCheckIn={latestFastingCheckIn}
         recommendation={fastingRecommendation}
         onSaveCheckIn={onSaveFastingCheckIn}
+        onSynthesizeRecommendation={onSynthesizeFastingRecommendation}
       />
 
       {/* 3. Today's Training Card */}

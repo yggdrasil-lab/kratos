@@ -233,6 +233,33 @@ export async function setupMockApi(page: Page): Promise<MockApiState> {
     })
   })
 
+  await page.route(/\/api\/biometrics\/fasting-recommendation\/synthesize(\?.*)?$/, async (route) => {
+    if (route.request().method() === 'POST') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          date: '2026-11-01',
+          protocol_name: '14:10 Shifted Schedule Protocol',
+          target_window: '14:10',
+          window_hours: '11:00 AM - 9:00 PM',
+          rationale: 'Custom user schedule adjustment incorporated with 3h pre-bed cutoff.',
+          fueling_anchors: [
+            '11:00 AM: Meal 1 with 40g protein',
+            '04:00 PM: Pre-workout fuel',
+            '08:30 PM: Recovery meal',
+          ],
+          recovery_status: 'optimal',
+          activity_context: 'Badminton Match Play (sport)',
+          is_llm_generated: true,
+          research_citation: 'Panda Lab (Circadian TRE) & Schoenfeld (MPS Distribution)',
+        }),
+      })
+      return
+    }
+    await route.continue()
+  })
+
   await page.route(/\/api\/biometrics\/fasting-recommendation(\?.*)?$/, async (route) => {
     await route.fulfill({
       status: 200,
@@ -250,6 +277,8 @@ export async function setupMockApi(page: Page): Promise<MockApiState> {
         ],
         recovery_status: 'optimal',
         activity_context: 'Badminton Match Play (sport)',
+        is_llm_generated: true,
+        research_citation: 'Panda Lab (Circadian TRE) & Schoenfeld (MPS Distribution)',
       }),
     })
   })

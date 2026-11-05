@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     cors_origins: str = "http://localhost:5173"
     mcp_token: str | None = None
+    llm_base_url: str = "http://muninn:4000/v1"
+    llm_api_key: str = "sk-muninn-insecure-master-key"
+    llm_model: str = "compress"
 
     @property
     def cors_origin_list(self) -> list[str]:

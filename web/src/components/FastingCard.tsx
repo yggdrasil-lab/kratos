@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { FastingCheckIn, FastingRecommendation } from '../types'
 import { FastingCheckInModal } from './FastingCheckInModal'
+import { FastingAiModal } from './FastingAiModal'
 
 interface FastingCardProps {
   circadianDate: string
@@ -8,6 +9,7 @@ interface FastingCardProps {
   latestCheckIn?: FastingCheckIn
   recommendation?: FastingRecommendation | null
   onSaveCheckIn: (checkIn: FastingCheckIn) => void
+  onSynthesizeRecommendation?: (customContext?: string) => Promise<void>
 }
 
 export function FastingCard({
@@ -16,8 +18,11 @@ export function FastingCard({
   latestCheckIn,
   recommendation,
   onSaveCheckIn,
+  onSynthesizeRecommendation,
 }: FastingCardProps) {
   const [showModal, setShowModal] = useState<boolean>(false)
+  const [showAiModal, setShowAiModal] = useState<boolean>(false)
+  const [showResearch, setShowResearch] = useState<boolean>(false)
 
   // Default fallback protocol based on day of week if dynamic recommendation is not available
   let protocolName = recommendation?.protocol_name ?? '16:8 Standard Split'
@@ -30,6 +35,8 @@ export function FastingCard({
   ]
   const rationale = recommendation?.rationale
   const recoveryStatus = recommendation?.recovery_status
+  const isLlmGenerated = recommendation?.is_llm_generated ?? false
+  const researchCitation = recommendation?.research_citation
 
   if (!recommendation) {
     if (dayOfWeek === 4) {
@@ -106,48 +113,84 @@ export function FastingCard({
                     {recoveryStatus === 'fatigued' ? '🔴 Autoregulated' : recoveryStatus === 'moderate' ? '🟡 Moderate' : '🟢 Primed'}
                   </span>
                 )}
+                {isLlmGenerated && (
+                  <span style={{
+                    fontSize: '0.65rem',
+                    padding: '0.1rem 0.4rem',
+                    borderRadius: '0.4rem',
+                    fontWeight: 600,
+                    backgroundColor: 'rgba(59, 130, 246, 0.25)',
+                    color: '#93c5fd',
+                  }}>
+                    ⚡ AI Synthesized
+                  </span>
+                )}
               </div>
             </div>
           </div>
 
-          {isCheckedInToday ? (
-            <span style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.3rem',
-              padding: '0.25rem 0.6rem',
-              borderRadius: '1rem',
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              backgroundColor: latestCheckIn.adherence === 'completed'
-                ? 'rgba(16, 185, 129, 0.2)'
-                : latestCheckIn.adherence === 'early'
-                ? 'rgba(245, 158, 11, 0.2)'
-                : 'rgba(239, 68, 68, 0.2)',
-              color: latestCheckIn.adherence === 'completed'
-                ? '#10b981'
-                : latestCheckIn.adherence === 'early'
-                ? '#f59e0b'
-                : '#ef4444',
-            }}>
-              {latestCheckIn.adherence === 'completed' ? '✓ Completed' : latestCheckIn.adherence === 'early' ? '⚡ Early' : '🔴 Off-Plan'}
-            </span>
-          ) : (
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => setShowModal(true)}
-              style={{
-                padding: '0.3rem 0.75rem',
-                fontSize: '0.8rem',
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            {onSynthesizeRecommendation && (
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setShowAiModal(true)}
+                style={{
+                  padding: '0.3rem 0.55rem',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  borderColor: 'rgba(59, 130, 246, 0.4)',
+                  color: '#93c5fd',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.25rem',
+                }}
+                title="Adapt protocol with AI sports physiology"
+              >
+                <span>⚡</span>
+                <span>Adapt</span>
+              </button>
+            )}
+
+            {isCheckedInToday ? (
+              <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.3rem',
+                padding: '0.25rem 0.6rem',
+                borderRadius: '1rem',
+                fontSize: '0.75rem',
                 fontWeight: 600,
-                borderColor: 'var(--primary-color)',
-                color: '#60a5fa',
-              }}
-            >
-              Log Fast
-            </button>
-          )}
+                backgroundColor: latestCheckIn.adherence === 'completed'
+                  ? 'rgba(16, 185, 129, 0.2)'
+                  : latestCheckIn.adherence === 'early'
+                  ? 'rgba(245, 158, 11, 0.2)'
+                  : 'rgba(239, 68, 68, 0.2)',
+                color: latestCheckIn.adherence === 'completed'
+                  ? '#10b981'
+                  : latestCheckIn.adherence === 'early'
+                  ? '#f59e0b'
+                  : '#ef4444',
+              }}>
+                {latestCheckIn.adherence === 'completed' ? '✓ Completed' : latestCheckIn.adherence === 'early' ? '⚡ Early' : '🔴 Off-Plan'}
+              </span>
+            ) : (
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setShowModal(true)}
+                style={{
+                  padding: '0.3rem 0.75rem',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  borderColor: 'var(--primary-color)',
+                  color: '#60a5fa',
+                }}
+              >
+                Log Fast
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Target Window Bar */}
@@ -206,6 +249,47 @@ export function FastingCard({
           ))}
         </div>
 
+        {/* Research Grounding Accordion */}
+        {researchCitation && (
+          <div style={{ marginTop: '0.65rem', paddingTop: '0.5rem', borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
+            <button
+              type="button"
+              onClick={() => setShowResearch((prev) => !prev)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                padding: 0,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                color: '#60a5fa',
+                fontSize: '0.72rem',
+                cursor: 'pointer',
+              }}
+            >
+              <span>📚</span>
+              <span style={{ textDecoration: 'underline' }}>{researchCitation}</span>
+              <span style={{ fontSize: '0.65rem' }}>{showResearch ? '▲' : '▼'}</span>
+            </button>
+            {showResearch && (
+              <div style={{
+                marginTop: '0.4rem',
+                padding: '0.5rem 0.75rem',
+                borderRadius: '0.4rem',
+                backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                fontSize: '0.72rem',
+                color: 'var(--text-secondary)',
+                lineHeight: 1.45,
+              }}>
+                <div>☀️ <strong>Panda Lab:</strong> 8-10h feeding window ending 3-4h prior to sleep preserves nocturnal HRV & deep sleep.</div>
+                <div>🥩 <strong>Schoenfeld / Aragon:</strong> 0.4-0.5g/kg protein every 3-5h on lift days with an anabolic recovery anchor.</div>
+                <div>🏸 <strong>Court Kinetics:</strong> Pre-match complex carbs + electrolytes 2-3h before play prevent glycogen depletion.</div>
+                <div>🧬 <strong>Mattson / Longo:</strong> 18:6 autophagy fasts reserved strictly for low-strain recovery days.</div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Existing Check-In Summary if already logged */}
         {isCheckedInToday && (
           <div style={{
@@ -252,6 +336,14 @@ export function FastingCard({
             setShowModal(false)
           }}
           onClose={() => setShowModal(false)}
+        />
+      )}
+
+      {showAiModal && onSynthesizeRecommendation && (
+        <FastingAiModal
+          currentCitation={researchCitation}
+          onSynthesize={onSynthesizeRecommendation}
+          onClose={() => setShowAiModal(false)}
         />
       )}
     </>

@@ -294,5 +294,12 @@ class FastingRecommendationRead(BaseModel):
     fueling_anchors: list[str] = Field(default_factory=list)
     recovery_status: Literal["optimal", "moderate", "fatigued"]
     activity_context: str
+    is_llm_generated: bool = False
+    research_citation: str | None = None
+
+
+class FastingSynthesizeRequest(BaseModel):
+    target_date: str | None = None
+    custom_context: str | None = None
 
 

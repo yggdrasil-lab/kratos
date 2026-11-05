@@ -225,3 +225,27 @@ class WeeklyPlan(TimestampMixin, Base):
         Index("weekly_plan_iso_week_alive_idx", "iso_week", postgresql_where=text("deleted_at is null")),
     )
 
+
+class FastingRecommendation(TimestampMixin, Base):
+    """Daily fasting recommendation synthesizing scheduled plan, biometrics, and research principles."""
+
+    __tablename__ = "fasting_recommendation"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    date: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    protocol_name: Mapped[str] = mapped_column(Text, nullable=False)
+    target_window: Mapped[str] = mapped_column(Text, nullable=False)
+    window_hours: Mapped[str] = mapped_column(Text, nullable=False)
+    rationale: Mapped[str] = mapped_column(Text, nullable=False)
+    fueling_anchors: Mapped[list[str]] = mapped_column(JSONB, nullable=False, server_default="[]")
+    recovery_status: Mapped[str] = mapped_column(Text, nullable=False)
+    activity_context: Mapped[str] = mapped_column(Text, nullable=False)
+    is_llm_generated: Mapped[bool] = mapped_column(nullable=False, server_default=text("false"))
+    research_citation: Mapped[str | None] = mapped_column(Text, nullable=True)
+    custom_context: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        Index("fasting_recommendation_date_alive_idx", "date", postgresql_where=text("deleted_at is null")),
+    )
+
+

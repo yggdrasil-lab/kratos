@@ -91,6 +91,26 @@ export const api = {
     }
   },
 
+  synthesizeFastingRecommendation: async (
+    customContext?: string,
+    targetDate?: string,
+  ): Promise<FastingRecommendation | null> => {
+    try {
+      return await request<FastingRecommendation>('/biometrics/fasting-recommendation/synthesize', {
+        method: 'POST',
+        body: JSON.stringify({
+          target_date: targetDate,
+          custom_context: customContext,
+        }),
+      })
+    } catch (err) {
+      if (err instanceof SessionExpiredError) {
+        throw err
+      }
+      return null
+    }
+  },
+
   saveFastingCheckIn: async (payload: FastingCheckIn): Promise<void> => {
     try {
       await request<void>('/biometrics/fasting', {
