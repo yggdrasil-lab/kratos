@@ -71,3 +71,21 @@ class TestJevClient(unittest.TestCase):
         self.assertEqual(rec.target_rir, "RIR 3-4")
         for ex in rec.exercises:
             self.assertEqual(ex.target_sets, 2)
+
+    @patch("app.services.jev_client.call_jev")
+    def test_classify_recovery_state_jev_string_biometrics(self, mock_call_jev):
+        mock_call_jev.return_value = ("MAV_OVERLOAD", 0.015)
+        # Verify strings from PostgreSQL / Eir do not raise ValueError in string formatting
+        biometrics = {
+            "sleep_duration_hours": "7.8",
+            "sleep_deep_hours": "1.9",
+            "hrv_ms": "50.26",
+            "resting_hr_bpm": "56"
+        }
+        result = classify_recovery_state_jev(biometrics)
+        self.assertEqual(result, "MAV_OVERLOAD")
+        # Ensure call_jev received properly formatted user_prompt with floats
+        user_prompt = mock_call_jev.call_args[0][1]
+        self.assertIn("Sleep: 7.8h", user_prompt)
+        self.assertIn("HRV: 50.3ms", user_prompt)
+        self.assertIn("Resting HR: 56bpm", user_prompt)

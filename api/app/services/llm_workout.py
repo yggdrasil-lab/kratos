@@ -64,70 +64,85 @@ def synthesize_workout_recommendation_llm(
     custom_context: str | None = None,
 ) -> WorkoutRecommendationRead:
     """Synthesizes an adaptive, research-grounded workout recommendation via LLM, falling back to deterministic baseline if unavailable."""
-    weekday_name = target_date.strftime("%a")
-    activity_name = "Rest Day"
-    activity_type = "rest"
-
-    if weekly_plan and weekly_plan.days:
-        for day in weekly_plan.days:
-            if day.get("day") == weekday_name:
-                activity_name = day.get("activity", "Rest Day")
-                activity_type = day.get("type", "rest")
-                break
-
-    hrv = biometrics.get("hrv_ms") if biometrics else None
-    sleep_h = biometrics.get("sleep_duration_hours") if biometrics else None
-    deep_sleep_h = biometrics.get("sleep_deep_hours") if biometrics else None
-    rhr = biometrics.get("resting_hr_bpm") if biometrics else None
-    weight_kg = biometrics.get("latest_weight_kg") if biometrics else None
-
-    # Fast Jev System One gates for joint sparing, time budget, and recovery tier
-    jev_recovery = classify_recovery_state_jev(biometrics)
-    jev_gates = classify_constraints_jev(custom_context)
-
-    context_payload = {
-        "date": target_date.isoformat(),
-        "day_of_week": target_date.strftime("%A"),
-        "scheduled_activity": {
-            "name": activity_name,
-            "type": activity_type,
-        },
-        "biometrics": {
-            "hrv_ms": hrv,
-            "sleep_duration_hours": sleep_h,
-            "sleep_deep_hours": deep_sleep_h,
-            "resting_hr_bpm": rhr,
-            "weight_kg": weight_kg,
-        },
-        "recent_feedback": recent_feedback or [],
-        "user_custom_instructions": custom_context or "None provided. Synthesize optimal training session.",
-        "jev_decision_gates": {
-            "recovery_tier": jev_recovery or "AUTOMATIC",
-            "joint_focus": jev_gates.get("joint_focus", "NOMINAL"),
-            "time_budget": jev_gates.get("time_budget", "TIME_STANDARD_45M"),
-        },
-    }
-
-    url = f"{settings.llm_base_url.rstrip('/')}/chat/completions"
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {settings.llm_api_key}",
-        "User-Agent": "Kratos-Workout-Synthesizer/1.0",
-    }
-    body = {
-        "model": settings.llm_model,
-        "response_format": {"type": "json_object"},
-        "temperature": 0.2,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": f"Synthesize today's workout prescription and exercise cues based on athlete context:\n{json.dumps(context_payload, indent=2)}",
-            },
-        ],
-    }
-
     try:
+        weekday_name = target_date.strftime("%a")
+        activity_name = "Rest Day"
+        activity_type = "rest"
+
+        if weekly_plan and weekly_plan.days:
+            for day in weekly_plan.days:
+                if day.get("day") == weekday_name:
+                    activity_name = day.get("activity", "Rest Day")
+                    activity_type = day.get("type", "rest")
+                    break
+
+        try:
+            hrv = float(biometrics["hrv_ms"]) if biometrics and biometrics.get("hrv_ms") is not None else None
+        except (ValueError, TypeError):
+            hrv = None
+        try:
+            sleep_h = float(biometrics["sleep_duration_hours"]) if biometrics and biometrics.get("sleep_duration_hours") is not None else None
+        except (ValueError, TypeError):
+            sleep_h = None
+        try:
+            deep_sleep_h = float(biometrics["sleep_deep_hours"]) if biometrics and biometrics.get("sleep_deep_hours") is not None else None
+        except (ValueError, TypeError):
+            deep_sleep_h = None
+        try:
+            rhr = int(float(biometrics["resting_hr_bpm"])) if biometrics and biometrics.get("resting_hr_bpm") is not None else None
+        except (ValueError, TypeError):
+            rhr = None
+        try:
+            weight_kg = float(biometrics["latest_weight_kg"]) if biometrics and biometrics.get("latest_weight_kg") is not None else None
+        except (ValueError, TypeError):
+            weight_kg = None
+
+        # Fast Jev System One gates for joint sparing, time budget, and recovery tier
+        jev_recovery = classify_recovery_state_jev(biometrics)
+        jev_gates = classify_constraints_jev(custom_context)
+
+        context_payload = {
+            "date": target_date.isoformat(),
+            "day_of_week": target_date.strftime("%A"),
+            "scheduled_activity": {
+                "name": activity_name,
+                "type": activity_type,
+            },
+            "biometrics": {
+                "hrv_ms": hrv,
+                "sleep_duration_hours": sleep_h,
+                "sleep_deep_hours": deep_sleep_h,
+                "resting_hr_bpm": rhr,
+                "weight_kg": weight_kg,
+            },
+            "recent_feedback": recent_feedback or [],
+            "user_custom_instructions": custom_context or "None provided. Synthesize optimal training session.",
+            "jev_decision_gates": {
+                "recovery_tier": jev_recovery or "AUTOMATIC",
+                "joint_focus": jev_gates.get("joint_focus", "NOMINAL"),
+                "time_budget": jev_gates.get("time_budget", "TIME_STANDARD_45M"),
+            },
+        }
+
+        url = f"{settings.llm_base_url.rstrip('/')}/chat/completions"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {settings.llm_api_key}",
+            "User-Agent": "Kratos-Workout-Synthesizer/1.0",
+        }
+        body = {
+            "model": settings.llm_model,
+            "response_format": {"type": "json_object"},
+            "temperature": 0.2,
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": f"Synthesize today's workout prescription and exercise cues based on athlete context:\n{json.dumps(context_payload, indent=2)}",
+                },
+            ],
+        }
+
         req = urllib.request.Request(
             url,
             data=json.dumps(body).encode("utf-8"),
