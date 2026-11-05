@@ -64,4 +64,53 @@ test.describe('Train Flow and Effort Debrief', () => {
     await expect(page.getByRole('heading', { name: 'Workout Complete!' })).not.toBeVisible()
     await expect(page.getByText(/Today's Training/i)).toBeVisible()
   })
+
+  test('renders smart workout autoregulation badge, readiness adaptation, and research grounding', async ({ page }) => {
+    // 1. Verify AI badge and readiness adaptation banner
+    await expect(page.getByText('⚡ AI Autoregulated')).toBeVisible()
+    await expect(page.getByText('Progressive Overload', { exact: true })).toBeVisible()
+    await expect(page.getByText(/MAV • RPE 8-9 \(1-2 RIR\)/i)).toBeVisible()
+
+    // 2. Verify exercise cues
+    await expect(page.getByText(/Progressive overload anchor: push to 1 RIR on set 3/i)).toBeVisible()
+
+    // 3. Verify research citation accordion
+    const citationBtn = page.getByRole('button', { name: /Israetel \(Volume Landmarks\) & Helms \(Autoregulation RIR\)/i })
+    await expect(citationBtn).toBeVisible()
+    await citationBtn.click()
+
+    // 4. Verify expanded scientific pillars
+    await expect(page.getByText(/Israetel \(RP\): Sets scaled between MEV/i)).toBeVisible()
+    await expect(page.getByText(/Concurrent Interference: Preserves leg power/i)).toBeVisible()
+  })
+
+  test('adapts workout protocol with AI modal and custom context', async ({ page }) => {
+    // Locate and click the workout Adapt button
+    const adaptBtn = page.getByTitle('Autoregulate training with AI sports physiology')
+    await expect(adaptBtn).toBeVisible()
+    await adaptBtn.click()
+
+    // Modal opens
+    const modal = page.locator('.modal-backdrop')
+    await expect(modal).toBeVisible()
+    await expect(modal.getByRole('heading', { name: 'Adaptive Workout Synthesizer' })).toBeVisible()
+
+    // Verify 4 scientific pillars in modal
+    await expect(modal.getByText(/Volume Landmarks \(RP\):/i)).toBeVisible()
+    await expect(modal.getByText(/RIR Autoregulation:/i)).toBeVisible()
+    await expect(modal.getByText(/Joint Sparing \(McGill\):/i)).toBeVisible()
+    await expect(modal.getByText(/Court Freshness:/i)).toBeVisible()
+
+    // Type custom context and submit
+    const textarea = modal.locator('textarea')
+    await textarea.fill('Left shoulder pinching, need quick 35m session')
+    await modal.getByRole('button', { name: /Synthesize Training/i }).click()
+
+    // Modal closes and updated workout is displayed
+    await expect(modal).not.toBeVisible()
+    await expect(page.getByText('Upper Body A (Joint-Sparing Autoregulated)')).toBeVisible()
+    await expect(page.getByText(/Fatigue \/ Joint Deload/i)).toBeVisible()
+    await expect(page.getByText(/MEV • RPE 7-8 \(2 RIR\)/i)).toBeVisible()
+    await expect(page.getByText(/Neutral grip; elbows tucked 45 deg/i)).toBeVisible()
+  })
 })

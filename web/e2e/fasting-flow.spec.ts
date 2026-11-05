@@ -131,7 +131,7 @@ test.describe('Fasting Check-In Flow', () => {
   })
 
   test('adapts protocol with AI modal and custom context', async ({ page }) => {
-    const adaptBtn = page.getByRole('button', { name: /Adapt/i })
+    const adaptBtn = page.getByTitle('Adapt protocol with AI sports physiology')
     await expect(adaptBtn).toBeVisible()
     await adaptBtn.click()
 

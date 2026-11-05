@@ -13,6 +13,7 @@ import type {
   Routine,
   SessionItemPayload,
   SessionPayload,
+  WorkoutRecommendation,
 } from './types'
 import { BottomNav } from './components/BottomNav'
 import { EffortDebriefModal } from './components/EffortDebriefModal'
@@ -51,6 +52,7 @@ export function App() {
   const [sessions, setSessions] = useState<SessionPayload[]>([])
   const [biometrics, setBiometrics] = useState<DailyBiometrics | null>(null)
   const [fastingRecommendation, setFastingRecommendation] = useState<FastingRecommendation | null>(null)
+  const [workoutRecommendation, setWorkoutRecommendation] = useState<WorkoutRecommendation | null>(null)
   const [fastingLogs, setFastingLogs] = useState<FastingCheckIn[]>([])
   const [session, setSession] = useState<SessionPayload | null>(null)
   const [showExercisePicker, setShowExercisePicker] = useState<boolean>(false)
@@ -115,12 +117,16 @@ export function App() {
 
   const loadBiometrics = async () => {
     try {
-      const [data, rec] = await Promise.all([
+      const [data, rec, workoutRec] = await Promise.all([
         api.getBiometricsToday(),
         api.getFastingRecommendation(),
+        api.getWorkoutRecommendation(),
       ])
       if (rec) {
         setFastingRecommendation(rec)
+      }
+      if (workoutRec) {
+        setWorkoutRecommendation(workoutRec)
       }
       if (data) {
         setBiometrics(data)
@@ -305,16 +311,23 @@ export function App() {
       .slice()
       .sort((a, b) => a.position - b.position)
       .map((it, idx) => {
-        const targetSets = it.target_sets ?? 2
+        const recEx = workoutRecommendation?.exercises?.find((re) => {
+          if (re.exercise_id && re.exercise_id === it.exercise_id) return true
+          const ex = exercises.find((e) => e.id === it.exercise_id)
+          return ex && ex.name.toLowerCase() === re.exercise_name.toLowerCase()
+        })
+        const targetSets = recEx?.target_sets ?? it.target_sets ?? 2
+        const targetReps = recEx?.target_reps ?? it.target_reps ?? null
+        const targetWeight = recEx?.suggested_weight_kg ?? it.target_weight_kg ?? null
         return {
           id: newId(),
           exercise_id: it.exercise_id,
           position: idx,
-          notes: it.notes,
+          notes: recEx?.notes || it.notes,
           extra: {
-            target_sets: it.target_sets,
-            target_reps: it.target_reps,
-            target_weight_kg: it.target_weight_kg,
+            target_sets: targetSets,
+            target_reps: targetReps,
+            target_weight_kg: targetWeight,
             target_duration_s: it.target_duration_s,
           },
           sets: Array.from({ length: targetSets }, (_, setIdx) => ({
@@ -455,6 +468,20 @@ export function App() {
         setSessionExpired(true)
       }
       void reportClientError(err, { source: 'fasting_synthesis' })
+    }
+  }
+
+  const handleSynthesizeWorkoutRecommendation = async (customContext?: string) => {
+    try {
+      const updated = await api.synthesizeWorkoutRecommendation(customContext, circadianDate)
+      if (updated) {
+        setWorkoutRecommendation(updated)
+      }
+    } catch (err) {
+      if (err instanceof SessionExpiredError) {
+        setSessionExpired(true)
+      }
+      void reportClientError(err, { source: 'workout_synthesis' })
     }
   }
 
@@ -764,6 +791,7 @@ export function App() {
                 dayOfWeek={dayOfWeek}
                 biometrics={biometrics}
                 fastingRecommendation={fastingRecommendation}
+                workoutRecommendation={workoutRecommendation}
                 routines={routines}
                 exercises={exercises}
                 sessions={sessions}
@@ -771,6 +799,7 @@ export function App() {
                 onStartRoutine={startSession}
                 onSaveFastingCheckIn={handleSaveFastingCheckIn}
                 onSynthesizeFastingRecommendation={handleSynthesizeFastingRecommendation}
+                onSynthesizeWorkoutRecommendation={handleSynthesizeWorkoutRecommendation}
               />
             )}
           </>
