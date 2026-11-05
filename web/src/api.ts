@@ -3,7 +3,7 @@
 // VITE_API_BASE_URL overrides the prefix for a split deployment.
 
 import { authFetch, SessionExpiredError } from '@yggdrasil-lab/ui'
-import type { ClientErrorPayload, DailyBiometrics, Exercise, FastingCheckIn, Routine, SessionPayload, WeeklyPlanPayload, WeeklyPlanRead } from './types'
+import type { ClientErrorPayload, DailyBiometrics, Exercise, FastingCheckIn, FastingRecommendation, Routine, SessionPayload, WeeklyPlanPayload, WeeklyPlanRead } from './types'
 
 export { SessionExpiredError }
 
@@ -71,6 +71,38 @@ export const api = {
   getBiometricsToday: async (): Promise<DailyBiometrics | null> => {
     try {
       return await request<DailyBiometrics>('/biometrics/today')
+    } catch (err) {
+      if (err instanceof SessionExpiredError) {
+        throw err
+      }
+      return null
+    }
+  },
+
+  getFastingRecommendation: async (targetDate?: string): Promise<FastingRecommendation | null> => {
+    try {
+      const suffix = targetDate ? `?target_date=${encodeURIComponent(targetDate)}` : ''
+      return await request<FastingRecommendation>(`/biometrics/fasting-recommendation${suffix}`)
+    } catch (err) {
+      if (err instanceof SessionExpiredError) {
+        throw err
+      }
+      return null
+    }
+  },
+
+  synthesizeFastingRecommendation: async (
+    customContext?: string,
+    targetDate?: string,
+  ): Promise<FastingRecommendation | null> => {
+    try {
+      return await request<FastingRecommendation>('/biometrics/fasting-recommendation/synthesize', {
+        method: 'POST',
+        body: JSON.stringify({
+          target_date: targetDate,
+          custom_context: customContext,
+        }),
+      })
     } catch (err) {
       if (err instanceof SessionExpiredError) {
         throw err

@@ -233,7 +233,57 @@ export async function setupMockApi(page: Page): Promise<MockApiState> {
     })
   })
 
-  await page.route('**/api/biometrics/fasting**', async (route) => {
+  await page.route(/\/api\/biometrics\/fasting-recommendation\/synthesize(\?.*)?$/, async (route) => {
+    if (route.request().method() === 'POST') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          date: '2026-11-01',
+          protocol_name: '14:10 Shifted Schedule Protocol',
+          target_window: '14:10',
+          window_hours: '11:00 AM - 9:00 PM',
+          rationale: 'Custom user schedule adjustment incorporated with 3h pre-bed cutoff.',
+          fueling_anchors: [
+            '11:00 AM: Meal 1 with 40g protein',
+            '04:00 PM: Pre-workout fuel',
+            '08:30 PM: Recovery meal',
+          ],
+          recovery_status: 'optimal',
+          activity_context: 'Badminton Match Play (sport)',
+          is_llm_generated: true,
+          research_citation: 'Panda Lab (Circadian TRE) & Schoenfeld (MPS Distribution)',
+        }),
+      })
+      return
+    }
+    await route.continue()
+  })
+
+  await page.route(/\/api\/biometrics\/fasting-recommendation(\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        date: '2026-11-01',
+        protocol_name: '16:8 Badminton Court Fueling',
+        target_window: '16:8',
+        window_hours: '12:30 PM - 9:30 PM',
+        rationale: 'Court session scheduled. Window shifted later to allow pre-court fuel and post-court recovery.',
+        fueling_anchors: [
+          '12:30 PM: Clean lunch with sustained carbs and 40g protein',
+          '05:00 PM: Pre-court fuel (oats + whey, banana, electrolytes)',
+          '09:30 PM: Post-court recovery protein shake (close window by 10:00 PM)',
+        ],
+        recovery_status: 'optimal',
+        activity_context: 'Badminton Match Play (sport)',
+        is_llm_generated: true,
+        research_citation: 'Panda Lab (Circadian TRE) & Schoenfeld (MPS Distribution)',
+      }),
+    })
+  })
+
+  await page.route(/\/api\/biometrics\/fasting(\?.*)?$/, async (route) => {
     if (route.request().method() === 'POST') {
       const payload = JSON.parse(route.request().postData() || '{}')
       state.savedFastingCheckIns.push(payload)

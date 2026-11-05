@@ -62,6 +62,9 @@ jobs:
           REGISTRY_PREFIX: ${{ vars.REGISTRY_PREFIX }}
           DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
           KRATOS_DB_MOUNT_PATH: ${{ vars.KRATOS_DB_MOUNT_PATH || '/opt/kratos/data' }}
+          KRATOS_LLM_BASE_URL: ${{ vars.KRATOS_LLM_BASE_URL || 'http://muninn:4000/v1' }}
+          KRATOS_LLM_API_KEY: ${{ secrets.MUNINN_MASTER_KEY || vars.KRATOS_LLM_API_KEY || 'sk-muninn-insecure-master-key' }}
+          KRATOS_LLM_MODEL: ${{ vars.KRATOS_LLM_MODEL || 'compress' }}
           IMAGE_TAG: kratos
         run: |
           curl -fsSL https://raw.githubusercontent.com/yggdrasil-lab/yggdrasil-os/main/deploy/deploy.sh -o /tmp/deploy.sh

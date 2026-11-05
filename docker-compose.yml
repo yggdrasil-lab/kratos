@@ -51,6 +51,9 @@ services:
       # KRATOS_MCP_TOKEN for pydantic-settings. Same shape as the fleet's other
       # *_FILE env vars.
       - KRATOS_MCP_TOKEN_FILE=/run/secrets/kratos_mcp_token
+      - KRATOS_LLM_BASE_URL=${KRATOS_LLM_BASE_URL}
+      - KRATOS_LLM_API_KEY=${KRATOS_LLM_API_KEY}
+      - KRATOS_LLM_MODEL=${KRATOS_LLM_MODEL}
       - TZ=Pacific/Auckland
     secrets:
       - kratos_mcp_token

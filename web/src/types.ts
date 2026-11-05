@@ -94,6 +94,19 @@ export interface FastingCheckIn {
   logged_at: string
 }
 
+export interface FastingRecommendation {
+  date: string
+  protocol_name: string
+  target_window: string
+  window_hours: string
+  rationale: string
+  fueling_anchors: string[]
+  recovery_status: 'optimal' | 'moderate' | 'fatigued'
+  activity_context: string
+  is_llm_generated?: boolean
+  research_citation?: string | null
+}
+
 export interface HealthFeedback {
   id?: string
   date: string

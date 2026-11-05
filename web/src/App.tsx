@@ -9,6 +9,7 @@ import type {
   EffortRating,
   Exercise,
   FastingCheckIn,
+  FastingRecommendation,
   Routine,
   SessionItemPayload,
   SessionPayload,
@@ -49,6 +50,7 @@ export function App() {
   const [routines, setRoutines] = useState<Routine[]>([])
   const [sessions, setSessions] = useState<SessionPayload[]>([])
   const [biometrics, setBiometrics] = useState<DailyBiometrics | null>(null)
+  const [fastingRecommendation, setFastingRecommendation] = useState<FastingRecommendation | null>(null)
   const [fastingLogs, setFastingLogs] = useState<FastingCheckIn[]>([])
   const [session, setSession] = useState<SessionPayload | null>(null)
   const [showExercisePicker, setShowExercisePicker] = useState<boolean>(false)
@@ -113,7 +115,13 @@ export function App() {
 
   const loadBiometrics = async () => {
     try {
-      const data = await api.getBiometricsToday()
+      const [data, rec] = await Promise.all([
+        api.getBiometricsToday(),
+        api.getFastingRecommendation(),
+      ])
+      if (rec) {
+        setFastingRecommendation(rec)
+      }
       if (data) {
         setBiometrics(data)
         setSessionExpired(false)
@@ -436,6 +444,20 @@ export function App() {
     }
   }
 
+  const handleSynthesizeFastingRecommendation = async (customContext?: string) => {
+    try {
+      const updated = await api.synthesizeFastingRecommendation(customContext, circadianDate)
+      if (updated) {
+        setFastingRecommendation(updated)
+      }
+    } catch (err) {
+      if (err instanceof SessionExpiredError) {
+        setSessionExpired(true)
+      }
+      void reportClientError(err, { source: 'fasting_synthesis' })
+    }
+  }
+
   const addExerciseToSession = (exercise: Exercise) => {
     if (!session) return
     const newItem: SessionItemPayload = {
@@ -741,12 +763,14 @@ export function App() {
                 circadianDate={circadianDate}
                 dayOfWeek={dayOfWeek}
                 biometrics={biometrics}
+                fastingRecommendation={fastingRecommendation}
                 routines={routines}
                 exercises={exercises}
                 sessions={sessions}
                 latestFastingCheckIn={todayFastingCheckIn}
                 onStartRoutine={startSession}
                 onSaveFastingCheckIn={handleSaveFastingCheckIn}
+                onSynthesizeFastingRecommendation={handleSynthesizeFastingRecommendation}
               />
             )}
           </>
