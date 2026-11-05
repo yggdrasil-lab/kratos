@@ -521,7 +521,23 @@ export function WeekView({
                     <span className="badge-missed">✕ Skipped</span>
                   )}
                   {day.type === 'sport' && attendedSportSession && (
-                    <span className="badge-completed">✓ Attended</span>
+                    <>
+                      <span className="badge-completed">✓ Attended</span>
+                      {Boolean(attendedSportSession.extra?.inferred) && (
+                        <span
+                          className="badge-duration"
+                          style={{
+                            background: 'rgba(234, 179, 8, 0.15)',
+                            color: '#eab308',
+                            border: '1px solid rgba(234, 179, 8, 0.3)',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                          }}
+                        >
+                          ⚡ Inferred
+                        </span>
+                      )}
+                    </>
                   )}
                   {day.type === 'sport' && !attendedSportSession && skippedSportSession && (
                     <span className="badge-missed">✕ Skipped</span>

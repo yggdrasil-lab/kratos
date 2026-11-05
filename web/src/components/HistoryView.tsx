@@ -342,6 +342,19 @@ export function HistoryView({
                             In Progress
                           </span>
                         )}
+                        {Boolean(sess.extra?.inferred) && (
+                          <span
+                            className="badge-duration"
+                            style={{
+                              background: 'rgba(234, 179, 8, 0.15)',
+                              color: '#eab308',
+                              border: '1px solid rgba(234, 179, 8, 0.3)',
+                              fontWeight: 600,
+                            }}
+                          >
+                            ⚡ Inferred from Plan
+                          </span>
+                        )}
                       </div>
                       <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
                         {formatDateTime(sess.started_at)}
@@ -375,6 +388,43 @@ export function HistoryView({
                     </button>
                   </div>
                 </div>
+
+                {Boolean(sess.extra?.inferred) && (
+                  <div
+                    style={{
+                      background: 'rgba(234, 179, 8, 0.08)',
+                      border: '1px solid rgba(234, 179, 8, 0.25)',
+                      borderRadius: '8px',
+                      padding: '0.65rem 0.85rem',
+                      marginBottom: '0.75rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '0.6rem',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <div style={{ fontSize: '0.82rem', color: '#fef08a', flex: 1, minWidth: '180px' }}>
+                      Auto-attached from plan and biometrics. Did you not do this workout?
+                    </div>
+                    <div className="flex-row" style={{ gap: '0.45rem', flexShrink: 0 }}>
+                      <button
+                        className="btn-danger"
+                        style={{ padding: '0.25rem 0.65rem', fontSize: '0.78rem', borderRadius: '6px' }}
+                        onClick={() => onDeleteSession(sess.id)}
+                      >
+                        Dismiss
+                      </button>
+                      <button
+                        className="btn-secondary"
+                        style={{ padding: '0.25rem 0.65rem', fontSize: '0.78rem', borderRadius: '6px' }}
+                        onClick={() => handleStartEdit(sess)}
+                      >
+                        Change
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {sess.notes && (
                   <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.75rem', fontStyle: 'italic' }}>
