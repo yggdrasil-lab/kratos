@@ -283,3 +283,16 @@ class WeeklyPlanRead(ORMModel):
     created_at: datetime
     updated_at: datetime
 
+
+# ----------------------------------------------------------------- fasting recommendation
+class FastingRecommendationRead(BaseModel):
+    date: str
+    protocol_name: str
+    target_window: str
+    window_hours: str
+    rationale: str
+    fueling_anchors: list[str] = Field(default_factory=list)
+    recovery_status: Literal["optimal", "moderate", "fatigued"]
+    activity_context: str
+
+

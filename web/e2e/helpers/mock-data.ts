@@ -233,7 +233,28 @@ export async function setupMockApi(page: Page): Promise<MockApiState> {
     })
   })
 
-  await page.route('**/api/biometrics/fasting**', async (route) => {
+  await page.route(/\/api\/biometrics\/fasting-recommendation(\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        date: '2026-11-01',
+        protocol_name: '16:8 Badminton Court Fueling',
+        target_window: '16:8',
+        window_hours: '12:30 PM - 9:30 PM',
+        rationale: 'Court session scheduled. Window shifted later to allow pre-court fuel and post-court recovery.',
+        fueling_anchors: [
+          '12:30 PM: Clean lunch with sustained carbs and 40g protein',
+          '05:00 PM: Pre-court fuel (oats + whey, banana, electrolytes)',
+          '09:30 PM: Post-court recovery protein shake (close window by 10:00 PM)',
+        ],
+        recovery_status: 'optimal',
+        activity_context: 'Badminton Match Play (sport)',
+      }),
+    })
+  })
+
+  await page.route(/\/api\/biometrics\/fasting(\?.*)?$/, async (route) => {
     if (route.request().method() === 'POST') {
       const payload = JSON.parse(route.request().postData() || '{}')
       state.savedFastingCheckIns.push(payload)

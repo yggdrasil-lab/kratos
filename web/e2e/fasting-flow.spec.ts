@@ -117,4 +117,10 @@ test.describe('Fasting Check-In Flow', () => {
     await expect(page.getByText(/Logged: Energy high • Headache none • "Logged remotely from PC browser"/i)).toBeVisible()
     await expect(page.getByRole('button', { name: 'Edit' })).toBeVisible()
   })
+
+  test('renders smart autoregulation rationale and protocol badge', async ({ page }) => {
+    await expect(page.getByText('Smart Autoregulation')).toBeVisible()
+    await expect(page.getByText(/Court session scheduled/i)).toBeVisible()
+    await expect(page.getByText('🟢 Primed')).toBeVisible()
+  })
 })

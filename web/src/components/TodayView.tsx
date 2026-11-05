@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { DailyBiometrics, Exercise, FastingCheckIn, Routine, SessionPayload } from '../types'
+import type { DailyBiometrics, Exercise, FastingCheckIn, FastingRecommendation, Routine, SessionPayload } from '../types'
 import { DAY_NAMES, DAY_SHORTS, formatFriendlyDate } from '../utils/circadian'
 import { FastingCard } from './FastingCard'
 
@@ -7,6 +7,7 @@ interface TodayViewProps {
   circadianDate: string
   dayOfWeek: number
   biometrics: DailyBiometrics | null
+  fastingRecommendation?: FastingRecommendation | null
   routines: Routine[]
   exercises: Exercise[]
   sessions: SessionPayload[]
@@ -19,6 +20,7 @@ export function TodayView({
   circadianDate,
   dayOfWeek,
   biometrics,
+  fastingRecommendation,
   routines,
   exercises,
   sessions,
@@ -206,6 +208,7 @@ export function TodayView({
         circadianDate={circadianDate}
         dayOfWeek={dayOfWeek}
         latestCheckIn={latestFastingCheckIn}
+        recommendation={fastingRecommendation}
         onSaveCheckIn={onSaveFastingCheckIn}
       />
 

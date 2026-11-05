@@ -11,8 +11,15 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.db import get_db
+from app.models import WeeklyPlan
+from app.schemas import FastingRecommendationRead
+from app.services.fasting_engine import generate_fasting_recommendation
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +86,42 @@ def get_latest_biometrics() -> dict[str, Any] | None:
     except Exception as exc:
         logger.debug("Eir latest biometrics probe failed: %s", exc)
     return None
+
+
+@router.get("/fasting-recommendation", response_model=FastingRecommendationRead)
+def get_fasting_recommendation(
+    target_date: str | None = None,
+    db: Session = Depends(get_db),
+) -> FastingRecommendationRead:
+    """Returns a smart autoregulated fasting recommendation based on scheduled plan and Eir biometrics."""
+    resolved_date_str = target_date or _get_auckland_today()
+    try:
+        t_date = datetime.strptime(resolved_date_str, "%Y-%m-%d").date()
+    except ValueError:
+        t_date = datetime.now(timezone.utc).date()
+
+    # Query weekly plan for this date
+    iso_year, iso_week, _ = t_date.isocalendar()
+    iso_week_str = f"{iso_year}-W{iso_week:02d}"
+    weekly_plan = db.scalar(
+        select(WeeklyPlan).where(
+            WeeklyPlan.iso_week == iso_week_str,
+            WeeklyPlan.deleted_at.is_(None),
+        )
+    )
+
+    # Fetch biometrics for this date from Eir
+    biometrics = None
+    url = f"{EIR_INTERNAL_URL}/biometrics/daily/{t_date.isoformat()}"
+    req = urllib.request.Request(url, headers={"User-Agent": "Kratos-Bridge/1.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=2.0) as resp:
+            if resp.status == 200:
+                biometrics = json.loads(resp.read().decode("utf-8"))
+    except Exception as exc:
+        logger.debug("Failed fetching Eir biometrics for fasting recommendation: %s", exc)
+
+    return generate_fasting_recommendation(t_date, weekly_plan, biometrics)
 
 
 @router.post("/fasting")
