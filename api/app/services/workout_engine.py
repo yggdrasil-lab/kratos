@@ -9,6 +9,7 @@ from typing import Literal
 
 from app.models import WeeklyPlan
 from app.schemas import RecommendedExerciseItem, WorkoutRecommendationRead
+from app.services.jev_client import classify_recovery_state_jev
 
 
 def generate_workout_recommendation(
@@ -19,15 +20,23 @@ def generate_workout_recommendation(
     """Generates a baseline workout recommendation scaled by recovery telemetry."""
     weekday_name = target_date.strftime("%a")
 
-    # 1. Evaluate recovery state from biometrics
+    # 1. Evaluate recovery state (Jev System One classifier with fallback to biometric thresholds)
     sleep_h = biometrics.get("sleep_duration_hours") if biometrics else None
     hrv = biometrics.get("hrv_ms") if biometrics else None
 
+    jev_verdict = classify_recovery_state_jev(biometrics)
     recovery_status: Literal["optimal", "moderate", "fatigued"] = "optimal"
-    if (sleep_h is not None and sleep_h < 5.5) or (hrv is not None and hrv < 35.0):
+    if jev_verdict in ("MEV_DELOAD", "ACTIVE_RECOVERY"):
         recovery_status = "fatigued"
-    elif (sleep_h is not None and sleep_h < 6.8) or (hrv is not None and hrv < 45.0):
+    elif jev_verdict == "MAINTENANCE":
         recovery_status = "moderate"
+    elif jev_verdict == "MAV_OVERLOAD":
+        recovery_status = "optimal"
+    else:
+        if (sleep_h is not None and sleep_h < 5.5) or (hrv is not None and hrv < 35.0):
+            recovery_status = "fatigued"
+        elif (sleep_h is not None and sleep_h < 6.8) or (hrv is not None and hrv < 45.0):
+            recovery_status = "moderate"
 
     # 2. Resolve scheduled activity from weekly plan
     activity_name = "Rest Day"

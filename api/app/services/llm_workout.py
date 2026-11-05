@@ -20,6 +20,7 @@ import urllib.request
 from app.config import settings
 from app.models import WeeklyPlan
 from app.schemas import RecommendedExerciseItem, WorkoutRecommendationRead
+from app.services.jev_client import classify_constraints_jev, classify_recovery_state_jev
 from app.services.workout_engine import generate_workout_recommendation
 
 logger = logging.getLogger(__name__)
@@ -30,6 +31,8 @@ Your recommendations are grounded in four scientific pillars:
 2. Autoregulation & RIR (Helms / Schoenfeld): Dictate exact Reps-in-Reserve (RIR 1-2 on high recovery, RIR 2-3 on moderate, RIR 3-4 on low recovery).
 3. Joint Sparing Biomechanics (McGill / Starrett): If user notes joint discomfort (e.g. shoulder pinching, tight lower back), recommend neutral-grip or chest-supported variations and provide specific tempo/form cues.
 4. Concurrent Interference Avoidance (Hickson / Hawley): Near badminton match play, spare the knee extensors and Achilles from heavy eccentric strain.
+
+When 'jev_decision_gates' indicates SHOULDER_SPARING, LUMBAR_SPARING, or KNEE_SPARING, strictly prioritize neutral-grip, chest-supported, or deloaded variations. When TIME_CRUNCH_30M is indicated, limit prescription to 2-3 high-impact exercises.
 
 You must respond ONLY with a valid JSON object matching this exact structure:
 {
@@ -78,6 +81,10 @@ def synthesize_workout_recommendation_llm(
     rhr = biometrics.get("resting_hr_bpm") if biometrics else None
     weight_kg = biometrics.get("latest_weight_kg") if biometrics else None
 
+    # Fast Jev System One gates for joint sparing, time budget, and recovery tier
+    jev_recovery = classify_recovery_state_jev(biometrics)
+    jev_gates = classify_constraints_jev(custom_context)
+
     context_payload = {
         "date": target_date.isoformat(),
         "day_of_week": target_date.strftime("%A"),
@@ -94,6 +101,11 @@ def synthesize_workout_recommendation_llm(
         },
         "recent_feedback": recent_feedback or [],
         "user_custom_instructions": custom_context or "None provided. Synthesize optimal training session.",
+        "jev_decision_gates": {
+            "recovery_tier": jev_recovery or "AUTOMATIC",
+            "joint_focus": jev_gates.get("joint_focus", "NOMINAL"),
+            "time_budget": jev_gates.get("time_budget", "TIME_STANDARD_45M"),
+        },
     }
 
     url = f"{settings.llm_base_url.rstrip('/')}/chat/completions"
