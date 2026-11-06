@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { createPortal } from 'react-dom'
+import { Modal, OptionCardGroup, ChipSelector, Button } from '@yggdrasil-lab/ui'
+import type { OptionCardItem } from '@yggdrasil-lab/ui'
 import type { FastingCheckIn } from '../types'
 
 interface FastingCheckInModalProps {
@@ -10,6 +11,44 @@ interface FastingCheckInModalProps {
   onClose: () => void
 }
 
+type AdherenceValue = 'completed' | 'early' | 'off_plan'
+
+const ADHERENCE_OPTIONS: OptionCardItem<AdherenceValue>[] = [
+  {
+    value: 'completed',
+    icon: '🟢',
+    label: 'Completed Target Window',
+    description: 'Hit full fast target',
+    accent: 'emerald',
+  },
+  {
+    value: 'early',
+    icon: '🟡',
+    label: 'Broke Fast Early',
+    description: 'Broke 1-2h before target window',
+    accent: 'amber',
+  },
+  {
+    value: 'off_plan',
+    icon: '🔴',
+    label: 'Off-Plan / Skipped Fast',
+    description: 'Ate early breakfast or continuous grazing',
+    accent: 'rose',
+  },
+]
+
+const ENERGY_OPTIONS = [
+  { value: 'high', label: '⚡ High' },
+  { value: 'normal', label: '😐 Normal' },
+  { value: 'low', label: '🪫 Low' },
+]
+
+const HEADACHE_OPTIONS = [
+  { value: 'none', label: 'None' },
+  { value: 'mild', label: 'Mild' },
+  { value: 'sugar_spike', label: 'Sugar Spike' },
+]
+
 export function FastingCheckInModal({
   date,
   targetWindow,
@@ -17,7 +56,7 @@ export function FastingCheckInModal({
   onSave,
   onClose,
 }: FastingCheckInModalProps) {
-  const [adherence, setAdherence] = useState<'completed' | 'early' | 'off_plan'>(
+  const [adherence, setAdherence] = useState<AdherenceValue>(
     initialCheckIn?.adherence ?? 'completed'
   )
   const [energy, setEnergy] = useState<'high' | 'normal' | 'low'>(
@@ -42,232 +81,66 @@ export function FastingCheckInModal({
     onSave(payload)
   }
 
-  return createPortal(
-    <div className="modal-backdrop animate-fade-in" style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: 'rgba(15, 23, 42, 0.85)',
-      backdropFilter: 'blur(8px)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 1000,
-      padding: '1rem',
-      overflowY: 'auto',
-    }}>
-      <div className="animate-scale-up" style={{
-        maxWidth: '480px',
-        width: '100%',
-        maxHeight: '90vh',
-        overflowY: 'auto',
-        backgroundColor: '#1e293b',
-        borderRadius: '16px',
-        border: '1px solid rgba(255, 255, 255, 0.15)',
-        boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.9)',
-        padding: '1.5rem',
-      }}>
-        {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-          <div>
-            <h3 style={{ fontSize: '1.3rem', fontWeight: 700 }}>Fasting Check-In</h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-              Target: {targetWindow} for {date}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--text-muted)',
-              fontSize: '1.4rem',
-              cursor: 'pointer',
-            }}
-          >
-            ✕
-          </button>
-        </div>
+  return (
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      title="Fasting Check-In"
+      subtitle={`Target: ${targetWindow} for ${date}`}
+    >
+      <div className="space-y-4">
+        <OptionCardGroup
+          label="Did you follow today's fasting window?"
+          options={ADHERENCE_OPTIONS}
+          value={adherence}
+          onChange={setAdherence}
+        />
 
-        {/* Adherence Selection */}
-        <div style={{ marginBottom: '1.25rem' }}>
-          <label style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.5rem' }}>
-            Did you follow today's fasting window?
-          </label>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <button
-              type="button"
-              onClick={() => setAdherence('completed')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.6rem',
-                padding: '0.7rem 0.9rem',
-                borderRadius: '0.6rem',
-                backgroundColor: adherence === 'completed' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255, 255, 255, 0.03)',
-                border: `1.5px solid ${adherence === 'completed' ? '#10b981' : 'rgba(255, 255, 255, 0.08)'}`,
-                color: adherence === 'completed' ? '#10b981' : 'var(--text-primary)',
-                fontWeight: 600,
-                textAlign: 'left',
-                cursor: 'pointer',
-              }}
-            >
-              <span>🟢</span>
-              <div>
-                <div>Completed Target Window</div>
-                <div style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)' }}>Hit full fast target</div>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setAdherence('early')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.6rem',
-                padding: '0.7rem 0.9rem',
-                borderRadius: '0.6rem',
-                backgroundColor: adherence === 'early' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255, 255, 255, 0.03)',
-                border: `1.5px solid ${adherence === 'early' ? '#f59e0b' : 'rgba(255, 255, 255, 0.08)'}`,
-                color: adherence === 'early' ? '#f59e0b' : 'var(--text-primary)',
-                fontWeight: 600,
-                textAlign: 'left',
-                cursor: 'pointer',
-              }}
-            >
-              <span>🟡</span>
-              <div>
-                <div>Broke Fast Early</div>
-                <div style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)' }}>Broke 1-2h before target window</div>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setAdherence('off_plan')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.6rem',
-                padding: '0.7rem 0.9rem',
-                borderRadius: '0.6rem',
-                backgroundColor: adherence === 'off_plan' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255, 255, 255, 0.03)',
-                border: `1.5px solid ${adherence === 'off_plan' ? '#ef4444' : 'rgba(255, 255, 255, 0.08)'}`,
-                color: adherence === 'off_plan' ? '#ef4444' : 'var(--text-primary)',
-                fontWeight: 600,
-                textAlign: 'left',
-                cursor: 'pointer',
-              }}
-            >
-              <span>🔴</span>
-              <div>
-                <div>Off-Plan / Skipped Fast</div>
-                <div style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)' }}>Ate early breakfast or continuous grazing</div>
-              </div>
-            </button>
-          </div>
-        </div>
-
-        {/* Energy Level */}
-        <div style={{ marginBottom: '1.25rem' }}>
-          <label style={{ display: 'block', fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>
+        <div className="space-y-1.5">
+          <label className="block font-semibold text-xs text-slate-300">
             Energy level during the fast:
           </label>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            {[
-              { val: 'high', label: '⚡ High' },
-              { val: 'normal', label: '😐 Normal' },
-              { val: 'low', label: '🪫 Low' },
-            ].map((opt) => (
-              <button
-                key={opt.val}
-                type="button"
-                onClick={() => setEnergy(opt.val as any)}
-                style={{
-                  flex: 1,
-                  padding: '0.5rem',
-                  borderRadius: '0.5rem',
-                  fontSize: '0.85rem',
-                  fontWeight: 600,
-                  backgroundColor: energy === opt.val ? 'rgba(59, 130, 246, 0.25)' : 'rgba(255, 255, 255, 0.04)',
-                  border: `1px solid ${energy === opt.val ? 'var(--primary-color)' : 'rgba(255, 255, 255, 0.08)'}`,
-                  color: energy === opt.val ? '#60a5fa' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                }}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
+          <ChipSelector
+            options={ENERGY_OPTIONS}
+            selected={energy}
+            onChange={(val) => setEnergy(val as 'high' | 'normal' | 'low')}
+            variant="blue"
+            equalWidth
+          />
         </div>
 
-        {/* Headaches / Sugar Crashes */}
-        <div style={{ marginBottom: '1.25rem' }}>
-          <label style={{ display: 'block', fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>
+        <div className="space-y-1.5">
+          <label className="block font-semibold text-xs text-slate-300">
             Headache / Sugar Crash:
           </label>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            {[
-              { val: 'none', label: 'None' },
-              { val: 'mild', label: 'Mild' },
-              { val: 'sugar_spike', label: 'Sugar Spike' },
-            ].map((opt) => (
-              <button
-                key={opt.val}
-                type="button"
-                onClick={() => setHeadache(opt.val as any)}
-                style={{
-                  flex: 1,
-                  padding: '0.5rem',
-                  borderRadius: '0.5rem',
-                  fontSize: '0.8rem',
-                  fontWeight: 600,
-                  backgroundColor: headache === opt.val ? 'rgba(244, 63, 94, 0.2)' : 'rgba(255, 255, 255, 0.04)',
-                  border: `1px solid ${headache === opt.val ? '#f43f5e' : 'rgba(255, 255, 255, 0.08)'}`,
-                  color: headache === opt.val ? '#f43f5e' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                }}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
+          <ChipSelector
+            options={HEADACHE_OPTIONS}
+            selected={headache}
+            onChange={(val) => setHeadache(val as 'none' | 'mild' | 'sugar_spike')}
+            variant="rose"
+            equalWidth
+          />
         </div>
 
-        {/* Optional Notes */}
-        <div style={{ marginBottom: '1.5rem' }}>
+        <div>
           <input
             type="text"
             placeholder="Notes (e.g. felt hungry at 3pm, drank electrolytes)..."
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '0.6rem 0.8rem',
-              borderRadius: '0.5rem',
-              backgroundColor: 'rgba(0, 0, 0, 0.25)',
-              border: '1px solid var(--surface-border)',
-              color: 'var(--text-primary)',
-              fontSize: '0.85rem',
-            }}
+            className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-slate-100 placeholder-slate-500"
           />
         </div>
 
-        {/* Actions */}
-        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
-          <button type="button" className="btn-secondary" onClick={onClose} style={{ padding: '0.6rem 1.2rem' }}>
+        <div className="flex gap-2.5 justify-end pt-1">
+          <Button variant="secondary" size="md" onClick={onClose}>
             Cancel
-          </button>
-          <button type="button" className="btn-primary" onClick={handleSave} style={{ padding: '0.6rem 1.5rem', fontWeight: 600 }}>
+          </Button>
+          <Button variant="blue" size="md" onClick={handleSave}>
             Save Check-In
-          </button>
+          </Button>
         </div>
       </div>
-    </div>,
-    document.body
+    </Modal>
   )
 }

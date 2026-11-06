@@ -1,7 +1,7 @@
 import { useState } from 'react'
+import { GlassCard, Button, AlertBanner, CollapsibleSection, AiSynthesizerModal } from '@yggdrasil-lab/ui'
 import type { FastingCheckIn, FastingRecommendation } from '../types'
 import { FastingCheckInModal } from './FastingCheckInModal'
-import { FastingAiModal } from './FastingAiModal'
 
 interface FastingCardProps {
   circadianDate: string
@@ -11,6 +11,25 @@ interface FastingCardProps {
   onSaveCheckIn: (checkIn: FastingCheckIn) => void
   onSynthesizeRecommendation?: (customContext?: string) => Promise<void>
 }
+
+const FASTING_PILLARS = [
+  {
+    label: 'Circadian TRE',
+    description: '8-10h window ending 3-4h prior to sleep to preserve nocturnal HRV and deep sleep.',
+  },
+  {
+    label: 'MPS Distribution',
+    description: '0.4-0.5 g/kg protein spaced across 3-4 meals on lifting days with post-lift anchor.',
+  },
+  {
+    label: 'Court Glycogen',
+    description: 'Pre-match carbs and electrolytes 2-3h before badminton; post-match amino acids.',
+  },
+  {
+    label: 'Metabolic Reset',
+    description: '18:6 autophagy fasts reserved strictly for low-strain recovery days.',
+  },
+]
 
 export function FastingCard({
   circadianDate,
@@ -22,9 +41,7 @@ export function FastingCard({
 }: FastingCardProps) {
   const [showModal, setShowModal] = useState<boolean>(false)
   const [showAiModal, setShowAiModal] = useState<boolean>(false)
-  const [showResearch, setShowResearch] = useState<boolean>(false)
 
-  // Default fallback protocol based on day of week if dynamic recommendation is not available
   let protocolName = recommendation?.protocol_name ?? '16:8 Standard Split'
   let targetWindow = recommendation?.target_window ?? '16:8'
   let windowHours = recommendation?.window_hours ?? '12:30 PM - 8:30 PM'
@@ -40,7 +57,6 @@ export function FastingCard({
 
   if (!recommendation) {
     if (dayOfWeek === 4) {
-      // Friday: Deep Reset
       protocolName = '18:6 Deep Metabolic Reset'
       targetWindow = '18:6'
       windowHours = '4:30 PM - 8:30 PM'
@@ -50,7 +66,6 @@ export function FastingCard({
         'Goal: Deep fat oxidation after Thursday badminton glycogen burn',
       ]
     } else if (dayOfWeek === 1 || dayOfWeek === 3) {
-      // Tuesday / Thursday: Badminton Fueling
       protocolName = '16:8 Badminton Court Fueling'
       targetWindow = '16:8'
       windowHours = '12:00 PM - 9:30 PM'
@@ -60,7 +75,6 @@ export function FastingCard({
         '09:30 PM: Light protein shake after court (close window by 10 PM)',
       ]
     } else if (dayOfWeek === 5 || dayOfWeek === 6) {
-      // Weekend
       protocolName = '14:10 Social Baseline'
       targetWindow = '14:10'
       windowHours = '10:30 AM - 8:30 PM'
@@ -73,55 +87,42 @@ export function FastingCard({
 
   const isCheckedInToday = latestCheckIn && latestCheckIn.date === circadianDate
 
+  const recoveryBadgeClass =
+    recoveryStatus === 'fatigued'
+      ? 'bg-rose-500/20 text-rose-400'
+      : recoveryStatus === 'moderate'
+      ? 'bg-amber-500/20 text-amber-400'
+      : 'bg-emerald-500/20 text-emerald-400'
+
+  const adherenceBadgeClass =
+    latestCheckIn?.adherence === 'completed'
+      ? 'bg-emerald-500/20 text-emerald-400'
+      : latestCheckIn?.adherence === 'early'
+      ? 'bg-amber-500/20 text-amber-400'
+      : 'bg-rose-500/20 text-rose-400'
+
   return (
     <>
-      <div className="glass-panel animate-slide-up" style={{
-        marginBottom: '1.25rem',
-        padding: '1.25rem',
-        border: '1px solid rgba(255, 255, 255, 0.08)',
-        background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.5), rgba(15, 23, 42, 0.7))',
-      }}>
+      <GlassCard className="animate-slide-up mb-5">
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ fontSize: '1.25rem' }}>⏱️</span>
+        <div className="flex justify-between items-center mb-3 gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">⏱️</span>
             <div>
-              <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
+              <div className="font-bold text-sm text-slate-100">
                 Fasting and Fueling
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.1rem', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '0.75rem', color: '#60a5fa', fontWeight: 600 }}>
+              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                <span className="text-xs text-sky-400 font-semibold">
                   {protocolName}
                 </span>
                 {recommendation && (
-                  <span style={{
-                    fontSize: '0.65rem',
-                    padding: '0.1rem 0.4rem',
-                    borderRadius: '0.4rem',
-                    fontWeight: 600,
-                    backgroundColor: recoveryStatus === 'fatigued'
-                      ? 'rgba(239, 68, 68, 0.2)'
-                      : recoveryStatus === 'moderate'
-                      ? 'rgba(245, 158, 11, 0.2)'
-                      : 'rgba(16, 185, 129, 0.2)',
-                    color: recoveryStatus === 'fatigued'
-                      ? '#ef4444'
-                      : recoveryStatus === 'moderate'
-                      ? '#f59e0b'
-                      : '#10b981',
-                  }}>
+                  <span className={`text-[11px] px-1.5 py-0.5 rounded-md font-semibold ${recoveryBadgeClass}`}>
                     {recoveryStatus === 'fatigued' ? '🔴 Autoregulated' : recoveryStatus === 'moderate' ? '🟡 Moderate' : '🟢 Primed'}
                   </span>
                 )}
                 {isLlmGenerated && (
-                  <span style={{
-                    fontSize: '0.65rem',
-                    padding: '0.1rem 0.4rem',
-                    borderRadius: '0.4rem',
-                    fontWeight: 600,
-                    backgroundColor: 'rgba(59, 130, 246, 0.25)',
-                    color: '#93c5fd',
-                  }}>
+                  <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold bg-blue-500/25 text-blue-300">
                     ⚡ AI Synthesized
                   </span>
                 )}
@@ -129,121 +130,66 @@ export function FastingCard({
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          <div className="flex items-center gap-1.5 shrink-0">
             {onSynthesizeRecommendation && (
-              <button
-                type="button"
-                className="btn-secondary"
+              <Button
+                variant="outline"
+                size="xs"
+                icon={<span>⚡</span>}
                 onClick={() => setShowAiModal(true)}
-                style={{
-                  padding: '0.3rem 0.55rem',
-                  fontSize: '0.75rem',
-                  fontWeight: 600,
-                  borderColor: 'rgba(59, 130, 246, 0.4)',
-                  color: '#93c5fd',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.25rem',
-                }}
                 title="Adapt protocol with AI sports physiology"
+                className="border-blue-500/40 text-blue-300"
               >
-                <span>⚡</span>
-                <span>Adapt</span>
-              </button>
+                Adapt
+              </Button>
             )}
 
             {isCheckedInToday ? (
-              <span style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.3rem',
-                padding: '0.25rem 0.6rem',
-                borderRadius: '1rem',
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                backgroundColor: latestCheckIn.adherence === 'completed'
-                  ? 'rgba(16, 185, 129, 0.2)'
-                  : latestCheckIn.adherence === 'early'
-                  ? 'rgba(245, 158, 11, 0.2)'
-                  : 'rgba(239, 68, 68, 0.2)',
-                color: latestCheckIn.adherence === 'completed'
-                  ? '#10b981'
-                  : latestCheckIn.adherence === 'early'
-                  ? '#f59e0b'
-                  : '#ef4444',
-              }}>
+              <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${adherenceBadgeClass}`}>
                 {latestCheckIn.adherence === 'completed' ? '✓ Completed' : latestCheckIn.adherence === 'early' ? '⚡ Early' : '🔴 Off-Plan'}
               </span>
             ) : (
-              <button
-                type="button"
-                className="btn-secondary"
+              <Button
+                variant="outline"
+                size="xs"
                 onClick={() => setShowModal(true)}
-                style={{
-                  padding: '0.3rem 0.75rem',
-                  fontSize: '0.8rem',
-                  fontWeight: 600,
-                  borderColor: 'var(--primary-color)',
-                  color: '#60a5fa',
-                }}
+                className="border-blue-500/50 text-sky-400"
               >
                 Log Fast
-              </button>
+              </Button>
             )}
           </div>
         </div>
 
         {/* Target Window Bar */}
-        <div style={{
-          backgroundColor: 'rgba(0, 0, 0, 0.25)',
-          borderRadius: '0.5rem',
-          padding: '0.6rem 0.8rem',
-          marginBottom: '0.75rem',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-        }}>
-          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Target Window</span>
-          <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>{windowHours}</span>
+        <div className="bg-background/70 rounded-xl px-3.5 py-2.5 mb-3 flex justify-between items-center border border-border/50">
+          <span className="text-xs text-slate-400">Target Window</span>
+          <span className="text-xs font-semibold text-slate-100">{windowHours}</span>
         </div>
 
         {/* Smart Autoregulation Rationale */}
         {rationale && (
-          <div style={{
-            backgroundColor: recoveryStatus === 'fatigued'
-              ? 'rgba(239, 68, 68, 0.12)'
-              : recoveryStatus === 'moderate'
-              ? 'rgba(245, 158, 11, 0.12)'
-              : 'rgba(59, 130, 246, 0.12)',
-            border: recoveryStatus === 'fatigued'
-              ? '1px solid rgba(239, 68, 68, 0.3)'
-              : recoveryStatus === 'moderate'
-              ? '1px solid rgba(245, 158, 11, 0.3)'
-              : '1px solid rgba(59, 130, 246, 0.25)',
-            borderRadius: '0.5rem',
-            padding: '0.65rem 0.85rem',
-            marginBottom: '0.75rem',
-            fontSize: '0.78rem',
-            color: recoveryStatus === 'fatigued' ? '#fca5a5' : recoveryStatus === 'moderate' ? '#fde68a' : '#93c5fd',
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: '0.5rem',
-          }}>
-            <span style={{ fontSize: '0.95rem', lineHeight: 1.2 }}>🧠</span>
-            <div style={{ flex: 1, lineHeight: 1.4 }}>
-              <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.15rem' }}>
-                Smart Autoregulation
-              </div>
-              <div>{rationale}</div>
-            </div>
-          </div>
+          <AlertBanner
+            variant={
+              recoveryStatus === 'fatigued'
+                ? 'error'
+                : recoveryStatus === 'moderate'
+                ? 'warning'
+                : 'info'
+            }
+            icon="🧠"
+            title="Smart Autoregulation"
+            className="mb-3"
+          >
+            {rationale}
+          </AlertBanner>
         )}
 
         {/* Fueling Anchors List */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+        <div className="flex flex-col gap-1.5">
           {fuelingAnchors.map((anchor, idx) => (
-            <div key={idx} style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'flex-start', gap: '0.4rem' }}>
-              <span style={{ color: 'var(--primary-hover)', marginTop: '0.1rem' }}>•</span>
+            <div key={idx} className="text-xs text-slate-300 flex items-start gap-1.5">
+              <span className="text-sky-400 mt-0.5">•</span>
               <span>{anchor}</span>
             </div>
           ))}
@@ -251,80 +197,37 @@ export function FastingCard({
 
         {/* Research Grounding Accordion */}
         {researchCitation && (
-          <div style={{ marginTop: '0.65rem', paddingTop: '0.5rem', borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
-            <button
-              type="button"
-              onClick={() => setShowResearch((prev) => !prev)}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                padding: 0,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.35rem',
-                color: '#60a5fa',
-                fontSize: '0.72rem',
-                cursor: 'pointer',
-              }}
-            >
-              <span>📚</span>
-              <span style={{ textDecoration: 'underline' }}>{researchCitation}</span>
-              <span style={{ fontSize: '0.65rem' }}>{showResearch ? '▲' : '▼'}</span>
-            </button>
-            {showResearch && (
-              <div style={{
-                marginTop: '0.4rem',
-                padding: '0.5rem 0.75rem',
-                borderRadius: '0.4rem',
-                backgroundColor: 'rgba(0, 0, 0, 0.3)',
-                fontSize: '0.72rem',
-                color: 'var(--text-secondary)',
-                lineHeight: 1.45,
-              }}>
-                <div>☀️ <strong>Panda Lab:</strong> 8-10h feeding window ending 3-4h prior to sleep preserves nocturnal HRV & deep sleep.</div>
-                <div>🥩 <strong>Schoenfeld / Aragon:</strong> 0.4-0.5g/kg protein every 3-5h on lift days with an anabolic recovery anchor.</div>
-                <div>🏸 <strong>Court Kinetics:</strong> Pre-match complex carbs + electrolytes 2-3h before play prevent glycogen depletion.</div>
-                <div>🧬 <strong>Mattson / Longo:</strong> 18:6 autophagy fasts reserved strictly for low-strain recovery days.</div>
-              </div>
-            )}
-          </div>
+          <CollapsibleSection
+            variant="inline"
+            icon="📚"
+            title={researchCitation}
+            className="mt-3"
+          >
+            <div>☀️ <strong>Panda Lab:</strong> 8-10h feeding window ending 3-4h prior to sleep preserves nocturnal HRV & deep sleep.</div>
+            <div>🥩 <strong>Schoenfeld / Aragon:</strong> 0.4-0.5g/kg protein every 3-5h on lift days with an anabolic recovery anchor.</div>
+            <div>🏸 <strong>Court Kinetics:</strong> Pre-match complex carbs + electrolytes 2-3h before play prevent glycogen depletion.</div>
+            <div>🧬 <strong>Mattson / Longo:</strong> 18:6 autophagy fasts reserved strictly for low-strain recovery days.</div>
+          </CollapsibleSection>
         )}
 
         {/* Existing Check-In Summary if already logged */}
         {isCheckedInToday && (
-          <div style={{
-            marginTop: '0.75rem',
-            paddingTop: '0.6rem',
-            borderTop: '1px solid rgba(255, 255, 255, 0.05)',
-            fontSize: '0.75rem',
-            color: 'var(--text-muted)',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            gap: '0.5rem',
-          }}>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div className="mt-3 pt-2.5 border-t border-border/50 text-xs text-slate-400 flex justify-between items-center gap-2">
+            <span className="truncate">
               Logged: Energy {latestCheckIn.energy} • Headache {latestCheckIn.headache}
               {latestCheckIn.notes ? ` • "${latestCheckIn.notes}"` : ''}
             </span>
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="xs"
               onClick={() => setShowModal(true)}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: 'var(--text-secondary)',
-                textDecoration: 'underline',
-                fontSize: '0.75rem',
-                cursor: 'pointer',
-                flexShrink: 0,
-              }}
+              className="underline text-slate-300 shrink-0"
             >
               Edit
-            </button>
+            </Button>
           </div>
         )}
-      </div>
+      </GlassCard>
 
       {showModal && (
         <FastingCheckInModal
@@ -339,11 +242,18 @@ export function FastingCard({
         />
       )}
 
-      {showAiModal && onSynthesizeRecommendation && (
-        <FastingAiModal
-          currentCitation={researchCitation}
-          onSynthesize={onSynthesizeRecommendation}
+      {onSynthesizeRecommendation && (
+        <AiSynthesizerModal
+          isOpen={showAiModal}
           onClose={() => setShowAiModal(false)}
+          title="Adaptive Fasting Synthesizer"
+          subtitle="Sports Physiology & Circadian Research Grounding"
+          citationTitle={researchCitation || 'Panda Lab (Circadian TRE) & Schoenfeld (MPS Distribution)'}
+          pillars={FASTING_PILLARS}
+          inputLabel="Day Shifts or Custom Schedule (Optional)"
+          inputPlaceholder="e.g. Lunch at 1:30 PM with team; badminton moved to 7:00 PM; feeling slightly sore from deadlifts"
+          submitLabel="Synthesize with AI"
+          onSynthesize={onSynthesizeRecommendation}
         />
       )}
     </>

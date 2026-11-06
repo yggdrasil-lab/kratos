@@ -20,8 +20,8 @@ test.describe('Routine Workout Flow', () => {
 
     // Enter actuals for first set
     const setRow = page.locator('.set-row').filter({ has: page.locator('input') }).first()
-    const weightInput = setRow.locator('input[type="number"]').first()
-    const repsInput = setRow.locator('input[type="number"]').nth(1)
+    const weightInput = setRow.locator('input').first()
+    const repsInput = setRow.locator('input').nth(1)
     await weightInput.fill('32')
     await repsInput.fill('9')
 
