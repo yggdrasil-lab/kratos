@@ -243,6 +243,7 @@ class FastingRecommendation(TimestampMixin, Base):
     is_llm_generated: Mapped[bool] = mapped_column(nullable=False, server_default=text("false"))
     research_citation: Mapped[str | None] = mapped_column(Text, nullable=True)
     custom_context: Mapped[str | None] = mapped_column(Text, nullable=True)
+    extra: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
 
     __table_args__ = (
         Index("fasting_recommendation_date_alive_idx", "date", postgresql_where=text("deleted_at is null")),
@@ -265,6 +266,7 @@ class WorkoutRecommendation(TimestampMixin, Base):
     recovery_status: Mapped[str] = mapped_column(Text, nullable=False)
     research_citation: Mapped[str | None] = mapped_column(Text, nullable=True)
     custom_context: Mapped[str | None] = mapped_column(Text, nullable=True)
+    extra: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
     is_llm_generated: Mapped[bool] = mapped_column(nullable=False, server_default=text("false"))
 
     __table_args__ = (

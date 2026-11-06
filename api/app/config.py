@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -22,6 +23,28 @@ class Settings(BaseSettings):
     llm_api_key: str = "sk-muninn-insecure-master-key"
     llm_model: str = "compress"
     jev_model: str = "jev-decision"
+    discord_webhook_url: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "KRATOS_DISCORD_WEBHOOK_URL",
+            "DISCORD_HEALTH_WEBHOOK_URL",
+            "DISCORD_WEBHOOK_URL",
+        ),
+    )
+    discord_bot_token: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("KRATOS_DISCORD_BOT_TOKEN", "DISCORD_BOT_TOKEN"),
+    )
+    discord_health_channel_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "KRATOS_DISCORD_HEALTH_CHANNEL_ID", "DISCORD_HEALTH_CHANNEL_ID"
+        ),
+    )
+    discord_user_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("KRATOS_DISCORD_USER_ID", "DISCORD_USER_ID"),
+    )
 
     @property
     def cors_origin_list(self) -> list[str]:

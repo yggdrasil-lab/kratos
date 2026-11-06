@@ -46,7 +46,20 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from app.config import settings
-from app.models import Exercise, Routine, RoutineItem, WeeklyPlan
+from app.models import (
+    Exercise,
+    FastingRecommendation,
+    Routine,
+    RoutineItem,
+    WeeklyPlan,
+    WorkoutRecommendation,
+)
+from app.routers.biometrics import (
+    get_fasting_recommendation as _get_fasting_recommendation,
+    get_workout_recommendation as _get_workout_recommendation,
+    trigger_fasting_synthesis as _trigger_fasting_synthesis,
+    trigger_workout_synthesis as _trigger_workout_synthesis,
+)
 from app.routers.catalogue import (
     create_exercise as _create_exercise,
 )
@@ -77,9 +90,11 @@ from app.routers.plan import (
 from app.schemas import (
     ExerciseCreate,
     ExerciseUpdate,
+    FastingSynthesizeRequest,
     RoutineCreate,
     RoutineItemCreate,
     RoutineUpdate,
+    WorkoutSynthesizeRequest,
 )
 
 # Spec ("Specs - MCP endpoint.md", §4): every write records a `source` value of
@@ -440,6 +455,70 @@ def build_mcp_server() -> MCPServer:
                 "extra": plan.extra,
                 "status": "saved",
             }
+
+    @server.tool(
+        name="fasting_recommendation_get",
+        description="Get today's (or target date's) AI-synthesized circadian fasting recommendation, including target window, rationale, fueling anchors, and Discord thread ID.",
+    )
+    def fasting_recommendation_get(target_date: str | None = None) -> dict:
+        with mcp_session() as db:
+            rec = _get_fasting_recommendation(target_date=target_date, db=db)
+            return rec.model_dump()
+
+    @server.tool(
+        name="fasting_recommendation_adjust",
+        description="Adjust and re-synthesize a fasting recommendation for today (or target date) using user instructions from Discord or chat (e.g. 'shorten fast to 14h', 'shift feeding window earlier for lunch meeting').",
+    )
+    def fasting_recommendation_adjust(
+        user_adjustment: str,
+        target_date: str | None = None,
+    ) -> dict:
+        with mcp_session() as db:
+            payload = FastingSynthesizeRequest(target_date=target_date, custom_context=user_adjustment)
+            rec = _trigger_fasting_synthesis(payload=payload, db=db)
+            existing = db.scalar(
+                select(FastingRecommendation).where(
+                    FastingRecommendation.date == rec.date,
+                    FastingRecommendation.deleted_at.is_(None),
+                )
+            )
+            if existing:
+                existing.extra = _with_source(existing.extra)
+                db.commit()
+                rec.extra = existing.extra
+            return rec.model_dump()
+
+    @server.tool(
+        name="workout_recommendation_get",
+        description="Get today's (or target date's) AI-synthesized workout recommendation, including routine name, readiness adaptation, target RIR, volume landmark, exercises, and Discord thread ID.",
+    )
+    def workout_recommendation_get(target_date: str | None = None) -> dict:
+        with mcp_session() as db:
+            rec = _get_workout_recommendation(target_date=target_date, db=db)
+            return rec.model_dump()
+
+    @server.tool(
+        name="workout_recommendation_adjust",
+        description="Adjust and re-synthesize an autoregulated workout recommendation for today (or target date) based on user instructions from Discord or chat (e.g. 'swap Bulgarian Split Squats for Leg Press due to knee tweak', 'reduce volume by 1 set across all exercises').",
+    )
+    def workout_recommendation_adjust(
+        user_adjustment: str,
+        target_date: str | None = None,
+    ) -> dict:
+        with mcp_session() as db:
+            payload = WorkoutSynthesizeRequest(target_date=target_date, custom_context=user_adjustment)
+            rec = _trigger_workout_synthesis(payload=payload, db=db)
+            existing = db.scalar(
+                select(WorkoutRecommendation).where(
+                    WorkoutRecommendation.date == rec.date,
+                    WorkoutRecommendation.deleted_at.is_(None),
+                )
+            )
+            if existing:
+                existing.extra = _with_source(existing.extra)
+                db.commit()
+                rec.extra = existing.extra
+            return rec.model_dump()
 
     return server
 

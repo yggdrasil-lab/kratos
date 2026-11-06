@@ -25,6 +25,11 @@ from app.schemas import (
     WorkoutRecommendationRead,
     WorkoutSynthesizeRequest,
 )
+from app.services.discord import (
+    post_fasting_recommendation_thread,
+    post_thread_adjustment_reply,
+    post_workout_recommendation_thread,
+)
 from app.services.fasting_engine import generate_fasting_recommendation
 from app.services.llm_fasting import synthesize_fasting_recommendation_llm
 from app.services.llm_workout import synthesize_workout_recommendation_llm
@@ -127,6 +132,7 @@ def get_fasting_recommendation(
             activity_context=cached.activity_context,
             is_llm_generated=cached.is_llm_generated,
             research_citation=cached.research_citation,
+            extra=cached.extra or {},
         )
 
     # Query weekly plan for this date
@@ -152,6 +158,17 @@ def get_fasting_recommendation(
 
     rec = synthesize_fasting_recommendation_llm(t_date, weekly_plan, biometrics)
 
+    # Dispatch starter thread to Discord #health forum if configured
+    thread_id = None
+    try:
+        thread_id = post_fasting_recommendation_thread(rec, date_str)
+    except Exception as exc:
+        logger.warning("Failed creating Discord thread for fasting recommendation: %s", exc)
+
+    extra_payload: dict[str, Any] = {"source": "llm"}
+    if thread_id:
+        extra_payload["discord_thread_id"] = str(thread_id)
+
     # Cache recommendation for today
     record = FastingRecommendation(
         date=date_str,
@@ -164,6 +181,7 @@ def get_fasting_recommendation(
         activity_context=rec.activity_context,
         is_llm_generated=rec.is_llm_generated,
         research_citation=rec.research_citation,
+        extra=extra_payload,
     )
     db.add(record)
     try:
@@ -172,6 +190,7 @@ def get_fasting_recommendation(
         db.rollback()
         logger.debug("Failed saving fasting recommendation cache: %s", exc)
 
+    rec.extra = extra_payload
     return rec
 
 
@@ -220,6 +239,32 @@ def trigger_fasting_synthesis(
             FastingRecommendation.deleted_at.is_(None),
         )
     )
+
+    thread_id = None
+    if existing and existing.extra and existing.extra.get("discord_thread_id"):
+        thread_id = str(existing.extra.get("discord_thread_id"))
+        if payload.custom_context:
+            try:
+                post_thread_adjustment_reply(
+                    thread_id=thread_id,
+                    title=f"{rec.target_window} ({rec.window_hours})",
+                    summary=f"**Protocol**: {rec.protocol_name}\n**Rationale**: {rec.rationale}",
+                    details=f"**Adjustment Applied**: {payload.custom_context}",
+                )
+            except Exception as exc:
+                logger.warning("Failed posting fasting adjustment to Discord thread: %s", exc)
+    else:
+        try:
+            thread_id = post_fasting_recommendation_thread(rec, date_str)
+        except Exception as exc:
+            logger.warning("Failed creating Discord thread on fasting synthesis: %s", exc)
+
+    extra_payload = dict(existing.extra or {}) if existing else {"source": "llm"}
+    if thread_id:
+        extra_payload["discord_thread_id"] = str(thread_id)
+    if payload.custom_context:
+        extra_payload["last_adjustment"] = payload.custom_context
+
     if existing:
         existing.protocol_name = rec.protocol_name
         existing.target_window = rec.target_window
@@ -231,6 +276,7 @@ def trigger_fasting_synthesis(
         existing.is_llm_generated = rec.is_llm_generated
         existing.research_citation = rec.research_citation
         existing.custom_context = payload.custom_context
+        existing.extra = extra_payload
     else:
         new_record = FastingRecommendation(
             date=date_str,
@@ -244,6 +290,7 @@ def trigger_fasting_synthesis(
             is_llm_generated=rec.is_llm_generated,
             research_citation=rec.research_citation,
             custom_context=payload.custom_context,
+            extra=extra_payload,
         )
         db.add(new_record)
     try:
@@ -252,6 +299,7 @@ def trigger_fasting_synthesis(
         db.rollback()
         logger.debug("Failed persisting synthesized fasting recommendation: %s", exc)
 
+    rec.extra = extra_payload
     return rec
 
 
@@ -295,6 +343,7 @@ def get_workout_recommendation(
             recovery_status=cached.recovery_status,
             research_citation=cached.research_citation,
             is_llm_generated=cached.is_llm_generated,
+            extra=cached.extra or {},
         )
 
     iso_year, iso_week, _ = t_date.isocalendar()
@@ -318,6 +367,17 @@ def get_workout_recommendation(
 
     rec = synthesize_workout_recommendation_llm(t_date, weekly_plan, biometrics)
 
+    # Dispatch starter thread to Discord #health forum if configured
+    thread_id = None
+    try:
+        thread_id = post_workout_recommendation_thread(rec, date_str)
+    except Exception as exc:
+        logger.warning("Failed creating Discord thread for workout recommendation: %s", exc)
+
+    extra_payload: dict[str, Any] = {"source": "llm"}
+    if thread_id:
+        extra_payload["discord_thread_id"] = str(thread_id)
+
     record = WorkoutRecommendation(
         date=date_str,
         routine_name=rec.routine_name,
@@ -329,6 +389,7 @@ def get_workout_recommendation(
         recovery_status=rec.recovery_status,
         research_citation=rec.research_citation,
         is_llm_generated=rec.is_llm_generated,
+        extra=extra_payload,
     )
     db.add(record)
     try:
@@ -337,6 +398,7 @@ def get_workout_recommendation(
         db.rollback()
         logger.debug("Failed saving workout recommendation cache: %s", exc)
 
+    rec.extra = extra_payload
     return rec
 
 
@@ -385,6 +447,32 @@ def trigger_workout_synthesis(
             WorkoutRecommendation.deleted_at.is_(None),
         )
     )
+
+    thread_id = None
+    if existing and existing.extra and existing.extra.get("discord_thread_id"):
+        thread_id = str(existing.extra.get("discord_thread_id"))
+        if payload.custom_context:
+            try:
+                post_thread_adjustment_reply(
+                    thread_id=thread_id,
+                    title=f"{rec.routine_name} ({rec.volume_landmark})",
+                    summary=f"**Adaptation**: {rec.readiness_adaptation} | **Target**: {rec.target_rir}\n**Rationale**: {rec.rationale}",
+                    details=f"**Adjustment Applied**: {payload.custom_context}",
+                )
+            except Exception as exc:
+                logger.warning("Failed posting workout adjustment to Discord thread: %s", exc)
+    else:
+        try:
+            thread_id = post_workout_recommendation_thread(rec, date_str)
+        except Exception as exc:
+            logger.warning("Failed creating Discord thread on workout synthesis: %s", exc)
+
+    extra_payload = dict(existing.extra or {}) if existing else {"source": "llm"}
+    if thread_id:
+        extra_payload["discord_thread_id"] = str(thread_id)
+    if payload.custom_context:
+        extra_payload["last_adjustment"] = payload.custom_context
+
     if existing:
         existing.routine_name = rec.routine_name
         existing.readiness_adaptation = rec.readiness_adaptation
@@ -396,6 +484,7 @@ def trigger_workout_synthesis(
         existing.research_citation = rec.research_citation
         existing.custom_context = payload.custom_context
         existing.is_llm_generated = rec.is_llm_generated
+        existing.extra = extra_payload
     else:
         new_record = WorkoutRecommendation(
             date=date_str,
@@ -409,6 +498,7 @@ def trigger_workout_synthesis(
             research_citation=rec.research_citation,
             custom_context=payload.custom_context,
             is_llm_generated=rec.is_llm_generated,
+            extra=extra_payload,
         )
         db.add(new_record)
     try:
@@ -417,6 +507,7 @@ def trigger_workout_synthesis(
         db.rollback()
         logger.debug("Failed persisting synthesized workout recommendation: %s", exc)
 
+    rec.extra = extra_payload
     return rec
 
 
