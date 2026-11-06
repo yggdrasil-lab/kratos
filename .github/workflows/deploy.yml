@@ -57,15 +57,39 @@ jobs:
           DB_DIR="${KRATOS_DB_MOUNT_PATH:-/opt/kratos/data}"
           docker run --rm -v "${DB_DIR}":/data alpine mkdir -p /data
 
+      - name: Validate Required Configuration
+        env:
+          DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
+          REGISTRY_PREFIX: ${{ vars.REGISTRY_PREFIX }}
+          MUNINN_MASTER_KEY: ${{ secrets.MUNINN_MASTER_KEY }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_CHANNEL_HEALTH_ID: ${{ vars.DISCORD_CHANNEL_HEALTH_ID }}
+          DISCORD_USER_ID: ${{ vars.DISCORD_USER_ID }}
+        run: |
+          MISSING=""
+          [ -z "$DOMAIN_NAME" ] && MISSING="$MISSING DOMAIN_NAME"
+          [ -z "$REGISTRY_PREFIX" ] && MISSING="$MISSING REGISTRY_PREFIX"
+          [ -z "$MUNINN_MASTER_KEY" ] && MISSING="$MISSING MUNINN_MASTER_KEY"
+          [ -z "$DISCORD_BOT_TOKEN" ] && MISSING="$MISSING DISCORD_BOT_TOKEN"
+          [ -z "$DISCORD_CHANNEL_HEALTH_ID" ] && MISSING="$MISSING DISCORD_CHANNEL_HEALTH_ID"
+          [ -z "$DISCORD_USER_ID" ] && MISSING="$MISSING DISCORD_USER_ID"
+          if [ -n "$MISSING" ]; then
+            echo "::error::Deployment halted: missing required configuration:$MISSING" >&2
+            exit 1
+          fi
+
       - name: Build and Deploy with Docker Compose
         env:
           REGISTRY_PREFIX: ${{ vars.REGISTRY_PREFIX }}
           DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
           KRATOS_DB_MOUNT_PATH: ${{ vars.KRATOS_DB_MOUNT_PATH || '/opt/kratos/data' }}
           KRATOS_LLM_BASE_URL: ${{ vars.KRATOS_LLM_BASE_URL || 'http://muninn:4000/v1' }}
-          KRATOS_LLM_API_KEY: ${{ secrets.MUNINN_MASTER_KEY || vars.KRATOS_LLM_API_KEY }}
+          KRATOS_LLM_API_KEY: ${{ secrets.MUNINN_MASTER_KEY }}
           KRATOS_LLM_MODEL: ${{ vars.KRATOS_LLM_MODEL || 'app-synthesize' }}
           KRATOS_EIR_INTERNAL_URL: ${{ vars.KRATOS_EIR_INTERNAL_URL || 'http://eir-api:8000' }}
+          KRATOS_DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          KRATOS_DISCORD_HEALTH_CHANNEL_ID: ${{ vars.DISCORD_CHANNEL_HEALTH_ID }}
+          KRATOS_DISCORD_USER_ID: ${{ vars.DISCORD_USER_ID }}
           IMAGE_TAG: kratos
         run: |
           curl -fsSL https://raw.githubusercontent.com/yggdrasil-lab/yggdrasil-os/main/deploy/deploy.sh -o /tmp/deploy.sh
