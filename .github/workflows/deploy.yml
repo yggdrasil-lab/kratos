@@ -66,6 +66,10 @@ jobs:
           KRATOS_LLM_API_KEY: ${{ secrets.MUNINN_MASTER_KEY || vars.KRATOS_LLM_API_KEY }}
           KRATOS_LLM_MODEL: ${{ vars.KRATOS_LLM_MODEL || 'app-synthesize' }}
           KRATOS_EIR_INTERNAL_URL: ${{ vars.KRATOS_EIR_INTERNAL_URL || 'http://eir-api:8000' }}
+          KRATOS_DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_HEALTH_WEBHOOK_URL || secrets.KRATOS_DISCORD_WEBHOOK_URL || '' }}
+          KRATOS_DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN || secrets.KRATOS_DISCORD_BOT_TOKEN || '' }}
+          KRATOS_DISCORD_HEALTH_CHANNEL_ID: ${{ vars.DISCORD_CHANNEL_HEALTH_ID || vars.KRATOS_DISCORD_HEALTH_CHANNEL_ID || '' }}
+          KRATOS_DISCORD_USER_ID: ${{ vars.DISCORD_USER_ID || vars.KRATOS_DISCORD_USER_ID || '' }}
           IMAGE_TAG: kratos
         run: |
           curl -fsSL https://raw.githubusercontent.com/yggdrasil-lab/yggdrasil-os/main/deploy/deploy.sh -o /tmp/deploy.sh

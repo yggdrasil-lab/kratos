@@ -42,7 +42,9 @@ class Settings(BaseSettings):
     discord_health_channel_id: str | None = Field(
         default=None,
         validation_alias=AliasChoices(
-            "KRATOS_DISCORD_HEALTH_CHANNEL_ID", "DISCORD_HEALTH_CHANNEL_ID"
+            "KRATOS_DISCORD_HEALTH_CHANNEL_ID",
+            "DISCORD_CHANNEL_HEALTH_ID",
+            "DISCORD_HEALTH_CHANNEL_ID",
         ),
     )
     discord_user_id: str | None = Field(
