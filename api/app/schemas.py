@@ -296,6 +296,7 @@ class FastingRecommendationRead(BaseModel):
     activity_context: str
     is_llm_generated: bool = False
     research_citation: str | None = None
+    extra: dict = Field(default_factory=dict)
 
 
 class FastingSynthesizeRequest(BaseModel):
@@ -323,6 +324,7 @@ class WorkoutRecommendationRead(BaseModel):
     recovery_status: Literal["optimal", "moderate", "fatigued"]
     research_citation: str | None = None
     is_llm_generated: bool = False
+    extra: dict = Field(default_factory=dict)
 
 
 class WorkoutSynthesizeRequest(BaseModel):
