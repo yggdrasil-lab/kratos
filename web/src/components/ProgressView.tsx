@@ -8,7 +8,8 @@ interface ProgressViewProps {
   exercises: Exercise[]
   fastingLogs: FastingCheckIn[]
   biometrics: DailyBiometrics | null
-  onDeleteSession: (id: string) => Promise<void>
+  onDeleteSession: (id: string) => Promise<void> | void
+  onConfirmSession: (id: string) => Promise<void> | void
 }
 
 export function ProgressView({
@@ -17,6 +18,7 @@ export function ProgressView({
   fastingLogs,
   biometrics,
   onDeleteSession,
+  onConfirmSession,
 }: ProgressViewProps) {
   const [search, setSearch] = useState<string>('')
 
@@ -109,9 +111,16 @@ export function ProgressView({
               const tags = (s.extra?.effort_tags as string[]) || []
               const routineName = (s.extra?.routine_name as string) || 'Gym Session'
               const dateStr = s.started_at.split('T')[0]
+              const isInferred = Boolean(s.extra?.inferred)
 
               let effortBadge = null
-              if (effort === 'too_easy') {
+              if (isInferred) {
+                effortBadge = (
+                  <span className="text-[11px] px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold flex items-center gap-1">
+                    ⚡ Inferred from Plan
+                  </span>
+                )
+              } else if (effort === 'too_easy') {
                 effortBadge = <span className="text-[11px] px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 font-semibold">🟢 Too Easy</span>
               } else if (effort === 'optimal') {
                 effortBadge = <span className="text-[11px] px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-400 font-semibold">🟡 Optimal</span>
@@ -134,6 +143,30 @@ export function ProgressView({
                     </div>
                     {effortBadge}
                   </div>
+
+                  {isInferred && (
+                    <div className="bg-amber-500/10 border border-amber-500/25 rounded-lg p-2.5 my-2 flex items-center justify-between gap-2 flex-wrap">
+                      <div className="text-xs text-amber-200/90 flex-1 min-w-[180px]">
+                        Auto-detected from plan and biometrics. Keep or dismiss?
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Button
+                          variant="blue"
+                          size="xs"
+                          onClick={() => onConfirmSession(s.id)}
+                        >
+                          ✓ Confirm
+                        </Button>
+                        <Button
+                          variant="danger"
+                          size="xs"
+                          onClick={() => onDeleteSession(s.id)}
+                        >
+                          ✕ Dismiss
+                        </Button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Summary row */}
                   <div className="text-xs text-slate-300 mb-2 flex gap-3">
