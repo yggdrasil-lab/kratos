@@ -30,6 +30,7 @@ import type {
 } from './types'
 import { BottomNav } from './components/BottomNav'
 import { EffortDebriefModal } from './components/EffortDebriefModal'
+import { EditSessionModal } from './components/EditSessionModal'
 import { ProgressView } from './components/ProgressView'
 import { TodayView } from './components/TodayView'
 import { getCircadianDate, getCircadianDayOfWeek } from './utils/circadian'
@@ -77,6 +78,7 @@ export function App() {
   const [session, setSession] = useState<SessionPayload | null>(null)
   const [showExercisePicker, setShowExercisePicker] = useState<boolean>(false)
   const [showDebriefModal, setShowDebriefModal] = useState<boolean>(false)
+  const [editingSession, setEditingSession] = useState<SessionPayload | null>(null)
   const [search, setSearch] = useState<string>('')
   const [keypadTarget, setKeypadTarget] = useState<ActiveKeypadTarget | null>(null)
   const [keypadBuffer, setKeypadBuffer] = useState<string>('')
@@ -513,6 +515,14 @@ export function App() {
     await loadSessions()
   }
 
+  const handleUpdateSession = async (updatedSession: SessionPayload) => {
+    setSessions((prev) => prev.map((s) => (s.id === updatedSession.id ? updatedSession : s)))
+    await enqueue(updatedSession)
+    await sync()
+    await loadSessions()
+    setEditingSession(null)
+  }
+
   const handleSaveFastingCheckIn = async (checkIn: FastingCheckIn) => {
     try {
       await db.fastingLogs.put(checkIn)
@@ -900,10 +910,12 @@ export function App() {
               <ProgressView
                 sessions={sessions}
                 exercises={exercises}
+                routines={routines}
                 fastingLogs={fastingLogs}
                 biometrics={biometrics}
                 onDeleteSession={handleDeleteSession}
                 onConfirmSession={handleConfirmSession}
+                onEditSession={setEditingSession}
               />
             ) : (
               <TodayView
@@ -922,6 +934,7 @@ export function App() {
                 onSynthesizeWorkoutRecommendation={handleSynthesizeWorkoutRecommendation}
                 onDeleteSession={handleDeleteSession}
                 onConfirmSession={handleConfirmSession}
+                onEditSession={setEditingSession}
               />
             )}
           </>
@@ -935,6 +948,17 @@ export function App() {
           exercises={exercises}
           onSave={completeDebriefAndSave}
           onSkip={skipDebriefAndSave}
+        />
+      )}
+
+      {/* Edit Workout Session Details Modal */}
+      {editingSession && (
+        <EditSessionModal
+          session={editingSession}
+          routines={routines}
+          isOpen={editingSession !== null}
+          onClose={() => setEditingSession(null)}
+          onSave={handleUpdateSession}
         />
       )}
 
