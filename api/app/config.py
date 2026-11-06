@@ -27,14 +27,6 @@ class Settings(BaseSettings):
         default="http://eir-api:8000",
         validation_alias=AliasChoices("KRATOS_EIR_INTERNAL_URL", "EIR_INTERNAL_URL"),
     )
-    discord_webhook_url: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices(
-            "KRATOS_DISCORD_WEBHOOK_URL",
-            "DISCORD_HEALTH_WEBHOOK_URL",
-            "DISCORD_WEBHOOK_URL",
-        ),
-    )
     discord_bot_token: str | None = Field(
         default=None,
         validation_alias=AliasChoices("KRATOS_DISCORD_BOT_TOKEN", "DISCORD_BOT_TOKEN"),
