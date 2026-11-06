@@ -43,6 +43,7 @@ def call_jev(
     user_content: str,
     model: str | None = None,
     timeout: float = 4.0,
+    response_format: dict | None = None,
 ) -> Tuple[Optional[str], float]:
     """Invokes Jev System One via Muninn LiteLLM router.
 
@@ -53,7 +54,7 @@ def call_jev(
     endpoint = f"{settings.llm_base_url.rstrip('/')}/chat/completions"
     api_key = settings.llm_api_key
 
-    payload = {
+    payload: dict[str, object] = {
         "model": model_name,
         "messages": [
             {"role": "system", "content": system_prompt},
@@ -61,6 +62,8 @@ def call_jev(
         ],
         "temperature": 0.0,
     }
+    if response_format:
+        payload["response_format"] = response_format
 
     req = urllib.request.Request(
         endpoint,
@@ -89,6 +92,98 @@ def call_jev(
         return None, elapsed
 
     return None, time.time() - t0
+
+
+WORKOUT_GATES_SCHEMA = {
+    "questions": {
+        "recovery_tier": {
+            "type": "choice",
+            "criteria": {
+                "MAV_OVERLOAD": "Optimal sleep >7.5h and high/normal HRV (>45ms). High readiness for volume overload.",
+                "MAINTENANCE": "Normal baseline sleep (6.5-7.5h) and normal vitals.",
+                "MEV_DELOAD": "Poor sleep (<6.0h), elevated resting HR, or low HRV (<35ms). Needs fatigue deload.",
+                "ACTIVE_RECOVERY": "Severe exhaustion (<5.0h sleep), extreme soreness, or rest day.",
+            },
+        },
+        "joint_focus": {
+            "type": "choice",
+            "criteria": {
+                "SHOULDER_SPARING": "User mentions shoulder pinch, rotator cuff, or anterior impingement.",
+                "LUMBAR_SPARING": "User mentions lower back pain, spinal tightness, or deadlift fatigue.",
+                "KNEE_SPARING": "User mentions knee soreness, patellar friction, or quad tendon tightness.",
+                "NOMINAL": "No acute joint pain or tendon friction reported.",
+            },
+        },
+        "time_budget": {
+            "type": "choice",
+            "criteria": {
+                "TIME_CRUNCH_30M": "User mentions having only 30-35 mins, rushing, or quick session.",
+                "TIME_STANDARD_45M": "Standard training session (~45 mins).",
+                "TIME_EXTENDED_60M": "Full unrestricted training session (>60 mins).",
+            },
+        },
+    }
+}
+
+
+def classify_workout_decision_gates(
+    biometrics: dict | None,
+    user_text: str | None,
+) -> Dict[str, str]:
+    """Evaluates recovery_tier, joint_focus, and time_budget in a single multi-question Jev decision call.
+
+    Returns:
+        {
+            'recovery_tier': 'MAV_OVERLOAD' | 'MAINTENANCE' | 'MEV_DELOAD' | 'ACTIVE_RECOVERY',
+            'joint_focus': 'SHOULDER_SPARING' | 'LUMBAR_SPARING' | 'KNEE_SPARING' | 'NOMINAL',
+            'time_budget': 'TIME_CRUNCH_30M' | 'TIME_STANDARD_45M' | 'TIME_EXTENDED_60M',
+        }
+    """
+    default_gates = {
+        "recovery_tier": "MAINTENANCE",
+        "joint_focus": "NOMINAL",
+        "time_budget": "TIME_STANDARD_45M",
+    }
+    try:
+        sleep_h = safe_float(biometrics.get("sleep_duration_hours")) if biometrics else None
+        deep_sleep_h = safe_float(biometrics.get("sleep_deep_hours")) if biometrics else None
+        hrv = safe_float(biometrics.get("hrv_ms")) if biometrics else None
+        rhr = safe_int(biometrics.get("resting_hr_bpm")) if biometrics else None
+
+        bio_parts = []
+        if sleep_h is not None:
+            bio_parts.append(f"Sleep: {sleep_h:.1f}h" + (f" ({deep_sleep_h:.1f}h deep)" if deep_sleep_h is not None else ""))
+        if hrv is not None:
+            bio_parts.append(f"HRV: {hrv:.1f}ms")
+        if rhr is not None:
+            bio_parts.append(f"Resting HR: {rhr}bpm")
+
+        bio_summary = ", ".join(bio_parts) if bio_parts else "Biometrics: unavailable"
+        user_summary = user_text.strip() if user_text and user_text.strip() else "User notes: None"
+
+        user_content = f"{bio_summary}\nAthlete notes: {user_summary}"
+        system_prompt = f"Evaluate athlete readiness and constraints:\n```json\n{json.dumps(WORKOUT_GATES_SCHEMA)}\n```"
+
+        content, _ = call_jev(system_prompt, user_content, response_format={"type": "json_object"})
+        if content:
+            parsed = json.loads(content)
+            rec_tier = parsed.get("recovery_tier")
+            if rec_tier in ("MAV_OVERLOAD", "MAINTENANCE", "MEV_DELOAD", "ACTIVE_RECOVERY"):
+                default_gates["recovery_tier"] = rec_tier
+
+            joint = parsed.get("joint_focus")
+            if joint in ("SHOULDER_SPARING", "LUMBAR_SPARING", "KNEE_SPARING", "NOMINAL"):
+                default_gates["joint_focus"] = joint
+
+            time_b = parsed.get("time_budget")
+            if time_b in ("TIME_CRUNCH_30M", "TIME_STANDARD_45M", "TIME_EXTENDED_60M"):
+                default_gates["time_budget"] = time_b
+
+            return default_gates
+    except Exception as exc:
+        logger.warning("Error in classify_workout_decision_gates (%s); falling back to defaults", exc)
+
+    return default_gates
 
 
 def classify_recovery_state_jev(biometrics: dict | None) -> Optional[str]:
