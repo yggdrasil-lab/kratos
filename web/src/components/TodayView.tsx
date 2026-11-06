@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { GlassCard, Button, AlertBanner, CollapsibleSection, AiSynthesizerModal } from '@yggdrasil-lab/ui'
 import type { DailyBiometrics, Exercise, FastingCheckIn, FastingRecommendation, Routine, SessionPayload, WorkoutRecommendation } from '../types'
 import { DAY_NAMES, DAY_SHORTS, formatFriendlyDate } from '../utils/circadian'
+import { getSessionLabel } from '../utils/session'
 import { FastingCard } from './FastingCard'
 
 interface TodayViewProps {
@@ -20,6 +21,7 @@ interface TodayViewProps {
   onSynthesizeWorkoutRecommendation?: (customContext?: string) => Promise<void>
   onDeleteSession: (id: string) => Promise<void> | void
   onConfirmSession: (id: string) => Promise<void> | void
+  onEditSession?: (session: SessionPayload) => void
 }
 
 const WORKOUT_PILLARS = [
@@ -57,6 +59,7 @@ export function TodayView({
   onSynthesizeWorkoutRecommendation,
   onDeleteSession,
   onConfirmSession,
+  onEditSession,
 }: TodayViewProps) {
   const [selectedRoutineOverride, setSelectedRoutineOverride] = useState<Routine | null>(null)
   const [showRoutinePicker, setShowRoutinePicker] = useState<boolean>(false)
@@ -186,7 +189,7 @@ export function TodayView({
       {inferredSessions.length > 0 && (
         <div className="flex flex-col gap-3 mb-5">
           {inferredSessions.map((infSession) => {
-            const routineName = (infSession.extra?.routine_name as string) || 'Workout / Sport Activity'
+            const routineName = getSessionLabel(infSession, routines)
             const sessionDate = infSession.started_at ? infSession.started_at.split('T')[0] : circadianDate
             const durationMins = infSession.ended_at && infSession.started_at
               ? Math.max(1, Math.round((new Date(infSession.ended_at).getTime() - new Date(infSession.started_at).getTime()) / 60000))
@@ -228,7 +231,7 @@ export function TodayView({
                   Auto-attached from plan and wearable biometrics. Did you complete this workout?
                 </p>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <Button
                     variant="blue"
                     size="xs"
@@ -236,6 +239,15 @@ export function TodayView({
                   >
                     ✓ Confirm / Keep
                   </Button>
+                  {onEditSession && (
+                    <Button
+                      variant="secondary"
+                      size="xs"
+                      onClick={() => onEditSession(infSession)}
+                    >
+                      Change
+                    </Button>
+                  )}
                   <Button
                     variant="danger"
                     size="xs"

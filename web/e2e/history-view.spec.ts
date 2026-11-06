@@ -160,4 +160,97 @@ test.describe('Progress and Activity Stream', () => {
 
     expect(apiState.deletedSessionIds).toContain('sess-inferred-3')
   })
+
+  test('allows changing workout routine name from Progress tab', async ({ page }) => {
+    const apiState = await setupMockApi(page)
+    const genericSess = {
+      id: 'sess-change-1',
+      routine_id: null,
+      started_at: '2026-11-05T18:00:00.000Z',
+      ended_at: '2026-11-05T19:00:00.000Z',
+      notes: null,
+      extra: {
+        routine_name: 'Gym Session',
+      },
+      items: [],
+    }
+    apiState.sessions.unshift(genericSess)
+
+    await page.goto('/')
+
+    const bottomNav = page.locator('nav.bottom-nav')
+    await bottomNav.getByRole('button', { name: 'Progress, 80kg Goal and Activity' }).click()
+
+    // Click Change button for this session
+    const changeBtn = page.getByRole('button', { name: 'Change' }).first()
+    await expect(changeBtn).toBeVisible()
+    await changeBtn.click()
+
+    // Modal appears
+    await expect(page.getByRole('heading', { name: 'Edit Workout Details' })).toBeVisible()
+
+    // Select preset Lower Body A
+    const presetBtn = page.getByRole('button', { name: 'Lower Body A' })
+    await expect(presetBtn).toBeVisible()
+    await presetBtn.click()
+
+    // Select Optimal effort
+    const optimalBtn = page.getByRole('button', { name: '🟡 Optimal' })
+    await expect(optimalBtn).toBeVisible()
+    await optimalBtn.click()
+
+    // Save changes
+    const saveBtn = page.getByRole('button', { name: 'Save Changes' })
+    await expect(saveBtn).toBeVisible()
+    await saveBtn.click()
+
+    // Modal closes and list updates
+    await expect(page.getByRole('heading', { name: 'Edit Workout Details' })).not.toBeVisible()
+    await expect.poll(() => apiState.savedSessions.find((s) => s.id === 'sess-change-1')?.extra?.routine_name).toBe('Lower Body A')
+  })
+
+  test('allows changing an inferred workout from Today tab review banner', async ({ page }) => {
+    const apiState = await setupMockApi(page)
+    const infSess = {
+      id: 'sess-change-today',
+      routine_id: null,
+      started_at: '2026-11-05T18:00:00.000Z',
+      ended_at: '2026-11-05T19:00:00.000Z',
+      notes: null,
+      extra: {
+        inferred: true,
+        routine_name: 'Gym Session',
+      },
+      items: [],
+    }
+    apiState.sessions.unshift(infSess)
+
+    await page.goto('/')
+
+    // Banner is visible on Today tab
+    await expect(page.getByText('Auto-Detected Workout')).toBeVisible()
+
+    // Click Change
+    const changeBtn = page.getByRole('button', { name: 'Change' }).first()
+    await expect(changeBtn).toBeVisible()
+    await changeBtn.click()
+
+    // Modal opens
+    await expect(page.getByRole('heading', { name: 'Edit Workout Details' })).toBeVisible()
+
+    // Pick badminton
+    const badmintonPreset = page.getByRole('button', { name: '🏸 Badminton Match Play' })
+    await expect(badmintonPreset).toBeVisible()
+    await badmintonPreset.click()
+
+    // Save
+    const saveBtn = page.getByRole('button', { name: 'Save Changes' })
+    await saveBtn.click()
+
+    await expect(page.getByRole('heading', { name: 'Edit Workout Details' })).not.toBeVisible()
+    await expect.poll(() => apiState.savedSessions.find((s) => s.id === 'sess-change-today')?.extra?.routine_name).toBe('🏸 Badminton Match Play')
+    const saved = apiState.savedSessions.find((s) => s.id === 'sess-change-today')
+    expect(saved?.extra?.inferred).toBe(false)
+    expect(saved?.extra?.confirmed).toBe(true)
+  })
 })

@@ -1,24 +1,29 @@
 import { useState } from 'react'
 import { GlassCard, GoalProgressCard, CollapsibleSection, Button } from '@yggdrasil-lab/ui'
-import type { DailyBiometrics, Exercise, FastingCheckIn, SessionPayload } from '../types'
+import type { DailyBiometrics, Exercise, FastingCheckIn, Routine, SessionPayload } from '../types'
 import { formatFriendlyDate } from '../utils/circadian'
+import { getSessionLabel } from '../utils/session'
 
 interface ProgressViewProps {
   sessions: SessionPayload[]
   exercises: Exercise[]
+  routines?: Routine[]
   fastingLogs: FastingCheckIn[]
   biometrics: DailyBiometrics | null
   onDeleteSession: (id: string) => Promise<void> | void
   onConfirmSession: (id: string) => Promise<void> | void
+  onEditSession: (session: SessionPayload) => void
 }
 
 export function ProgressView({
   sessions,
   exercises,
+  routines = [],
   fastingLogs,
   biometrics,
   onDeleteSession,
   onConfirmSession,
+  onEditSession,
 }: ProgressViewProps) {
   const [search, setSearch] = useState<string>('')
 
@@ -109,7 +114,7 @@ export function ProgressView({
               const stats = computeSessionStats(s)
               const effort = (s.extra?.effort_rating as string) || ''
               const tags = (s.extra?.effort_tags as string[]) || []
-              const routineName = (s.extra?.routine_name as string) || 'Gym Session'
+              const routineName = getSessionLabel(s, routines)
               const dateStr = s.started_at.split('T')[0]
               const isInferred = Boolean(s.extra?.inferred)
 
@@ -132,7 +137,7 @@ export function ProgressView({
 
               return (
                 <GlassCard key={s.id} className="p-4">
-                  <div className="flex justify-between items-start mb-1.5">
+                  <div className="flex justify-between items-start mb-1.5 gap-2">
                     <div>
                       <div className="text-xs text-slate-400">
                         {formatFriendlyDate(dateStr)}
@@ -141,7 +146,17 @@ export function ProgressView({
                         {routineName}
                       </div>
                     </div>
-                    {effortBadge}
+                    <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                      {effortBadge}
+                      <Button
+                        variant="secondary"
+                        size="xs"
+                        onClick={() => onEditSession(s)}
+                        title="Edit Workout Details"
+                      >
+                        Change
+                      </Button>
+                    </div>
                   </div>
 
                   {isInferred && (
@@ -156,6 +171,13 @@ export function ProgressView({
                           onClick={() => onConfirmSession(s.id)}
                         >
                           ✓ Confirm
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="xs"
+                          onClick={() => onEditSession(s)}
+                        >
+                          Change
                         </Button>
                         <Button
                           variant="danger"
@@ -276,19 +298,28 @@ export function ProgressView({
               >
                 <div>
                   <div className="text-xs font-semibold text-slate-100">
-                    {(s.extra?.routine_name as string) || 'Gym Session'}
+                    {getSessionLabel(s, routines)}
                   </div>
                   <div className="text-[11px] text-slate-400">
                     {s.started_at.split('T')[0]} • {s.items.length} exercises
                   </div>
                 </div>
-                <Button
-                  variant="danger"
-                  size="xs"
-                  onClick={() => onDeleteSession(s.id)}
-                >
-                  Delete
-                </Button>
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    variant="secondary"
+                    size="xs"
+                    onClick={() => onEditSession(s)}
+                  >
+                    Change
+                  </Button>
+                  <Button
+                    variant="danger"
+                    size="xs"
+                    onClick={() => onDeleteSession(s.id)}
+                  >
+                    Delete
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
