@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { createPortal } from 'react-dom'
+import { Modal, OptionCardGroup, ChipSelector, Button } from '@yggdrasil-lab/ui'
+import type { OptionCardItem } from '@yggdrasil-lab/ui'
 import type { EffortRating, Exercise, SessionPayload } from '../types'
 
 interface EffortDebriefModalProps {
@@ -9,34 +10,34 @@ interface EffortDebriefModalProps {
   onSkip: () => void
 }
 
-const EFFORT_OPTIONS: { rating: EffortRating; label: string; desc: string; color: string; emoji: string }[] = [
+const EFFORT_OPTIONS: OptionCardItem<EffortRating>[] = [
   {
-    rating: 'too_easy',
-    emoji: '🟢',
+    value: 'too_easy',
+    icon: '🟢',
     label: 'Too Easy',
-    desc: 'Plenty left in the tank. Ready for weight bump next time.',
-    color: '#10b981',
+    description: 'Plenty left in the tank. Ready for weight bump next time.',
+    accent: 'emerald',
   },
   {
-    rating: 'optimal',
-    emoji: '🟡',
+    value: 'optimal',
+    icon: '🟡',
     label: 'Just Right / Optimal',
-    desc: 'Hit true technical failure on target sets. Solid fatigue.',
-    color: '#f59e0b',
+    description: 'Hit true technical failure on target sets. Solid fatigue.',
+    accent: 'amber',
   },
   {
-    rating: 'hard',
-    emoji: '🟠',
+    value: 'hard',
+    icon: '🟠',
     label: 'Challenging / Hard',
-    desc: 'Pushed to the limits. Will need recovery before next session.',
-    color: '#f97316',
+    description: 'Pushed to the limits. Will need recovery before next session.',
+    accent: 'orange',
   },
   {
-    rating: 'too_hard',
-    emoji: '🔴',
+    value: 'too_hard',
+    icon: '🔴',
     label: 'Too Hard / Cooked',
-    desc: 'Missed target reps, form breakdown, or joints felt uncomfortable.',
-    color: '#ef4444',
+    description: 'Missed target reps, form breakdown, or joints felt uncomfortable.',
+    accent: 'rose',
   },
 ]
 
@@ -54,7 +55,6 @@ export function EffortDebriefModal({ session, exercises: _exercises, onSave, onS
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [notes, setNotes] = useState<string>('')
 
-  // Calculate session summary stats
   let totalVolumeKg = 0
   let completedSetsCount = 0
 
@@ -72,164 +72,58 @@ export function EffortDebriefModal({ session, exercises: _exercises, onSave, onS
   const startTime = new Date(session.started_at).getTime()
   const durationMinutes = Math.max(1, Math.round((Date.now() - startTime) / 60000))
 
-  const toggleTag = (tag: string) => {
-    setSelectedTags((prev) =>
-      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
-    )
-  }
-
   const handleComplete = () => {
     onSave(selectedRating, selectedTags, notes.trim())
   }
 
-  return createPortal(
-    <div className="modal-backdrop animate-fade-in" style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: 'rgba(15, 23, 42, 0.85)',
-      backdropFilter: 'blur(8px)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 1000,
-      padding: '1rem',
-      overflowY: 'auto',
-    }}>
-      <div className="animate-scale-up" style={{
-        maxWidth: '520px',
-        width: '100%',
-        maxHeight: '90vh',
-        overflowY: 'auto',
-        backgroundColor: '#1e293b',
-        borderRadius: '16px',
-        border: '1px solid rgba(255, 255, 255, 0.15)',
-        boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.9)',
-        padding: '1.5rem',
-      }}>
-        {/* Celebration Header */}
-        <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: '0.25rem' }}>🎉</div>
-          <h2 style={{ fontSize: '1.6rem', marginBottom: '0.25rem' }}>Workout Complete!</h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-            {durationMinutes} min • {Math.round(totalVolumeKg).toLocaleString()} kg volume • {completedSetsCount} sets finished
-          </p>
-        </div>
+  return (
+    <Modal
+      isOpen={true}
+      onClose={onSkip}
+      title="Workout Complete!"
+      headerIcon="🎉"
+      subtitle={`${durationMinutes} min • ${Math.round(totalVolumeKg).toLocaleString()} kg volume • ${completedSetsCount} sets finished`}
+    >
+      <div className="space-y-4">
+        <OptionCardGroup
+          label="How much effort did this take?"
+          options={EFFORT_OPTIONS}
+          value={selectedRating}
+          onChange={setSelectedRating}
+        />
 
-        {/* Effort Rating Selection */}
-        <div style={{ marginBottom: '1.5rem' }}>
-          <label style={{ display: 'block', fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.75rem' }}>
-            How much effort did this take?
-          </label>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-            {EFFORT_OPTIONS.map((opt) => {
-              const isSelected = selectedRating === opt.rating
-              return (
-                <button
-                  key={opt.rating}
-                  type="button"
-                  onClick={() => setSelectedRating(opt.rating)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: '0.75rem',
-                    padding: '0.75rem 1rem',
-                    borderRadius: '0.75rem',
-                    textAlign: 'left',
-                    backgroundColor: isSelected ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.03)',
-                    border: `1.5px solid ${isSelected ? opt.color : 'rgba(255, 255, 255, 0.08)'}`,
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                  }}
-                >
-                  <span style={{ fontSize: '1.25rem', lineHeight: 1 }}>{opt.emoji}</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, fontSize: '0.95rem', color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
-                      {opt.label}
-                    </div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
-                      {opt.desc}
-                    </div>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Quick Context Tags */}
-        <div style={{ marginBottom: '1.25rem' }}>
-          <label style={{ display: 'block', fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+        <div className="space-y-1.5">
+          <label className="block font-semibold text-xs text-slate-300">
             Quick reflections (optional):
           </label>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-            {QUICK_TAGS.map((tag) => {
-              const isSelected = selectedTags.includes(tag)
-              return (
-                <button
-                  key={tag}
-                  type="button"
-                  onClick={() => toggleTag(tag)}
-                  style={{
-                    padding: '0.35rem 0.7rem',
-                    borderRadius: '2rem',
-                    fontSize: '0.8rem',
-                    fontWeight: 500,
-                    backgroundColor: isSelected ? 'rgba(139, 92, 246, 0.25)' : 'rgba(255, 255, 255, 0.05)',
-                    border: `1px solid ${isSelected ? 'var(--accent-color)' : 'rgba(255, 255, 255, 0.1)'}`,
-                    color: isSelected ? '#c084fc' : 'var(--text-secondary)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {tag}
-                </button>
-              )
-            })}
-          </div>
+          <ChipSelector
+            options={QUICK_TAGS}
+            multiSelect
+            selectedValues={selectedTags}
+            onChangeValues={setSelectedTags}
+            variant="purple"
+          />
         </div>
 
-        {/* Notes */}
-        <div style={{ marginBottom: '1.5rem' }}>
+        <div>
           <input
             type="text"
             placeholder="Add note (e.g. form felt smooth, or tight hamstring)..."
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '0.65rem 0.9rem',
-              borderRadius: '0.6rem',
-              backgroundColor: 'rgba(0, 0, 0, 0.25)',
-              border: '1px solid var(--surface-border)',
-              color: 'var(--text-primary)',
-              fontSize: '0.85rem',
-            }}
+            className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-slate-100 placeholder-slate-500"
           />
         </div>
 
-        {/* Action Buttons */}
-        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={onSkip}
-            style={{ padding: '0.75rem 1.25rem', fontSize: '0.9rem' }}
-          >
+        <div className="flex gap-2.5 justify-end pt-1">
+          <Button variant="secondary" size="md" onClick={onSkip}>
             Skip
-          </button>
-          <button
-            type="button"
-            className="btn-primary"
-            onClick={handleComplete}
-            style={{ padding: '0.75rem 1.75rem', fontSize: '0.95rem', fontWeight: 600 }}
-          >
+          </Button>
+          <Button variant="blue" size="md" onClick={handleComplete}>
             Save and Finish
-          </button>
+          </Button>
         </div>
       </div>
-    </div>,
-    document.body
+    </Modal>
   )
 }

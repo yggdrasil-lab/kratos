@@ -1,5 +1,18 @@
 import { useEffect, useState } from 'react'
-import { StatusBadge, PwaUpdateBanner, AppHeader, SessionExpiredBanner, SessionExpiredError } from '@yggdrasil-lab/ui'
+import {
+  AppShell,
+  AppHeader,
+  StatusBadge,
+  PwaUpdateBanner,
+  SessionExpiredBanner,
+  SessionExpiredError,
+  GlassCard,
+  Button,
+  Modal,
+  AlertBanner,
+  TactileKeypad,
+  NumberInputDisplay,
+} from '@yggdrasil-lab/ui'
 import { api } from './api'
 import { db, requestPersistence } from './db'
 import { enqueue, flush, newId, pending } from './outbox'
@@ -24,6 +37,13 @@ import { usePwaUpdate } from './utils/pwa'
 import { reportClientError } from './utils/telemetry'
 
 type Status = { kind: 'idle' | 'busy' | 'error'; message?: string }
+
+interface ActiveKeypadTarget {
+  itemIndex: number
+  setIndex: number
+  field: 'weight_kg' | 'reps'
+  label: string
+}
 
 const DRAFT_KEY = 'current'
 
@@ -58,8 +78,9 @@ export function App() {
   const [showExercisePicker, setShowExercisePicker] = useState<boolean>(false)
   const [showDebriefModal, setShowDebriefModal] = useState<boolean>(false)
   const [search, setSearch] = useState<string>('')
+  const [keypadTarget, setKeypadTarget] = useState<ActiveKeypadTarget | null>(null)
+  const [keypadBuffer, setKeypadBuffer] = useState<string>('')
 
-  // Held in state (not recomputed per render) so a foreground/rollover can refresh it.
   const [circadianDate, setCircadianDate] = useState(() => getCircadianDate())
   const [dayOfWeek, setDayOfWeek] = useState(() => getCircadianDayOfWeek())
   const {
@@ -69,7 +90,7 @@ export function App() {
   } = usePwaUpdate()
 
   const sync = async () => {
-    setStatus({ kind: 'busy', message: 'Syncing…' })
+    setStatus({ kind: 'busy', message: 'Syncing...' })
     try {
       const left = await flush()
       setQueued(left)
@@ -230,7 +251,7 @@ export function App() {
           await db.routines.bulkPut(fresh)
         })
       } catch {
-      // Ignore IndexedDB write failure
+        // Ignore IndexedDB write failure
       }
     } catch (err) {
       if (err instanceof SessionExpiredError) {
@@ -249,7 +270,6 @@ export function App() {
     setDayOfWeek(getCircadianDayOfWeek())
   }
 
-  // Manual refresh (header button): re-evaluate the date and re-pull everything.
   const refreshAll = async () => {
     refreshCircadianClock()
     await Promise.all([
@@ -286,8 +306,6 @@ export function App() {
       }
     }
     document.addEventListener('visibilitychange', onVisible)
-    // Catch the circadian rollover while the app stays open (setState bails out on
-    // an unchanged value, so this only re-renders when the date actually changes).
     const clockTimer = window.setInterval(refreshCircadianClock, 60_000)
     return () => {
       document.removeEventListener('visibilitychange', onVisible)
@@ -415,7 +433,6 @@ export function App() {
     setShowDebriefModal(false)
     await enqueue(finalSession)
 
-    // Bridge workout debrief feedback to Eir
     try {
       const routine = routines.find((r) => r.id === session.routine_id)
       const duration = session.started_at
@@ -609,6 +626,32 @@ export function App() {
     updateSession({ ...session, items: newItems })
   }
 
+  const openKeypadForSet = (
+    itemIndex: number,
+    setIndex: number,
+    field: 'weight_kg' | 'reps',
+    label: string,
+    currentVal: number | null
+  ) => {
+    setKeypadTarget({ itemIndex, setIndex, field, label })
+    setKeypadBuffer(currentVal !== null ? String(currentVal) : '')
+  }
+
+  const confirmKeypadValue = () => {
+    if (!keypadTarget) return
+    const parsed =
+      keypadTarget.field === 'weight_kg'
+        ? parseFloat(keypadBuffer)
+        : parseInt(keypadBuffer, 10)
+    updateSet(
+      keypadTarget.itemIndex,
+      keypadTarget.setIndex,
+      keypadTarget.field,
+      !isNaN(parsed) ? parsed : null
+    )
+    setKeypadTarget(null)
+  }
+
   const filteredExercises = search.trim()
     ? exercises.filter((e) =>
         e.name.toLowerCase().includes(search.trim().toLowerCase())
@@ -621,65 +664,76 @@ export function App() {
     (serverFastingToday?.date === circadianDate ? serverFastingToday : undefined)
 
   return (
-    <>
-      <AppHeader
-        variant="blue"
-        brandIcon={
-          <img
-            src="/favicon.svg"
-            alt="Kratos"
-            className="w-full h-full object-contain rounded-xl"
-          />
-        }
-        brandColor="overflow-hidden p-0 border border-sky-500/30"
-        title="Kratos"
-        subtitle="Strength & Circadian"
-        onRefresh={() => void refreshAll()}
-        isRefreshing={status.kind === 'busy'}
-        actions={
-          <div className="flex items-center space-x-2">
-            <StatusBadge
-              label={
-                status.kind === 'busy'
-                  ? 'Syncing...'
-                  : status.kind === 'error'
-                  ? status.message ?? 'Offline - data saved locally'
-                  : queued === 0
-                  ? 'All synced'
-                  : `${queued} pending`
-              }
-              variant={
-                status.kind === 'busy'
-                  ? 'busy'
-                  : status.kind === 'error'
-                  ? 'error'
-                  : queued === 0
-                  ? 'success'
-                  : 'warning'
-              }
-              isPulsing={status.kind === 'busy'}
-              className={status.kind === 'busy' ? 'syncing' : status.kind === 'error' ? 'error' : ''}
+    <AppShell
+      header={
+        <AppHeader
+          variant="blue"
+          brandIcon={
+            <img
+              src="/favicon.svg"
+              alt="Kratos"
+              className="w-full h-full object-contain rounded-xl"
             />
-            {queued > 0 && (
-              <button
-                className="btn-secondary"
-                style={{ padding: '0.2rem 0.6rem', fontSize: '0.8rem' }}
-                onClick={sync}
-                disabled={status.kind === 'busy'}
-              >
-                Force Sync
-              </button>
-            )}
-          </div>
-        }
-      />
-
-      <main className="animate-fade-in app-main-layout">
+          }
+          brandColor="overflow-hidden p-0 border border-sky-500/30"
+          title="Kratos"
+          subtitle="Strength & Circadian"
+          onRefresh={() => void refreshAll()}
+          isRefreshing={status.kind === 'busy'}
+          actions={
+            <div className="flex items-center space-x-2">
+              <StatusBadge
+                label={
+                  status.kind === 'busy'
+                    ? 'Syncing...'
+                    : status.kind === 'error'
+                    ? status.message ?? 'Offline - data saved locally'
+                    : queued === 0
+                    ? 'All synced'
+                    : `${queued} pending`
+                }
+                variant={
+                  status.kind === 'busy'
+                    ? 'busy'
+                    : status.kind === 'error'
+                    ? 'error'
+                    : queued === 0
+                    ? 'success'
+                    : 'warning'
+                }
+                isPulsing={status.kind === 'busy'}
+                className={`status-badge ${status.kind === 'busy' ? 'syncing' : status.kind === 'error' ? 'error' : ''}`}
+              />
+              {queued > 0 && (
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  onClick={sync}
+                  disabled={status.kind === 'busy'}
+                >
+                  Force Sync
+                </Button>
+              )}
+            </div>
+          }
+        />
+      }
+      bottomNav={
+        <BottomNav
+          activeTab={activeTab}
+          onChangeTab={setActiveTab}
+          hasActiveWorkout={session !== null}
+        />
+      }
+    >
+      <div className="max-w-2xl mx-auto">
         {sessionExpired && (
           <SessionExpiredBanner className="mb-4" />
         )}
         {status.kind === 'error' && status.message && !sessionExpired && (
-          <p style={{ color: 'var(--danger-color)', marginBottom: '1rem', textAlign: 'center' }}>{status.message}</p>
+          <AlertBanner variant="error" className="mb-4">
+            {status.message}
+          </AlertBanner>
         )}
         {needRefresh && (
           <PwaUpdateBanner
@@ -692,62 +746,59 @@ export function App() {
         {/* ACTIVE WORKOUT LOGGING SCREEN */}
         {session ? (
           <section className="animate-slide-up">
-            <div className="flex-between" style={{ marginBottom: '1.5rem' }}>
+            <div className="flex-between mb-5">
               <div>
-                <h2>{(session.extra?.routine_name as string) || 'Current Workout'}</h2>
-                <div
-                  className="status-badge"
-                  style={{ background: 'rgba(16, 185, 129, 0.15)', color: 'var(--success-color)' }}
-                >
+                <h2 className="text-xl font-bold m-0 text-slate-100">
+                  {(session.extra?.routine_name as string) || 'Current Workout'}
+                </h2>
+                <div className="status-badge bg-emerald-500/15 text-emerald-400 mt-1">
                   In progress
                 </div>
               </div>
-              <button
-                type="button"
-                className="btn-secondary"
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => updateSession(null)}
-                style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem' }}
               >
                 Discard
-              </button>
+              </Button>
             </div>
 
-            <div className="glass-panel">
+            <GlassCard>
               {session.items.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '2rem 1rem', color: 'var(--text-muted)' }}>
+                <div className="text-center py-8 px-4 text-slate-400">
                   <p>No exercises added yet.</p>
                 </div>
               ) : (
-                <div className="flex-col" style={{ gap: '2rem' }}>
+                <div className="flex flex-col gap-6">
                   {session.items.map((item, itemIdx) => {
                     const exercise = exercises.find((e) => e.id === item.exercise_id)
+                    const exLabel = (item.extra?.custom_name as string) || exercise?.name || 'Unknown Exercise'
                     const targetReps = (item.extra?.target_reps as number | null) ?? null
                     const targetWeight = (item.extra?.target_weight_kg as number | null) ?? null
                     return (
                       <div key={item.id} className="workout-item">
-                        <div className="flex-between" style={{ marginBottom: '1rem' }}>
-                          <h3 style={{ fontSize: '1.2rem', color: '#fff' }}>
-                            {(item.extra?.custom_name as string) || exercise?.name || 'Unknown Exercise'}
+                        <div className="flex-between mb-3">
+                          <h3 className="text-lg font-bold text-slate-100 m-0">
+                            {exLabel}
                           </h3>
-                          <button
-                            className="btn-icon btn-danger"
+                          <Button
+                            variant="danger"
+                            size="xs"
                             onClick={() => removeExercise(item.id)}
                             title="Remove Exercise"
                           >
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <line x1="18" y1="6" x2="6" y2="18"></line>
-                              <line x1="6" y1="6" x2="18" y2="18"></line>
-                            </svg>
-                          </button>
+                            ✕
+                          </Button>
                         </div>
 
-                        <div className="flex-col" style={{ gap: '0.75rem' }}>
+                        <div className="flex flex-col gap-2.5">
                           {item.sets.length > 0 && (
-                            <div className="set-row" style={{ color: 'var(--text-muted)', fontSize: '0.8rem', paddingBottom: '0.25rem' }}>
-                              <div style={{ textAlign: 'center' }}>SET</div>
-                              <div style={{ textAlign: 'center' }}>KG</div>
-                              <div style={{ textAlign: 'center' }}>REPS</div>
-                              <div></div>
+                            <div className="set-row text-slate-400 text-xs pb-1">
+                              <div className="text-center">SET</div>
+                              <div className="text-center">KG</div>
+                              <div className="text-center">REPS</div>
+                              <div />
                             </div>
                           )}
 
@@ -755,58 +806,75 @@ export function App() {
                             <div key={set.id} className="set-row">
                               <div className="set-number">{set.set_number}</div>
                               <input
-                                type="number"
-                                step="0.5"
+                                type="text"
+                                inputMode="decimal"
                                 placeholder={targetWeight !== null ? String(targetWeight) : 'Weight'}
                                 value={set.weight_kg !== null ? set.weight_kg : ''}
                                 onChange={(e) =>
                                   updateSet(itemIdx, setIdx, 'weight_kg', e.target.value ? parseFloat(e.target.value) : null)
                                 }
+                                onDoubleClick={() =>
+                                  openKeypadForSet(itemIdx, setIdx, 'weight_kg', `${exLabel} - Set ${set.set_number} Weight`, set.weight_kg)
+                                }
                               />
                               <input
-                                type="number"
+                                type="text"
+                                inputMode="numeric"
                                 placeholder={targetReps !== null ? String(targetReps) : 'Reps'}
                                 value={set.reps !== null ? set.reps : ''}
                                 onChange={(e) =>
-                                  updateSet(itemIdx, setIdx, 'reps', e.target.value ? parseInt(e.target.value) : null)
+                                  updateSet(itemIdx, setIdx, 'reps', e.target.value ? parseInt(e.target.value, 10) : null)
+                                }
+                                onDoubleClick={() =>
+                                  openKeypadForSet(itemIdx, setIdx, 'reps', `${exLabel} - Set ${set.set_number} Reps`, set.reps)
                                 }
                               />
-                              <button
-                                className="btn-icon btn-secondary"
+                              <Button
+                                variant="secondary"
+                                size="xs"
                                 onClick={() => removeSet(itemIdx, setIdx)}
+                                title="Remove Set"
                               >
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                  <path d="M3 6h18"></path>
-                                  <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
-                                  <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
-                                </svg>
-                              </button>
+                                🗑
+                              </Button>
                             </div>
                           ))}
                         </div>
 
-                        <button className="btn-secondary" style={{ width: '100%', marginTop: '1rem' }} onClick={() => addSet(itemIdx)}>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          fullWidth
+                          className="mt-3"
+                          onClick={() => addSet(itemIdx)}
+                        >
                           + Add Set
-                        </button>
+                        </Button>
                       </div>
                     )
                   })}
                 </div>
               )}
 
-              <div className="flex-col" style={{ gap: '1rem', marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--surface-border)' }}>
-                <button className="btn-secondary" onClick={() => setShowExercisePicker(true)} style={{ padding: '1rem' }}>
+              <div className="flex flex-col gap-3 mt-6 pt-5 border-t border-border">
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  fullWidth
+                  onClick={() => setShowExercisePicker(true)}
+                >
                   + Add Exercise
-                </button>
-                <button
-                  className="btn-primary"
+                </Button>
+                <Button
+                  variant="blue"
+                  size="lg"
+                  fullWidth
                   onClick={promptFinishSession}
-                  style={{ padding: '1rem', fontSize: '1.05rem', fontWeight: 700 }}
                 >
                   Finish Workout
-                </button>
+                </Button>
               </div>
-            </div>
+            </GlassCard>
           </section>
         ) : (
           /* DASHBOARD TABS (WHEN NOT IN WORKOUT) */
@@ -838,7 +906,7 @@ export function App() {
             )}
           </>
         )}
-      </main>
+      </div>
 
       {/* Post-Workout Effort Debrief Modal */}
       {showDebriefModal && session && (
@@ -851,72 +919,81 @@ export function App() {
       )}
 
       {/* Exercise Picker Modal */}
-      {showExercisePicker && (
-        <div
-          className="modal-overlay"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setShowExercisePicker(false)
-          }}
-        >
-          <div className="modal-content animate-slide-up">
-            <div className="flex-between" style={{ marginBottom: '1.5rem' }}>
-              <h2 style={{ margin: 0 }}>Select Exercise</h2>
-              <button className="btn-icon btn-secondary" onClick={() => setShowExercisePicker(false)}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-              </button>
-            </div>
+      <Modal
+        isOpen={showExercisePicker}
+        onClose={() => setShowExercisePicker(false)}
+        title="Select Exercise"
+      >
+        <div className="space-y-3">
+          <input
+            type="text"
+            placeholder="Search exercises..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-sm text-slate-100"
+          />
 
-            <input
-              type="text"
-              placeholder="Search exercises..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              style={{ marginBottom: '1rem' }}
-            />
-
-            {exercises.length === 0 ? (
-              status.kind === 'error' ? (
-                <p style={{ textAlign: 'center', padding: '2rem' }}>
-                  Couldn't load exercises - check your connection and try again.
-                </p>
-              ) : (
-                <p style={{ textAlign: 'center', padding: '2rem' }}>
-                  No exercises found. Add some to the database first.
-                </p>
-              )
-            ) : filteredExercises.length === 0 ? (
-              <p style={{ textAlign: 'center', padding: '2rem' }}>No exercises match your search.</p>
+          {exercises.length === 0 ? (
+            status.kind === 'error' ? (
+              <p className="text-center py-6 text-xs text-slate-400">
+                Couldn't load exercises - check your connection and try again.
+              </p>
             ) : (
-              <ul className="exercise-list">
-                {filteredExercises.map((exercise) => (
-                  <li key={exercise.id} className="exercise-item" onClick={() => addExerciseToSession(exercise)}>
-                    <div>
-                      <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{exercise.name}</div>
-                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                        {exercise.primary_muscles.join(', ')}
-                      </div>
+              <p className="text-center py-6 text-xs text-slate-400">
+                No exercises found. Add some to the database first.
+              </p>
+            )
+          ) : filteredExercises.length === 0 ? (
+            <p className="text-center py-6 text-xs text-slate-400">
+              No exercises match your search.
+            </p>
+          ) : (
+            <ul className="exercise-list">
+              {filteredExercises.map((exercise) => (
+                <li
+                  key={exercise.id}
+                  className="exercise-item"
+                  onClick={() => addExerciseToSession(exercise)}
+                >
+                  <div>
+                    <div className="font-semibold text-sm text-slate-100">{exercise.name}</div>
+                    <div className="text-xs text-slate-400">
+                      {exercise.primary_muscles.join(', ')}
                     </div>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--primary-color)" strokeWidth="2">
-                      <line x1="12" y1="5" x2="12" y2="19"></line>
-                      <line x1="5" y1="12" x2="19" y2="12"></line>
-                    </svg>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+                  </div>
+                  <span className="text-sky-400 font-bold text-lg">+</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
-      )}
+      </Modal>
 
-      {/* Bottom Navigation */}
-      <BottomNav
-        activeTab={activeTab}
-        onChangeTab={setActiveTab}
-        hasActiveWorkout={session !== null}
-      />
-    </>
+      {/* Tactile Keypad Set Entry Modal */}
+      <Modal
+        isOpen={keypadTarget !== null}
+        onClose={() => setKeypadTarget(null)}
+        title={keypadTarget?.label || 'Enter Set Metric'}
+      >
+        <div className="space-y-4">
+          <NumberInputDisplay
+            label={keypadTarget?.field === 'weight_kg' ? 'Weight' : 'Reps'}
+            value={keypadBuffer || '0'}
+            unit={keypadTarget?.field === 'weight_kg' ? 'KG' : 'REPS'}
+            variant="blue"
+          />
+          <TactileKeypad
+            value={keypadBuffer}
+            onChange={setKeypadBuffer}
+            variant="blue"
+            allowDecimals={keypadTarget?.field === 'weight_kg'}
+            maxDecimalPlaces={1}
+          />
+          <Button variant="blue" size="lg" fullWidth onClick={confirmKeypadValue}>
+            Apply Set Value
+          </Button>
+        </div>
+      </Modal>
+    </AppShell>
   )
 }
