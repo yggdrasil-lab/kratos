@@ -496,6 +496,23 @@ export function App() {
     await refreshQueueCount()
   }
 
+  const handleConfirmSession = async (sessionId: string) => {
+    const target = sessions.find((s) => s.id === sessionId)
+    if (!target) return
+    const updatedSession: SessionPayload = {
+      ...target,
+      extra: {
+        ...(target.extra || {}),
+        inferred: false,
+        confirmed: true,
+      },
+    }
+    setSessions((prev) => prev.map((s) => (s.id === sessionId ? updatedSession : s)))
+    await enqueue(updatedSession)
+    await sync()
+    await loadSessions()
+  }
+
   const handleSaveFastingCheckIn = async (checkIn: FastingCheckIn) => {
     try {
       await db.fastingLogs.put(checkIn)
@@ -886,6 +903,7 @@ export function App() {
                 fastingLogs={fastingLogs}
                 biometrics={biometrics}
                 onDeleteSession={handleDeleteSession}
+                onConfirmSession={handleConfirmSession}
               />
             ) : (
               <TodayView
@@ -902,6 +920,8 @@ export function App() {
                 onSaveFastingCheckIn={handleSaveFastingCheckIn}
                 onSynthesizeFastingRecommendation={handleSynthesizeFastingRecommendation}
                 onSynthesizeWorkoutRecommendation={handleSynthesizeWorkoutRecommendation}
+                onDeleteSession={handleDeleteSession}
+                onConfirmSession={handleConfirmSession}
               />
             )}
           </>

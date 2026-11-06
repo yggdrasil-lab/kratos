@@ -18,6 +18,8 @@ interface TodayViewProps {
   onSaveFastingCheckIn: (checkIn: FastingCheckIn) => void
   onSynthesizeFastingRecommendation?: (customContext?: string) => Promise<void>
   onSynthesizeWorkoutRecommendation?: (customContext?: string) => Promise<void>
+  onDeleteSession: (id: string) => Promise<void> | void
+  onConfirmSession: (id: string) => Promise<void> | void
 }
 
 const WORKOUT_PILLARS = [
@@ -53,6 +55,8 @@ export function TodayView({
   onSaveFastingCheckIn,
   onSynthesizeFastingRecommendation,
   onSynthesizeWorkoutRecommendation,
+  onDeleteSession,
+  onConfirmSession,
 }: TodayViewProps) {
   const [selectedRoutineOverride, setSelectedRoutineOverride] = useState<Routine | null>(null)
   const [showRoutinePicker, setShowRoutinePicker] = useState<boolean>(false)
@@ -164,6 +168,8 @@ export function TodayView({
     }
   })
 
+  const inferredSessions = sessions.filter((s) => Boolean(s.extra?.inferred))
+
   return (
     <div className="animate-fade-in pb-16">
       {/* Date and Welcome Header */}
@@ -175,6 +181,74 @@ export function TodayView({
           {formatFriendlyDate(circadianDate)}
         </h2>
       </div>
+
+      {/* Auto-Detected / Inferred Workout Review Banner */}
+      {inferredSessions.length > 0 && (
+        <div className="flex flex-col gap-3 mb-5">
+          {inferredSessions.map((infSession) => {
+            const routineName = (infSession.extra?.routine_name as string) || 'Workout / Sport Activity'
+            const sessionDate = infSession.started_at ? infSession.started_at.split('T')[0] : circadianDate
+            const durationMins = infSession.ended_at && infSession.started_at
+              ? Math.max(1, Math.round((new Date(infSession.ended_at).getTime() - new Date(infSession.started_at).getTime()) / 60000))
+              : (infSession.extra?.duration_minutes as number | undefined) || null
+
+            return (
+              <GlassCard
+                key={infSession.id}
+                className="animate-slide-up border-amber-500/40 bg-amber-500/10 p-4"
+              >
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-base">⚡</span>
+                    <span className="font-bold text-sm text-amber-300">
+                      Auto-Detected Workout ({formatFriendlyDate(sessionDate)})
+                    </span>
+                    <span className="text-[11px] px-2 py-0.5 rounded-md font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      Needs Review
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mb-2">
+                  <div className="text-base font-bold text-slate-100">
+                    {routineName}
+                  </div>
+                  <div className="text-xs text-slate-300 mt-0.5 flex gap-3 flex-wrap">
+                    {durationMins ? <span>⏱️ ~{durationMins} min</span> : null}
+                    {infSession.extra?.active_energy_kcal ? (
+                      <span>🔥 {String(infSession.extra.active_energy_kcal)} kcal</span>
+                    ) : null}
+                    {infSession.extra?.avg_hr ? (
+                      <span>💓 ~{String(infSession.extra.avg_hr)} bpm</span>
+                    ) : null}
+                  </div>
+                </div>
+
+                <p className="text-xs text-amber-200/90 mb-3">
+                  Auto-attached from plan and wearable biometrics. Did you complete this workout?
+                </p>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="blue"
+                    size="xs"
+                    onClick={() => onConfirmSession(infSession.id)}
+                  >
+                    ✓ Confirm / Keep
+                  </Button>
+                  <Button
+                    variant="danger"
+                    size="xs"
+                    onClick={() => onDeleteSession(infSession.id)}
+                  >
+                    ✕ Dismiss Workout
+                  </Button>
+                </div>
+              </GlassCard>
+            )
+          })}
+        </div>
+      )}
 
       {/* 1. Readiness and Vitals Badge */}
       <GlassCard className={`animate-slide-up mb-5 ${readinessBadge.borderClass}`}>
