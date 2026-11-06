@@ -20,9 +20,13 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173"
     mcp_token: str | None = None
     llm_base_url: str = "http://muninn:4000/v1"
-    llm_api_key: str = "sk-muninn-insecure-master-key"
-    llm_model: str = "compress"
+    llm_api_key: str = ""
+    llm_model: str = "app-synthesize"
     jev_model: str = "jev-decision"
+    eir_internal_url: str = Field(
+        default="http://eir-api:8000",
+        validation_alias=AliasChoices("KRATOS_EIR_INTERNAL_URL", "EIR_INTERNAL_URL"),
+    )
     discord_webhook_url: str | None = Field(
         default=None,
         validation_alias=AliasChoices(

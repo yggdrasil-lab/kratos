@@ -20,7 +20,11 @@ import urllib.request
 from app.config import settings
 from app.models import WeeklyPlan
 from app.schemas import RecommendedExerciseItem, WorkoutRecommendationRead
-from app.services.jev_client import classify_constraints_jev, classify_recovery_state_jev
+from app.services.jev_client import (
+    classify_constraints_jev,
+    classify_recovery_state_jev,
+    classify_workout_decision_gates,
+)
 from app.services.workout_engine import generate_workout_recommendation
 
 logger = logging.getLogger(__name__)
@@ -97,9 +101,9 @@ def synthesize_workout_recommendation_llm(
         except (ValueError, TypeError):
             weight_kg = None
 
-        # Fast Jev System One gates for joint sparing, time budget, and recovery tier
-        jev_recovery = classify_recovery_state_jev(biometrics)
-        jev_gates = classify_constraints_jev(custom_context)
+        # Fast Jev System One gates for joint sparing, time budget, and recovery tier (batched single call)
+        jev_gates = classify_workout_decision_gates(biometrics, custom_context)
+        jev_recovery = jev_gates.get("recovery_tier")
 
         context_payload = {
             "date": target_date.isoformat(),

@@ -11,6 +11,7 @@ from app.services.jev_client import (
     classify_constraints_jev,
     classify_fasting_window_jev,
     classify_recovery_state_jev,
+    classify_workout_decision_gates,
 )
 from app.services.workout_engine import generate_workout_recommendation
 
@@ -89,3 +90,21 @@ class TestJevClient(unittest.TestCase):
         self.assertIn("Sleep: 7.8h", user_prompt)
         self.assertIn("HRV: 50.3ms", user_prompt)
         self.assertIn("Resting HR: 56bpm", user_prompt)
+
+    @patch("app.services.jev_client.call_jev")
+    def test_classify_workout_decision_gates_batched(self, mock_call_jev):
+        mock_call_jev.return_value = (
+            json.dumps({
+                "recovery_tier": "MAV_OVERLOAD",
+                "joint_focus": "SHOULDER_SPARING",
+                "time_budget": "TIME_CRUNCH_30M",
+            }),
+            0.025,
+        )
+        biometrics = {"sleep_duration_hours": 8.0, "hrv_ms": 52.0}
+        user_notes = "Shoulder is slightly tender, need a quick 30 min session"
+        gates = classify_workout_decision_gates(biometrics, user_notes)
+        self.assertEqual(mock_call_jev.call_count, 1)
+        self.assertEqual(gates["recovery_tier"], "MAV_OVERLOAD")
+        self.assertEqual(gates["joint_focus"], "SHOULDER_SPARING")
+        self.assertEqual(gates["time_budget"], "TIME_CRUNCH_30M")

@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.db import get_db
 from app.models import FastingRecommendation, WeeklyPlan, WorkoutRecommendation
 from app.schemas import (
@@ -37,8 +38,6 @@ from app.services.llm_workout import synthesize_workout_recommendation_llm
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/biometrics", tags=["biometrics"])
-
-EIR_INTERNAL_URL = "http://eir-api:8000"
 
 
 class FastingCheckInPayload(BaseModel):
@@ -76,7 +75,7 @@ def _get_auckland_today() -> str:
 def get_today_biometrics() -> dict[str, Any] | None:
     """Proxies today's Eir daily biometrics summary for the Kratos dashboard."""
     today = _get_auckland_today()
-    url = f"{EIR_INTERNAL_URL}/biometrics/daily/{today}"
+    url = f"{settings.eir_internal_url}/biometrics/daily/{today}"
     req = urllib.request.Request(url, headers={"User-Agent": "Kratos-Bridge/1.0"})
     try:
         with urllib.request.urlopen(req, timeout=2.0) as resp:
@@ -90,7 +89,7 @@ def get_today_biometrics() -> dict[str, Any] | None:
 @router.get("/latest")
 def get_latest_biometrics() -> dict[str, Any] | None:
     """Proxies the most recent scale measurement from Eir."""
-    url = f"{EIR_INTERNAL_URL}/biometrics/latest"
+    url = f"{settings.eir_internal_url}/biometrics/latest"
     req = urllib.request.Request(url, headers={"User-Agent": "Kratos-Bridge/1.0"})
     try:
         with urllib.request.urlopen(req, timeout=2.0) as resp:
@@ -147,7 +146,7 @@ def get_fasting_recommendation(
 
     # Fetch biometrics for this date from Eir
     biometrics = None
-    url = f"{EIR_INTERNAL_URL}/biometrics/daily/{date_str}"
+    url = f"{settings.eir_internal_url}/biometrics/daily/{date_str}"
     req = urllib.request.Request(url, headers={"User-Agent": "Kratos-Bridge/1.0"})
     try:
         with urllib.request.urlopen(req, timeout=2.0) as resp:
@@ -217,7 +216,7 @@ def trigger_fasting_synthesis(
     )
 
     biometrics = None
-    url = f"{EIR_INTERNAL_URL}/biometrics/daily/{date_str}"
+    url = f"{settings.eir_internal_url}/biometrics/daily/{date_str}"
     req = urllib.request.Request(url, headers={"User-Agent": "Kratos-Bridge/1.0"})
     try:
         with urllib.request.urlopen(req, timeout=2.0) as resp:
@@ -356,7 +355,7 @@ def get_workout_recommendation(
     )
 
     biometrics = None
-    url = f"{EIR_INTERNAL_URL}/biometrics/daily/{date_str}"
+    url = f"{settings.eir_internal_url}/biometrics/daily/{date_str}"
     req = urllib.request.Request(url, headers={"User-Agent": "Kratos-Bridge/1.0"})
     try:
         with urllib.request.urlopen(req, timeout=2.0) as resp:
@@ -425,7 +424,7 @@ def trigger_workout_synthesis(
     )
 
     biometrics = None
-    url = f"{EIR_INTERNAL_URL}/biometrics/daily/{date_str}"
+    url = f"{settings.eir_internal_url}/biometrics/daily/{date_str}"
     req = urllib.request.Request(url, headers={"User-Agent": "Kratos-Bridge/1.0"})
     try:
         with urllib.request.urlopen(req, timeout=2.0) as resp:
@@ -517,7 +516,7 @@ def save_fasting_checkin(payload: FastingCheckInPayload) -> dict[str, str]:
     try:
         data = json.dumps(payload.model_dump()).encode("utf-8")
         req = urllib.request.Request(
-            f"{EIR_INTERNAL_URL}/feedback/fasting",
+            f"{settings.eir_internal_url}/feedback/fasting",
             data=data,
             headers={"Content-Type": "application/json", "User-Agent": "Kratos-Bridge/1.0"},
             method="POST",
@@ -535,7 +534,7 @@ def save_workout_feedback(payload: WorkoutFeedbackPayload) -> dict[str, str]:
     try:
         data = json.dumps(payload.model_dump()).encode("utf-8")
         req = urllib.request.Request(
-            f"{EIR_INTERNAL_URL}/feedback/workout",
+            f"{settings.eir_internal_url}/feedback/workout",
             data=data,
             headers={"Content-Type": "application/json", "User-Agent": "Kratos-Bridge/1.0"},
             method="POST",
