@@ -76,6 +76,32 @@ export const MOCK_ROUTINES = [
       },
     ],
   },
+  {
+    id: 'routine-lower-a',
+    name: 'Lower Body A',
+    notes: 'Squat and hinge focus',
+    extra: {},
+    items: [
+      {
+        id: 'ri-lower-1',
+        routine_id: 'routine-lower-a',
+        exercise_id: 'ex-squat',
+        position: 0,
+        target_sets: 3,
+        target_reps: 8,
+        target_weight_kg: 80,
+        target_duration_s: null,
+        notes: null,
+      },
+    ],
+  },
+  {
+    id: 'routine-badminton',
+    name: '🏸 Badminton Match Play',
+    notes: 'Court play session',
+    extra: {},
+    items: [],
+  },
 ]
 
 export const MOCK_SESSIONS = [
@@ -302,7 +328,8 @@ export async function setupMockApi(page: Page): Promise<MockApiState> {
               exercise_name: 'Bench Press (Dumbbell)',
               target_sets: 2,
               target_reps: '10-12',
-              suggested_weight_kg: 28,
+              suggested_weight_kg: 14,
+              weight_basis: 'per_hand',
               notes: 'Neutral grip; elbows tucked 45 deg to spare anterior shoulder capsule',
             },
             {
@@ -310,6 +337,7 @@ export async function setupMockApi(page: Page): Promise<MockApiState> {
               target_sets: 2,
               target_reps: '12-15',
               suggested_weight_kg: 35,
+              weight_basis: 'total',
               notes: 'Controlled eccentric 3s cadence; pause at clavicle',
             },
           ],
@@ -340,7 +368,8 @@ export async function setupMockApi(page: Page): Promise<MockApiState> {
             exercise_name: 'Bench Press (Dumbbell)',
             target_sets: 3,
             target_reps: '8-10',
-            suggested_weight_kg: 30,
+            suggested_weight_kg: 15,
+            weight_basis: 'per_hand',
             notes: 'Progressive overload anchor: push to 1 RIR on set 3',
           },
           {
@@ -348,6 +377,7 @@ export async function setupMockApi(page: Page): Promise<MockApiState> {
             target_sets: 3,
             target_reps: '10-12',
             suggested_weight_kg: 40,
+            weight_basis: 'total',
             notes: 'Strict press from collarbone, solid core brace',
           },
         ],

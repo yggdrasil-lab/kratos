@@ -96,49 +96,24 @@ export function TodayView({
     }
   }
 
-  const upperARoutine = routines.find((r) => r.name.toLowerCase().includes('upper') && r.name.toLowerCase().includes('a')) || routines[0]
-  const lowerARoutine = routines.find((r) => r.name.toLowerCase().includes('lower') && r.name.toLowerCase().includes('a')) || routines[1] || routines[0]
-  const upperBRoutine = routines.find((r) => r.name.toLowerCase().includes('upper') && r.name.toLowerCase().includes('b')) || routines[0]
-  const lowerBRoutine = routines.find((r) => r.name.toLowerCase().includes('lower') && r.name.toLowerCase().includes('b')) || routines[1] || routines[0]
+  // Derive routine from recommendation or PostgreSQL database routines
+  const recommendedRoutineName = workoutRecommendation?.routine_name
+  const matchedRecommendedRoutine = recommendedRoutineName
+    ? routines.find((r) => r.name.toLowerCase() === recommendedRoutineName.toLowerCase()) || null
+    : null
 
-  let defaultRoutine: Routine | null = upperARoutine
-  let dayType: 'lift' | 'sport' | 'rest' = 'lift'
-  let dayHeadline = 'Upper Body A (Chest and Vertical Pull)'
-  let daySubtitle = '4 exercises x 2 sets to failure'
-
-  if (dayOfWeek === 1) {
-    dayType = 'sport'
-    defaultRoutine = null
-    dayHeadline = '🏸 Badminton Match Play'
-    daySubtitle = '7:00 PM - 9:00 PM court time. Daytime focus: mobility and hydration.'
-  } else if (dayOfWeek === 2) {
-    dayType = 'lift'
-    defaultRoutine = lowerARoutine
-    dayHeadline = 'Lower Body A (Squat and Hinge)'
-    daySubtitle = '4 exercises x 2 sets to failure'
-  } else if (dayOfWeek === 3) {
-    dayType = 'sport'
-    defaultRoutine = null
-    dayHeadline = '🏸 Badminton Match Play'
-    daySubtitle = '7:00 PM - 9:00 PM court time. Daytime focus: mobility and hydration.'
-  } else if (dayOfWeek === 4) {
-    dayType = 'rest'
-    defaultRoutine = null
-    dayHeadline = '🧘 Rest and Deep Fast Day'
-    daySubtitle = 'Zero axial lifting. 18h+ intermittent fast and electrolyte hydration.'
-  } else if (dayOfWeek === 5) {
-    dayType = 'lift'
-    defaultRoutine = upperBRoutine
-    dayHeadline = 'Upper Body B (Arms, Back and Delts)'
-    daySubtitle = '4 exercises x 2 sets to failure'
-  } else if (dayOfWeek === 6) {
-    dayType = 'lift'
-    defaultRoutine = lowerBRoutine
-    dayHeadline = 'Lower Body B (Kettlebell, Lunge and Core)'
-    daySubtitle = '4 exercises x 2 sets to failure'
-  }
+  const defaultRoutine: Routine | null =
+    matchedRecommendedRoutine ||
+    (routines.length > 0 ? routines[dayOfWeek % routines.length] : null)
 
   const activeRoutine = selectedRoutineOverride || defaultRoutine
+
+  const dayHeadline = workoutRecommendation?.routine_name || activeRoutine?.name || 'Rest & Recovery'
+  const daySubtitle = workoutRecommendation?.exercises && workoutRecommendation.exercises.length > 0
+    ? `${workoutRecommendation.exercises.length} autoregulated exercises`
+    : activeRoutine?.items && activeRoutine.items.length > 0
+    ? `${activeRoutine.items.length} exercises configured`
+    : 'No routines scheduled for today'
 
   const getExerciseGhostTarget = (exerciseId: string) => {
     for (const sess of sessions) {
@@ -403,33 +378,46 @@ export function TodayView({
         {/* Exercise Preview */}
         {workoutRecommendation?.exercises && workoutRecommendation.exercises.length > 0 ? (
           <div className="flex flex-col gap-2 mb-5">
-            {workoutRecommendation.exercises.map((recEx, idx) => (
-              <div
-                key={idx}
-                className="bg-background/60 rounded-xl px-3.5 py-2.5 flex flex-col gap-1 border border-border/60"
-              >
-                <div className="flex justify-between items-center gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-400 font-semibold">{idx + 1}.</span>
-                    <span className="text-sm font-semibold text-slate-100">{recEx.exercise_name}</span>
+            {workoutRecommendation.exercises.map((recEx, idx) => {
+              const isPerHand =
+                recEx.weight_basis === 'per_hand' ||
+                recEx.exercise_name.toLowerCase().includes('dumbbell') ||
+                recEx.exercise_name.toLowerCase().includes('db ')
+              return (
+                <div
+                  key={idx}
+                  className="bg-background/60 rounded-xl px-3.5 py-2.5 flex flex-col gap-1 border border-border/60"
+                >
+                  <div className="flex justify-between items-center gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-400 font-semibold">{idx + 1}.</span>
+                      <span className="text-sm font-semibold text-slate-100">{recEx.exercise_name}</span>
+                    </div>
+                    <span className="text-xs text-purple-300 bg-purple-500/15 px-2 py-0.5 rounded-md font-semibold shrink-0">
+                      {recEx.suggested_weight_kg
+                        ? `${recEx.suggested_weight_kg}kg${isPerHand ? ' per hand' : ''} • `
+                        : ''}
+                      {recEx.target_sets} sets x {recEx.target_reps}
+                    </span>
                   </div>
-                  <span className="text-xs text-purple-300 bg-purple-500/15 px-2 py-0.5 rounded-md font-semibold shrink-0">
-                    {recEx.suggested_weight_kg ? `${recEx.suggested_weight_kg}kg • ` : ''}{recEx.target_sets} sets x {recEx.target_reps}
-                  </span>
+                  {recEx.notes && (
+                    <div className="text-xs text-slate-300 pl-5 italic">
+                      Cue: {recEx.notes}
+                    </div>
+                  )}
                 </div>
-                {recEx.notes && (
-                  <div className="text-xs text-slate-300 pl-5 italic">
-                    Cue: {recEx.notes}
-                  </div>
-                )}
-              </div>
-            ))}
+              )
+            })}
           </div>
         ) : activeRoutine && activeRoutine.items && activeRoutine.items.length > 0 ? (
           <div className="flex flex-col gap-2 mb-5">
             {activeRoutine.items.map((it, idx) => {
               const ex = exercises.find((e) => e.id === it.exercise_id)
               const exName = ex ? ex.name : `Exercise ${idx + 1}`
+              const isPerHand =
+                ex?.weight_basis === 'per_hand' ||
+                exName.toLowerCase().includes('dumbbell') ||
+                exName.toLowerCase().includes('db ')
               const ghost = getExerciseGhostTarget(it.exercise_id)
 
               return (
@@ -444,7 +432,7 @@ export function TodayView({
 
                   {ghost && ghost.weightKg !== null ? (
                     <span className="text-xs text-purple-300 bg-purple-500/15 px-2 py-0.5 rounded-md">
-                      Last: {ghost.weightKg}kg x {ghost.reps ?? 'failure'}
+                      Last: {ghost.weightKg}kg{isPerHand ? ' per hand' : ''} x {ghost.reps ?? 'failure'}
                     </span>
                   ) : (
                     <span className="text-xs text-slate-400">
@@ -482,25 +470,14 @@ export function TodayView({
           >
             Start Workout ({workoutRecommendation?.routine_name || activeRoutine?.name || 'Session'})
           </Button>
-        ) : dayType === 'sport' ? (
-          <div className="text-center space-y-3">
-            <p className="text-xs text-slate-300 m-0">
-              Badminton court scheduled for this evening. Rest up your legs!
-            </p>
-            {upperARoutine && (
-              <Button variant="secondary" size="md" onClick={() => onStartRoutine(upperARoutine)}>
-                Lift anyway (Upper Body)
-              </Button>
-            )}
-          </div>
         ) : (
           <div className="text-center space-y-3">
             <p className="text-xs text-slate-300 m-0">
-              Rest day. Enjoy the extended fast and hydration.
+              No routine scheduled for today. Configure routines in the Plan tab or tap Adapt to synthesize with AI.
             </p>
-            {upperARoutine && (
-              <Button variant="secondary" size="md" onClick={() => onStartRoutine(upperARoutine)}>
-                Log a workout instead
+            {routines.length > 0 && (
+              <Button variant="secondary" size="md" onClick={() => onStartRoutine(routines[0])}>
+                Start {routines[0].name}
               </Button>
             )}
           </div>
@@ -516,8 +493,6 @@ export function TodayView({
           {DAY_SHORTS.map((shortName, idx) => {
             const isToday = idx === dayOfWeek
             const isCompleted = weekDaySessions[idx]
-            const isBadminton = idx === 1 || idx === 3
-            const isFastDay = idx === 4
 
             let icon = '○'
             let boxClass = 'bg-background/50 border-border/60'
@@ -527,10 +502,6 @@ export function TodayView({
               icon = '✓'
               boxClass = 'bg-emerald-500/20 border-emerald-500'
               iconColor = 'text-emerald-400'
-            } else if (isBadminton) {
-              icon = '🏸'
-            } else if (isFastDay) {
-              icon = '🧘'
             }
 
             if (isToday) {

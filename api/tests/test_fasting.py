@@ -14,7 +14,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.db import Base, get_db
 from app.main import app
-from app.models import FastingRecommendation, WeeklyPlan
+from app.models import FastingRecommendation, Routine, WeeklyPlan
 from app.services.fasting_engine import generate_fasting_recommendation
 from app.services.llm_fasting import synthesize_fasting_recommendation_llm
 
@@ -27,6 +27,7 @@ class TestFastingRecommendation(unittest.TestCase):
             poolclass=StaticPool,
         )
         WeeklyPlan.__table__.create(bind=self.engine)
+        Routine.__table__.create(bind=self.engine)
         FastingRecommendation.__table__.create(bind=self.engine)
         self.SessionLocal = sessionmaker(bind=self.engine, autoflush=False, expire_on_commit=False)
         self.db = self.SessionLocal()
@@ -44,6 +45,7 @@ class TestFastingRecommendation(unittest.TestCase):
     def tearDown(self):
         self.db.close()
         FastingRecommendation.__table__.drop(bind=self.engine)
+        Routine.__table__.drop(bind=self.engine)
         WeeklyPlan.__table__.drop(bind=self.engine)
         app.dependency_overrides.clear()
 

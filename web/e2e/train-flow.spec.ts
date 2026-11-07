@@ -71,7 +71,8 @@ test.describe('Train Flow and Effort Debrief', () => {
     await expect(page.getByText('Progressive Overload', { exact: true })).toBeVisible()
     await expect(page.getByText(/MAV • RPE 8-9 \(1-2 RIR\)/i)).toBeVisible()
 
-    // 2. Verify exercise cues
+    // 2. Verify exercise cues and per-hand weight basis indicator
+    await expect(page.getByText(/15kg per hand/i)).toBeVisible()
     await expect(page.getByText(/Progressive overload anchor: push to 1 RIR on set 3/i)).toBeVisible()
 
     // 3. Verify research citation accordion
@@ -118,5 +119,6 @@ test.describe('Train Flow and Effort Debrief', () => {
     await page.getByRole('button', { name: /Start Workout/i }).click()
     await expect(page.getByRole('heading', { name: /Upper Body A \(Joint-Sparing Autoregulated\)/i })).toBeVisible()
     await expect(page.locator('.workout-item h3', { hasText: 'Bench Press (Dumbbell)' })).toBeVisible()
+    await expect(page.getByText('KG / HAND')).toBeVisible()
   })
 })

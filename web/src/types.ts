@@ -113,6 +113,7 @@ export interface RecommendedExerciseItem {
   target_sets: number
   target_reps: string
   suggested_weight_kg?: number | null
+  weight_basis?: WeightBasis
   notes?: string | null
 }
 

@@ -34,6 +34,7 @@ from app.services.discord import (
 from app.services.fasting_engine import generate_fasting_recommendation
 from app.services.llm_fasting import synthesize_fasting_recommendation_llm
 from app.services.llm_workout import synthesize_workout_recommendation_llm
+from app.services.workout_engine import resolve_exercise_weight_basis
 
 logger = logging.getLogger(__name__)
 
@@ -155,7 +156,7 @@ def get_fasting_recommendation(
     except Exception as exc:
         logger.debug("Failed fetching Eir biometrics for fasting recommendation: %s", exc)
 
-    rec = synthesize_fasting_recommendation_llm(t_date, weekly_plan, biometrics)
+    rec = synthesize_fasting_recommendation_llm(t_date, weekly_plan, biometrics, db=db)
 
     # Dispatch starter thread to Discord #health forum if configured
     thread_id = None
@@ -230,6 +231,7 @@ def trigger_fasting_synthesis(
         weekly_plan=weekly_plan,
         biometrics=biometrics,
         custom_context=payload.custom_context,
+        db=db,
     )
 
     existing = db.scalar(
@@ -335,6 +337,10 @@ def get_workout_recommendation(
                     target_sets=int(ex.get("target_sets", 2)),
                     target_reps=str(ex.get("target_reps", "8-10 reps")),
                     suggested_weight_kg=float(ex["suggested_weight_kg"]) if ex.get("suggested_weight_kg") is not None else None,
+                    weight_basis=resolve_exercise_weight_basis(
+                        ex.get("exercise_name", "Exercise"),
+                        ex.get("weight_basis"),
+                    ),
                     notes=ex.get("notes"),
                 )
                 for ex in cached.exercises
@@ -364,7 +370,7 @@ def get_workout_recommendation(
     except Exception as exc:
         logger.debug("Failed fetching Eir biometrics for workout recommendation: %s", exc)
 
-    rec = synthesize_workout_recommendation_llm(t_date, weekly_plan, biometrics)
+    rec = synthesize_workout_recommendation_llm(t_date, weekly_plan, biometrics, db=db)
 
     # Dispatch starter thread to Discord #health forum if configured
     thread_id = None
@@ -438,6 +444,7 @@ def trigger_workout_synthesis(
         weekly_plan=weekly_plan,
         biometrics=biometrics,
         custom_context=payload.custom_context,
+        db=db,
     )
 
     existing = db.scalar(

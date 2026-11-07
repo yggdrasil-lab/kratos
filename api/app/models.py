@@ -22,6 +22,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    JSON,
     Numeric,
     String,
     Text,
@@ -68,10 +69,10 @@ class Exercise(TimestampMixin, Base):
     mechanics: Mapped[str | None] = mapped_column(Text)
     weight_basis: Mapped[str] = mapped_column(Text, nullable=False, server_default="total")
     primary_muscles: Mapped[list[str]] = mapped_column(
-        ARRAY(Text), nullable=False, server_default="{}"
+        ARRAY(Text).with_variant(JSON, "sqlite"), nullable=False, server_default="{}"
     )
     secondary_muscles: Mapped[list[str]] = mapped_column(
-        ARRAY(Text), nullable=False, server_default="{}"
+        ARRAY(Text).with_variant(JSON, "sqlite"), nullable=False, server_default="{}"
     )
     progression_scheme: Mapped[str | None] = mapped_column(Text)
     video_url: Mapped[str | None] = mapped_column(Text)

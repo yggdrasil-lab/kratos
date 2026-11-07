@@ -15,9 +15,12 @@ venv/
 # Node
 node_modules/
 dist/
+dist-*/
+dist.*
 dist-ssr/
 .vite/
 *.local
+.*_root_owned/
 
 # Editors / OS
 .DS_Store

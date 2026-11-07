@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Modal, Button } from '@yggdrasil-lab/ui'
 import type { EffortRating, Routine, SessionPayload } from '../types'
 import { getSessionLabel } from '../utils/session'
@@ -7,6 +7,7 @@ import { formatFriendlyDate } from '../utils/circadian'
 interface EditSessionModalProps {
   session: SessionPayload | null
   routines: Routine[]
+  sessions?: SessionPayload[]
   isOpen: boolean
   onClose: () => void
   onSave: (updated: SessionPayload) => Promise<void> | void
@@ -22,6 +23,7 @@ const EFFORT_OPTIONS: { value: EffortRating; label: string; activeClass: string 
 export function EditSessionModal({
   session,
   routines,
+  sessions,
   isOpen,
   onClose,
   onSave,
@@ -39,19 +41,21 @@ export function EditSessionModal({
     }
   }, [session, routines])
 
+  const presetOptions = useMemo(() => {
+    const fromRoutines = routines.map((r) => r.name.trim()).filter(Boolean)
+    const fromSessions = (sessions || [])
+      .map((s) => {
+        const name = (s.extra?.routine_name as string) || (s.extra?.activity_name as string) || ''
+        return name.trim()
+      })
+      .filter(Boolean)
+    const combined = Array.from(new Set([...fromRoutines, ...fromSessions]))
+    return combined.length > 0 ? combined : ['Gym Session']
+  }, [routines, sessions])
+
   if (!session) return null
 
   const sessionDate = session.started_at ? session.started_at.split('T')[0] : ''
-
-  const presetOptions = [
-    'Upper Body A',
-    'Lower Body A',
-    'Upper Body B',
-    'Lower Body B',
-    '🏸 Badminton Match Play',
-    '🏃 Outdoor Run / Walk',
-    '🧘 Mobility & Recovery',
-  ]
 
   const handleSave = async () => {
     setIsSaving(true)
@@ -100,7 +104,7 @@ export function EditSessionModal({
             type="text"
             value={routineName}
             onChange={(e) => setRoutineName(e.target.value)}
-            placeholder="e.g. Upper Body A, Badminton Match Play"
+            placeholder="Enter routine or activity name..."
             className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-sky-500"
           />
 
