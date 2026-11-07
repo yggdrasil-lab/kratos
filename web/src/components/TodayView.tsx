@@ -378,33 +378,46 @@ export function TodayView({
         {/* Exercise Preview */}
         {workoutRecommendation?.exercises && workoutRecommendation.exercises.length > 0 ? (
           <div className="flex flex-col gap-2 mb-5">
-            {workoutRecommendation.exercises.map((recEx, idx) => (
-              <div
-                key={idx}
-                className="bg-background/60 rounded-xl px-3.5 py-2.5 flex flex-col gap-1 border border-border/60"
-              >
-                <div className="flex justify-between items-center gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-400 font-semibold">{idx + 1}.</span>
-                    <span className="text-sm font-semibold text-slate-100">{recEx.exercise_name}</span>
+            {workoutRecommendation.exercises.map((recEx, idx) => {
+              const isPerHand =
+                recEx.weight_basis === 'per_hand' ||
+                recEx.exercise_name.toLowerCase().includes('dumbbell') ||
+                recEx.exercise_name.toLowerCase().includes('db ')
+              return (
+                <div
+                  key={idx}
+                  className="bg-background/60 rounded-xl px-3.5 py-2.5 flex flex-col gap-1 border border-border/60"
+                >
+                  <div className="flex justify-between items-center gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-400 font-semibold">{idx + 1}.</span>
+                      <span className="text-sm font-semibold text-slate-100">{recEx.exercise_name}</span>
+                    </div>
+                    <span className="text-xs text-purple-300 bg-purple-500/15 px-2 py-0.5 rounded-md font-semibold shrink-0">
+                      {recEx.suggested_weight_kg
+                        ? `${recEx.suggested_weight_kg}kg${isPerHand ? ' per hand' : ''} • `
+                        : ''}
+                      {recEx.target_sets} sets x {recEx.target_reps}
+                    </span>
                   </div>
-                  <span className="text-xs text-purple-300 bg-purple-500/15 px-2 py-0.5 rounded-md font-semibold shrink-0">
-                    {recEx.suggested_weight_kg ? `${recEx.suggested_weight_kg}kg • ` : ''}{recEx.target_sets} sets x {recEx.target_reps}
-                  </span>
+                  {recEx.notes && (
+                    <div className="text-xs text-slate-300 pl-5 italic">
+                      Cue: {recEx.notes}
+                    </div>
+                  )}
                 </div>
-                {recEx.notes && (
-                  <div className="text-xs text-slate-300 pl-5 italic">
-                    Cue: {recEx.notes}
-                  </div>
-                )}
-              </div>
-            ))}
+              )
+            })}
           </div>
         ) : activeRoutine && activeRoutine.items && activeRoutine.items.length > 0 ? (
           <div className="flex flex-col gap-2 mb-5">
             {activeRoutine.items.map((it, idx) => {
               const ex = exercises.find((e) => e.id === it.exercise_id)
               const exName = ex ? ex.name : `Exercise ${idx + 1}`
+              const isPerHand =
+                ex?.weight_basis === 'per_hand' ||
+                exName.toLowerCase().includes('dumbbell') ||
+                exName.toLowerCase().includes('db ')
               const ghost = getExerciseGhostTarget(it.exercise_id)
 
               return (
@@ -419,7 +432,7 @@ export function TodayView({
 
                   {ghost && ghost.weightKg !== null ? (
                     <span className="text-xs text-purple-300 bg-purple-500/15 px-2 py-0.5 rounded-md">
-                      Last: {ghost.weightKg}kg x {ghost.reps ?? 'failure'}
+                      Last: {ghost.weightKg}kg{isPerHand ? ' per hand' : ''} x {ghost.reps ?? 'failure'}
                     </span>
                   ) : (
                     <span className="text-xs text-slate-400">

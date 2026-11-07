@@ -58,8 +58,6 @@ def get_last_lift_for_exercise(db: Session, exercise_id) -> dict | None:
     except Exception:
         pass
     return None
-
-
 def generate_workout_recommendation(
     target_date: date,
     weekly_plan: WeeklyPlan | None = None,

@@ -88,7 +88,13 @@ def post_workout_recommendation_thread(
 
     exercises_lines: list[str] = []
     for ex in rec.exercises:
-        weight_str = f" @ {ex.suggested_weight_kg}kg" if ex.suggested_weight_kg is not None else ""
+        if ex.suggested_weight_kg is not None:
+            if ex.weight_basis == "per_hand":
+                weight_str = f" @ {ex.suggested_weight_kg}kg/hand ({ex.suggested_weight_kg}kg per dumbbell)"
+            else:
+                weight_str = f" @ {ex.suggested_weight_kg}kg"
+        else:
+            weight_str = ""
         notes_str = f" ({ex.notes})" if ex.notes else ""
         exercises_lines.append(f"- **{ex.exercise_name}**: {ex.target_sets} sets x {ex.target_reps}{weight_str}{notes_str}")
     exercises_text = "\n".join(exercises_lines) if exercises_lines else "- Rest or active recovery"

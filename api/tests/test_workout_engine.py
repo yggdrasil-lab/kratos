@@ -193,6 +193,7 @@ class TestWorkoutEngine(unittest.TestCase):
         self.assertTrue(rec.is_llm_generated)
         self.assertEqual(rec.routine_name, "Upper Body A (Joint Sparing)")
         self.assertEqual(rec.exercises[0].exercise_name, "Neutral-Grip Dumbbell Bench Press")
+        self.assertEqual(rec.exercises[0].weight_basis, "per_hand")
 
     @patch("urllib.request.urlopen")
     def test_workout_llm_synthesis_fallback(self, mock_urlopen):
@@ -257,6 +258,7 @@ class TestWorkoutEngine(unittest.TestCase):
         self.assertEqual(res_get.status_code, 200)
         cached_data = res_get.json()
         self.assertEqual(cached_data["routine_name"], "Upper Body A (Express 35m)")
+        self.assertEqual(cached_data["exercises"][0]["weight_basis"], "per_hand")
         self.assertEqual(mock_urlopen.call_count, 0)
 
 

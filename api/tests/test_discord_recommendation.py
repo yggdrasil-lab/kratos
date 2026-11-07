@@ -66,6 +66,53 @@ class TestDiscordService(unittest.TestCase):
         self.assertIn("<@12345>", payload["message"]["content"])
         self.assertIn("Two-Way Adjustment Loop", payload["message"]["content"])
 
+    @patch("urllib.request.urlopen")
+    def test_post_workout_recommendation_thread_weight_basis_formatting(self, mock_urlopen):
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.read.return_value = json.dumps({"id": "55667788"}).encode("utf-8")
+        mock_urlopen.return_value.__enter__.return_value = mock_resp
+
+        rec = WorkoutRecommendationRead(
+            date="2026-11-06",
+            routine_name="Upper & Lower Mix",
+            readiness_adaptation="Moderate stress adaptation",
+            target_rir="RIR 2",
+            volume_landmark="MAV",
+            rationale="Balanced session",
+            exercises=[
+                RecommendedExerciseItem(
+                    exercise_name="Dumbbell Bench Press",
+                    target_sets=2,
+                    target_reps="8-10 reps",
+                    suggested_weight_kg=15.0,
+                    weight_basis="per_hand",
+                ),
+                RecommendedExerciseItem(
+                    exercise_name="Barbell Back Squat",
+                    target_sets=2,
+                    target_reps="6-8 reps",
+                    suggested_weight_kg=100.0,
+                    weight_basis="total",
+                ),
+            ],
+            recovery_status="moderate",
+            is_llm_generated=False,
+        )
+
+        with patch("app.config.settings.discord_bot_token", "test-bot-token"):
+            thread_id = post_workout_recommendation_thread(
+                rec=rec,
+                target_date="2026-11-06",
+                channel_id="99887766",
+            )
+
+        self.assertEqual(thread_id, "55667788")
+        req = mock_urlopen.call_args[0][0]
+        payload = json.loads(req.data.decode("utf-8"))
+        content = payload["message"]["content"]
+        self.assertIn("15.0kg/hand (15.0kg per dumbbell)", content)
+        self.assertIn("**Barbell Back Squat**: 2 sets x 6-8 reps @ 100.0kg", content)
 
     @patch("urllib.request.urlopen")
     def test_post_workout_recommendation_thread_bot_token(self, mock_urlopen):
@@ -108,7 +155,7 @@ class TestDiscordService(unittest.TestCase):
         payload = json.loads(req.data.decode("utf-8"))
         self.assertIn("⚡ Workout: Upper Body A", payload["name"])
         self.assertIn("Incline Dumbbell Press", payload["message"]["content"])
-        self.assertIn("32.0kg", payload["message"]["content"])
+        self.assertIn("32.0kg/hand (32.0kg per dumbbell)", payload["message"]["content"])
 
     @patch("urllib.request.urlopen")
     def test_post_thread_adjustment_reply(self, mock_urlopen):

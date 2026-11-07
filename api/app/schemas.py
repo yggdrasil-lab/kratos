@@ -5,7 +5,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 Tracking = Literal["reps_weight", "reps_only", "duration", "completion", "distance_duration"]
 WeightBasis = Literal["total", "per_hand"]
@@ -310,7 +310,21 @@ class RecommendedExerciseItem(BaseModel):
     target_sets: int
     target_reps: str
     suggested_weight_kg: float | None = None
+    weight_basis: WeightBasis = "total"
     notes: str | None = None
+
+    @model_validator(mode="after")
+    def _infer_dumbbell_weight_basis(self) -> "RecommendedExerciseItem":
+        if self.weight_basis == "total":
+            lower_name = (self.exercise_name or "").lower()
+            if (
+                "dumbbell" in lower_name
+                or "db " in lower_name
+                or "per hand" in lower_name
+                or "per dumbbell" in lower_name
+            ):
+                self.weight_basis = "per_hand"
+        return self
 
 
 class WorkoutRecommendationRead(BaseModel):
