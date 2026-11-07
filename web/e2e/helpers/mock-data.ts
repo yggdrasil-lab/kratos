@@ -76,6 +76,32 @@ export const MOCK_ROUTINES = [
       },
     ],
   },
+  {
+    id: 'routine-lower-a',
+    name: 'Lower Body A',
+    notes: 'Squat and hinge focus',
+    extra: {},
+    items: [
+      {
+        id: 'ri-lower-1',
+        routine_id: 'routine-lower-a',
+        exercise_id: 'ex-squat',
+        position: 0,
+        target_sets: 3,
+        target_reps: 8,
+        target_weight_kg: 80,
+        target_duration_s: null,
+        notes: null,
+      },
+    ],
+  },
+  {
+    id: 'routine-badminton',
+    name: '🏸 Badminton Match Play',
+    notes: 'Court play session',
+    extra: {},
+    items: [],
+  },
 ]
 
 export const MOCK_SESSIONS = [

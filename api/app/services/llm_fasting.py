@@ -24,8 +24,11 @@ import logging
 import urllib.error
 import urllib.request
 
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
 from app.config import settings
-from app.models import WeeklyPlan
+from app.models import Routine, WeeklyPlan
 from app.schemas import FastingRecommendationRead
 from app.services.fasting_engine import generate_fasting_recommendation
 
@@ -61,19 +64,48 @@ def synthesize_fasting_recommendation_llm(
     biometrics: dict | None,
     recent_feedback: list[dict] | None = None,
     custom_context: str | None = None,
+    db: Session | None = None,
 ) -> FastingRecommendationRead:
     """Synthesizes a research-grounded, adaptive fasting recommendation via LLM, falling back to deterministic baseline if unavailable."""
-    # 1. Determine scheduled workout from plan
+    # 1. Determine scheduled workout from plan or database
     weekday_name = target_date.strftime("%a")
+    day_of_week = target_date.weekday()
     activity_name = "Rest Day"
     activity_type = "rest"
 
     if weekly_plan and weekly_plan.days:
         for day in weekly_plan.days:
-            if day.get("day") == weekday_name:
-                activity_name = day.get("activity", "Rest Day")
+            if day.get("day") == weekday_name or day.get("dayIndex") == day_of_week:
+                activity_name = day.get("activity") or day.get("sessionName", "Rest Day")
                 activity_type = day.get("type", "rest")
                 break
+    elif db is not None:
+        iso_year, iso_week, _ = target_date.isocalendar()
+        iso_week_str = f"{iso_year}-W{iso_week:02d}"
+        wp = db.scalar(
+            select(WeeklyPlan).where(
+                WeeklyPlan.iso_week == iso_week_str,
+                WeeklyPlan.deleted_at.is_(None),
+            )
+        )
+        if wp and wp.days:
+            for day in wp.days:
+                if day.get("day") == weekday_name or day.get("dayIndex") == day_of_week:
+                    activity_name = day.get("activity") or day.get("sessionName", "Rest Day")
+                    activity_type = day.get("type", "rest")
+                    break
+        else:
+            routines = list(
+                db.scalars(
+                    select(Routine)
+                    .where(Routine.deleted_at.is_(None))
+                    .order_by(Routine.name)
+                )
+            )
+            if routines:
+                routine = routines[day_of_week % len(routines)]
+                activity_name = routine.name
+                activity_type = "lift"
 
     # 2. Extract biometrics summary
     hrv = biometrics.get("hrv_ms") if biometrics else None
@@ -154,7 +186,7 @@ def synthesize_fasting_recommendation_llm(
         logger.warning("LLM fasting synthesis failed or timed out (%s); falling back to deterministic engine", exc)
 
     # Fallback to Tier 1 deterministic engine
-    baseline = generate_fasting_recommendation(target_date, weekly_plan, biometrics)
+    baseline = generate_fasting_recommendation(target_date, weekly_plan, biometrics, db=db)
     baseline.is_llm_generated = False
     baseline.research_citation = "Deterministic Baseline Engine"
     return baseline

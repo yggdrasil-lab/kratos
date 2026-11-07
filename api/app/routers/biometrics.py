@@ -155,7 +155,7 @@ def get_fasting_recommendation(
     except Exception as exc:
         logger.debug("Failed fetching Eir biometrics for fasting recommendation: %s", exc)
 
-    rec = synthesize_fasting_recommendation_llm(t_date, weekly_plan, biometrics)
+    rec = synthesize_fasting_recommendation_llm(t_date, weekly_plan, biometrics, db=db)
 
     # Dispatch starter thread to Discord #health forum if configured
     thread_id = None
@@ -230,6 +230,7 @@ def trigger_fasting_synthesis(
         weekly_plan=weekly_plan,
         biometrics=biometrics,
         custom_context=payload.custom_context,
+        db=db,
     )
 
     existing = db.scalar(
@@ -364,7 +365,7 @@ def get_workout_recommendation(
     except Exception as exc:
         logger.debug("Failed fetching Eir biometrics for workout recommendation: %s", exc)
 
-    rec = synthesize_workout_recommendation_llm(t_date, weekly_plan, biometrics)
+    rec = synthesize_workout_recommendation_llm(t_date, weekly_plan, biometrics, db=db)
 
     # Dispatch starter thread to Discord #health forum if configured
     thread_id = None
@@ -438,6 +439,7 @@ def trigger_workout_synthesis(
         weekly_plan=weekly_plan,
         biometrics=biometrics,
         custom_context=payload.custom_context,
+        db=db,
     )
 
     existing = db.scalar(

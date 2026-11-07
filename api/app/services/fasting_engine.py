@@ -7,7 +7,10 @@ Evaluates scheduled activity (lifting, badminton, rest) and live biometric recov
 from datetime import date
 from typing import Any
 
-from app.models import WeeklyPlan
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.models import Routine, WeeklyPlan
 from app.schemas import FastingRecommendationRead
 from app.services.jev_client import classify_fasting_window_jev
 
@@ -16,35 +19,67 @@ def generate_fasting_recommendation(
     target_date: date,
     weekly_plan: WeeklyPlan | None = None,
     biometrics: dict[str, Any] | None = None,
+    db: Session | None = None,
 ) -> FastingRecommendationRead:
     """Computes an autoregulated fasting protocol and fueling anchors for a calendar day."""
     day_of_week = target_date.weekday()  # 0 = Monday, ..., 6 = Sunday
+    weekday_name = target_date.strftime("%a")
     date_str = target_date.isoformat()
 
-    # 1. Resolve today's planned activity context
-    activity_type = "lift"
-    activity_name = "Training"
+    # 1. Resolve today's planned activity context from weekly_plan or PostgreSQL database
+    activity_type: str = "rest"
+    activity_name: str | None = None
+
     if weekly_plan and weekly_plan.days:
         for d in weekly_plan.days:
-            # dayIndex can match day_of_week, or list index
-            if d.get("dayIndex") == day_of_week or (d.get("dayIndex") is None and weekly_plan.days.index(d) == day_of_week):
+            # dayIndex can match day_of_week, day name, or list index
+            if d.get("day") == weekday_name or d.get("dayIndex") == day_of_week or (d.get("dayIndex") is None and weekly_plan.days.index(d) == day_of_week):
                 activity_type = d.get("type", "lift")
-                activity_name = d.get("sessionName", "Training")
+                activity_name = d.get("sessionName") or d.get("activity", "Training")
                 break
-    else:
-        # Canonical weekly split fallback
-        if day_of_week in (1, 3):  # Tuesday, Thursday
-            activity_type = "sport"
-            activity_name = "Badminton Match Play"
-        elif day_of_week == 4:  # Friday
+
+    if not activity_name and db is not None:
+        try:
+            iso_year, iso_week, _ = target_date.isocalendar()
+            iso_week_str = f"{iso_year}-W{iso_week:02d}"
+            wp = db.scalar(
+                select(WeeklyPlan).where(
+                    WeeklyPlan.iso_week == iso_week_str,
+                    WeeklyPlan.deleted_at.is_(None),
+                )
+            )
+            if wp and wp.days:
+                for d in wp.days:
+                    if d.get("day") == weekday_name or d.get("dayIndex") == day_of_week or (d.get("dayIndex") is None and wp.days.index(d) == day_of_week):
+                        activity_type = d.get("type", "lift")
+                        activity_name = d.get("sessionName") or d.get("activity", "Training")
+                        break
+
+            if not activity_name:
+                routines = list(
+                    db.scalars(
+                        select(Routine)
+                        .where(Routine.deleted_at.is_(None))
+                        .order_by(Routine.name)
+                    )
+                )
+                if routines:
+                    routine = routines[day_of_week % len(routines)]
+                    activity_type = "lift"
+                    activity_name = routine.name
+        except Exception:
+            pass
+
+    if not activity_name:
+        if day_of_week in (5, 6):
+            activity_type = "rest"
+            activity_name = "Weekend Social Baseline"
+        elif day_of_week == 4:
             activity_type = "rest"
             activity_name = "Rest and Reset"
-        elif day_of_week in (5, 6):  # Saturday, Sunday
-            activity_type = "rest" if day_of_week == 6 else "lift"
-            activity_name = "Active Recovery" if day_of_week == 6 else "Upper Body B"
         else:
-            activity_type = "lift"
-            activity_name = "Upper Body A" if day_of_week == 0 else "Lower Body A"
+            activity_type = "rest"
+            activity_name = "Rest Day"
 
     # 2. Evaluate autonomic recovery status from wearable telemetry
     bio = biometrics or {}

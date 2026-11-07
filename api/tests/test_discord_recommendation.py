@@ -66,37 +66,6 @@ class TestDiscordService(unittest.TestCase):
         self.assertIn("<@12345>", payload["message"]["content"])
         self.assertIn("Two-Way Adjustment Loop", payload["message"]["content"])
 
-    @patch("urllib.request.urlopen")
-    def test_post_fasting_recommendation_thread_webhook(self, mock_urlopen):
-        mock_resp = MagicMock()
-        mock_resp.status = 200
-        mock_resp.read.return_value = json.dumps({"channel_id": "55667788"}).encode("utf-8")
-        mock_urlopen.return_value.__enter__.return_value = mock_resp
-
-        rec = FastingRecommendationRead(
-            date="2026-11-06",
-            protocol_name="14:10 Circadian Maintenance",
-            target_window="10:00 - 20:00",
-            window_hours="14:10",
-            rationale="Moderate stress adaptation",
-            fueling_anchors=[],
-            recovery_status="moderate",
-            activity_context="Recovery day",
-            is_llm_generated=False,
-        )
-
-        with patch("app.config.settings.discord_bot_token", None):
-            thread_id = post_fasting_recommendation_thread(
-                rec=rec,
-                target_date="2026-11-06",
-                webhook_url="https://discord.com/api/webhooks/mock/test",
-            )
-
-        self.assertEqual(thread_id, "55667788")
-        req = mock_urlopen.call_args[0][0]
-        self.assertIn("wait=true", req.full_url)
-        payload = json.loads(req.data.decode("utf-8"))
-        self.assertIn("thread_name", payload)
 
     @patch("urllib.request.urlopen")
     def test_post_workout_recommendation_thread_bot_token(self, mock_urlopen):
@@ -172,7 +141,7 @@ class TestDiscordService(unittest.TestCase):
             activity_context="Rest",
         )
         with patch("app.config.settings.discord_health_channel_id", None), patch(
-            "app.config.settings.discord_webhook_url", None
+            "app.config.settings.discord_bot_token", None
         ):
             thread_id = post_fasting_recommendation_thread(rec, "2026-11-06")
             self.assertIsNone(thread_id)

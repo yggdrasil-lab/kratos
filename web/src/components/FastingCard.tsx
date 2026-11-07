@@ -56,31 +56,22 @@ export function FastingCard({
   const researchCitation = recommendation?.research_citation
 
   if (!recommendation) {
-    if (dayOfWeek === 4) {
-      protocolName = '18:6 Deep Metabolic Reset'
-      targetWindow = '18:6'
-      windowHours = '4:30 PM - 8:30 PM'
-      fuelingAnchors = [
-        'Morning: High water + black coffee + pink salt/electrolytes',
-        '04:30 PM: Break fast with dense protein + healthy fats',
-        'Goal: Deep fat oxidation after Thursday badminton glycogen burn',
-      ]
-    } else if (dayOfWeek === 1 || dayOfWeek === 3) {
-      protocolName = '16:8 Badminton Court Fueling'
-      targetWindow = '16:8'
-      windowHours = '12:00 PM - 9:30 PM'
-      fuelingAnchors = [
-        '12:00 PM: Balanced lunch with clean complex carbs',
-        '05:00 PM: Pre-court fuel (oats + whey, banana, electrolytes)',
-        '09:30 PM: Light protein shake after court (close window by 10 PM)',
-      ]
-    } else if (dayOfWeek === 5 || dayOfWeek === 6) {
+    if (dayOfWeek === 5 || dayOfWeek === 6) {
       protocolName = '14:10 Social Baseline'
       targetWindow = '14:10'
       windowHours = '10:30 AM - 8:30 PM'
       fuelingAnchors = [
         'Mindful portions with family and friends',
         'Prioritize hydration and avoid high-sugar snacks',
+      ]
+    } else {
+      protocolName = '16:8 Circadian Protocol'
+      targetWindow = '16:8'
+      windowHours = '12:00 PM - 8:00 PM'
+      fuelingAnchors = [
+        'Morning: High water intake and electrolyte hydration',
+        '12:00 PM: Balanced lunch with clean complex carbs and protein',
+        '07:00 PM: High-protein dinner (close window by 8:00 PM)',
       ]
     }
   }

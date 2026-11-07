@@ -13,7 +13,16 @@ from sqlalchemy.pool import StaticPool
 
 from app.db import Base, get_db
 from app.main import app
-from app.models import WeeklyPlan, WorkoutRecommendation
+from app.models import (
+    Exercise,
+    Routine,
+    RoutineItem,
+    Session as WorkoutSession,
+    SessionItem,
+    SetEntry,
+    WeeklyPlan,
+    WorkoutRecommendation,
+)
 from app.services.llm_workout import synthesize_workout_recommendation_llm
 from app.services.workout_engine import generate_workout_recommendation
 
@@ -27,8 +36,30 @@ class TestWorkoutEngine(unittest.TestCase):
         )
         WeeklyPlan.__table__.create(bind=self.engine)
         WorkoutRecommendation.__table__.create(bind=self.engine)
+        Exercise.__table__.create(bind=self.engine)
+        Routine.__table__.create(bind=self.engine)
+        RoutineItem.__table__.create(bind=self.engine)
+        WorkoutSession.__table__.create(bind=self.engine)
+        SessionItem.__table__.create(bind=self.engine)
+        SetEntry.__table__.create(bind=self.engine)
+
         self.SessionLocal = sessionmaker(bind=self.engine, autoflush=False, expire_on_commit=False)
         self.db = self.SessionLocal()
+
+        # Seed sample exercise and database routine
+        bench = Exercise(name="Bench Press", weight_basis="total", tracking="reps_weight")
+        db_routine = Routine(name="Upper Body A")
+        db_routine.items.append(
+            RoutineItem(
+                exercise=bench,
+                position=0,
+                target_sets=3,
+                target_reps=10,
+                target_weight_kg=60.0,
+            )
+        )
+        self.db.add_all([bench, db_routine])
+        self.db.commit()
 
         def override_get_db():
             session = self.SessionLocal()
@@ -42,6 +73,12 @@ class TestWorkoutEngine(unittest.TestCase):
 
     def tearDown(self):
         self.db.close()
+        SetEntry.__table__.drop(bind=self.engine)
+        SessionItem.__table__.drop(bind=self.engine)
+        WorkoutSession.__table__.drop(bind=self.engine)
+        RoutineItem.__table__.drop(bind=self.engine)
+        Routine.__table__.drop(bind=self.engine)
+        Exercise.__table__.drop(bind=self.engine)
         WorkoutRecommendation.__table__.drop(bind=self.engine)
         WeeklyPlan.__table__.drop(bind=self.engine)
         app.dependency_overrides.clear()
@@ -56,11 +93,15 @@ class TestWorkoutEngine(unittest.TestCase):
             "sleep_duration_hours": 5.1,
             "hrv_ms": 28.0,
         }
-        rec = generate_workout_recommendation(target_d, plan, biometrics)
+        rec = generate_workout_recommendation(target_d, plan, biometrics, db=self.db)
         self.assertEqual(rec.recovery_status, "fatigued")
         self.assertEqual(rec.volume_landmark, "MEV")
         self.assertIn("RIR 3-4", rec.target_rir)
         self.assertGreaterEqual(len(rec.exercises), 1)
+        self.assertEqual(rec.exercises[0].exercise_name, "Bench Press")
+        # Scaled down to MEV (3 sets -> 2 sets)
+        self.assertEqual(rec.exercises[0].target_sets, 2)
+        self.assertEqual(rec.exercises[0].suggested_weight_kg, 60.0)
 
     def test_workout_engine_sport_day(self):
         target_d = dt.date(2026, 11, 3)  # Tuesday
@@ -68,7 +109,7 @@ class TestWorkoutEngine(unittest.TestCase):
             iso_week="2026-W45",
             days=[{"day": "Tue", "activity": "Badminton Focus", "type": "sport"}],
         )
-        rec = generate_workout_recommendation(target_d, plan, None)
+        rec = generate_workout_recommendation(target_d, plan, None, db=self.db)
         self.assertIn("Badminton", rec.routine_name)
         self.assertIn("mobility", rec.readiness_adaptation.lower())
 
@@ -82,10 +123,32 @@ class TestWorkoutEngine(unittest.TestCase):
             "sleep_duration_hours": 8.0,
             "hrv_ms": 55.0,
         }
-        rec = generate_workout_recommendation(target_d, plan, biometrics)
+        rec = generate_workout_recommendation(target_d, plan, biometrics, db=self.db)
         self.assertEqual(rec.recovery_status, "optimal")
         self.assertEqual(rec.volume_landmark, "MAV")
         self.assertIn("RIR 1", rec.target_rir)
+        self.assertEqual(rec.exercises[0].target_sets, 3)
+
+    def test_workout_engine_empty_db_prompts_user(self):
+        # When no routines or plans exist in DB, zero fake exercises are generated
+        empty_engine = create_engine(
+            "sqlite:///:memory:",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        WeeklyPlan.__table__.create(bind=empty_engine)
+        Routine.__table__.create(bind=empty_engine)
+        EmptySession = sessionmaker(bind=empty_engine)
+        empty_db = EmptySession()
+        try:
+            target_d = dt.date(2026, 11, 2)
+            rec = generate_workout_recommendation(target_d, None, None, db=empty_db)
+            self.assertEqual(len(rec.exercises), 0)
+            self.assertIn("No routines configured", rec.readiness_adaptation)
+        finally:
+            empty_db.close()
+            Routine.__table__.drop(bind=empty_engine)
+            WeeklyPlan.__table__.drop(bind=empty_engine)
 
     @patch("urllib.request.urlopen")
     def test_workout_llm_synthesis_success(self, mock_urlopen):
@@ -125,6 +188,7 @@ class TestWorkoutEngine(unittest.TestCase):
             weekly_plan=None,
             biometrics={"hrv_ms": 32.0, "sleep_duration_hours": 6.0},
             custom_context="Left shoulder pinching",
+            db=self.db,
         )
         self.assertTrue(rec.is_llm_generated)
         self.assertEqual(rec.routine_name, "Upper Body A (Joint Sparing)")
@@ -138,9 +202,11 @@ class TestWorkoutEngine(unittest.TestCase):
             target_date=dt.date(2026, 11, 2),  # Monday (Lift day)
             weekly_plan=None,
             biometrics={"hrv_ms": 50.0, "sleep_duration_hours": 8.0},
+            db=self.db,
         )
         self.assertFalse(rec.is_llm_generated)
         self.assertEqual(rec.volume_landmark, "MAV")
+        self.assertEqual(rec.exercises[0].exercise_name, "Bench Press")
 
     @patch("urllib.request.urlopen")
     def test_workout_caching_and_synthesize_endpoint(self, mock_urlopen):

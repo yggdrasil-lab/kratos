@@ -956,6 +956,7 @@ export function App() {
         <EditSessionModal
           session={editingSession}
           routines={routines}
+          sessions={sessions}
           isOpen={editingSession !== null}
           onClose={() => setEditingSession(null)}
           onSave={handleUpdateSession}
