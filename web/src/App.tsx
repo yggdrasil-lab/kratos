@@ -336,6 +336,11 @@ export function App() {
             (recEx.exercise_id && e.id === recEx.exercise_id) ||
             e.name.toLowerCase() === recEx.exercise_name.toLowerCase()
         )
+        const isPerHand =
+          recEx.weight_basis === 'per_hand' ||
+          matchEx?.weight_basis === 'per_hand' ||
+          recEx.exercise_name.toLowerCase().includes('dumbbell') ||
+          recEx.exercise_name.toLowerCase().includes('db ')
         const targetSets = recEx.target_sets ?? 2
         return {
           id: newId(),
@@ -346,6 +351,7 @@ export function App() {
             target_sets: targetSets,
             target_reps: recEx.target_reps,
             target_weight_kg: recEx.suggested_weight_kg,
+            weight_basis: isPerHand ? 'per_hand' : 'total',
             custom_name: !matchEx ? recEx.exercise_name : undefined,
           },
           sets: Array.from({ length: targetSets }, (_, setIdx) => ({
@@ -801,14 +807,26 @@ export function App() {
                   {session.items.map((item, itemIdx) => {
                     const exercise = exercises.find((e) => e.id === item.exercise_id)
                     const exLabel = (item.extra?.custom_name as string) || exercise?.name || 'Unknown Exercise'
+                    const isPerHand =
+                      item.extra?.weight_basis === 'per_hand' ||
+                      exercise?.weight_basis === 'per_hand' ||
+                      exLabel.toLowerCase().includes('dumbbell') ||
+                      exLabel.toLowerCase().includes('db ')
                     const targetReps = (item.extra?.target_reps as number | null) ?? null
                     const targetWeight = (item.extra?.target_weight_kg as number | null) ?? null
                     return (
                       <div key={item.id} className="workout-item">
                         <div className="flex-between mb-3">
-                          <h3 className="text-lg font-bold text-slate-100 m-0">
-                            {exLabel}
-                          </h3>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="text-lg font-bold text-slate-100 m-0">
+                              {exLabel}
+                            </h3>
+                            {isPerHand && (
+                              <span className="text-[11px] px-2 py-0.5 rounded-md font-semibold bg-purple-500/15 text-purple-300">
+                                per hand
+                              </span>
+                            )}
+                          </div>
                           <Button
                             variant="danger"
                             size="xs"
@@ -823,7 +841,7 @@ export function App() {
                           {item.sets.length > 0 && (
                             <div className="set-row text-slate-400 text-xs pb-1">
                               <div className="text-center">SET</div>
-                              <div className="text-center">KG</div>
+                              <div className="text-center">{isPerHand ? 'KG / HAND' : 'KG'}</div>
                               <div className="text-center">REPS</div>
                               <div />
                             </div>
@@ -835,7 +853,15 @@ export function App() {
                               <input
                                 type="text"
                                 inputMode="decimal"
-                                placeholder={targetWeight !== null ? String(targetWeight) : 'Weight'}
+                                placeholder={
+                                  targetWeight !== null
+                                    ? isPerHand
+                                      ? `${targetWeight} per hand`
+                                      : String(targetWeight)
+                                    : isPerHand
+                                    ? 'Weight (per hand)'
+                                    : 'Weight'
+                                }
                                 value={set.weight_kg !== null ? set.weight_kg : ''}
                                 onChange={(e) =>
                                   updateSet(itemIdx, setIdx, 'weight_kg', e.target.value ? parseFloat(e.target.value) : null)

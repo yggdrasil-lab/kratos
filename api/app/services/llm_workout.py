@@ -25,7 +25,10 @@ from app.services.jev_client import (
     classify_recovery_state_jev,
     classify_workout_decision_gates,
 )
-from app.services.workout_engine import generate_workout_recommendation
+from app.services.workout_engine import (
+    generate_workout_recommendation,
+    resolve_exercise_weight_basis,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +40,7 @@ Your recommendations are grounded in four scientific pillars:
 4. Concurrent Interference Avoidance (Hickson / Hawley): Near badminton match play, spare the knee extensors and Achilles from heavy eccentric strain.
 
 When 'jev_decision_gates' indicates SHOULDER_SPARING, LUMBAR_SPARING, or KNEE_SPARING, strictly prioritize neutral-grip, chest-supported, or deloaded variations. When TIME_CRUNCH_30M is indicated, limit prescription to 2-3 high-impact exercises.
+For dumbbell exercises, set "weight_basis" to "per_hand" and specify "suggested_weight_kg" as the single-dumbbell weight per hand (e.g. 15.0 for 15kg per dumbbell, never the combined pair load). For barbell, machine, or cable total loads, set "weight_basis" to "total".
 
 You must respond ONLY with a valid JSON object matching this exact structure:
 {
@@ -50,7 +54,8 @@ You must respond ONLY with a valid JSON object matching this exact structure:
       "exercise_name": "string (e.g. 'Dumbbell Bench Press')",
       "target_sets": 2,
       "target_reps": "string (e.g. '8-10 reps')",
-      "suggested_weight_kg": 30.0,
+      "suggested_weight_kg": 15.0,
+      "weight_basis": "per_hand" | "total",
       "notes": "string (specific form, tempo, or joint-sparing cue, e.g. 'Controlled 3s eccentric, neutral grip to spare shoulder')"
     }
   ],
@@ -167,6 +172,10 @@ def synthesize_workout_recommendation_llm(
                             target_sets=int(ex.get("target_sets", 2)),
                             target_reps=str(ex.get("target_reps", "8-10 reps")),
                             suggested_weight_kg=float(ex["suggested_weight_kg"]) if ex.get("suggested_weight_kg") is not None else None,
+                            weight_basis=resolve_exercise_weight_basis(
+                                ex.get("exercise_name", "Exercise"),
+                                ex.get("weight_basis"),
+                            ),
                             notes=ex.get("notes"),
                         )
                         for ex in raw_exercises

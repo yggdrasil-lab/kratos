@@ -252,6 +252,7 @@ def build_mcp_server() -> MCPServer:
         tracking: str | None = None,
         equipment: str | None = None,
         mechanics: str | None = None,
+        weight_basis: str | None = None,
         primary_muscles: list[str] | None = None,
         secondary_muscles: list[str] | None = None,
         notes: str | None = None,
@@ -263,6 +264,8 @@ def build_mcp_server() -> MCPServer:
             fields["equipment"] = equipment
         if mechanics is not None:
             fields["mechanics"] = mechanics
+        if weight_basis is not None:
+            fields["weight_basis"] = weight_basis
         if primary_muscles is not None:
             fields["primary_muscles"] = primary_muscles
         if secondary_muscles is not None:
@@ -279,6 +282,7 @@ def build_mcp_server() -> MCPServer:
         tracking: str | None = None,
         equipment: str | None = None,
         mechanics: str | None = None,
+        weight_basis: str | None = None,
         primary_muscles: list[str] | None = None,
         secondary_muscles: list[str] | None = None,
         notes: str | None = None,
@@ -289,6 +293,7 @@ def build_mcp_server() -> MCPServer:
             "tracking": tracking,
             "equipment": equipment,
             "mechanics": mechanics,
+            "weight_basis": weight_basis,
             "primary_muscles": primary_muscles,
             "secondary_muscles": secondary_muscles,
             "notes": notes,

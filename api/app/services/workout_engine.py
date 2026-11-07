@@ -8,8 +8,23 @@ from datetime import date
 from typing import Literal
 
 from app.models import WeeklyPlan
-from app.schemas import RecommendedExerciseItem, WorkoutRecommendationRead
+from app.schemas import RecommendedExerciseItem, WeightBasis, WorkoutRecommendationRead
 from app.services.jev_client import classify_recovery_state_jev
+
+
+def resolve_exercise_weight_basis(
+    exercise_name: str,
+    explicit_basis: str | None = None,
+) -> WeightBasis:
+    """Determines whether an exercise's weight is specified per hand (per dumbbell) or total load."""
+    if explicit_basis == "per_hand":
+        return "per_hand"
+    lower_name = (exercise_name or "").lower()
+    if "dumbbell" in lower_name or "db " in lower_name or "per hand" in lower_name or "per dumbbell" in lower_name:
+        return "per_hand"
+    if explicit_basis == "total":
+        return "total"
+    return "total"
 
 
 def generate_workout_recommendation(
@@ -133,7 +148,8 @@ def generate_workout_recommendation(
                     exercise_name="Dumbbell Bench Press" if is_upper else "Leg Press",
                     target_sets=2,
                     target_reps="8-10 reps",
-                    suggested_weight_kg=30.0 if is_upper else 140.0,
+                    suggested_weight_kg=15.0 if is_upper else 140.0,
+                    weight_basis="per_hand" if is_upper else "total",
                     notes="Control 3s eccentric, keep 3 reps in reserve.",
                 ),
                 RecommendedExerciseItem(
@@ -161,7 +177,8 @@ def generate_workout_recommendation(
                     exercise_name="Dumbbell Bench Press" if is_upper else "Leg Press",
                     target_sets=2,
                     target_reps="8-10 reps",
-                    suggested_weight_kg=30.0 if is_upper else 140.0,
+                    suggested_weight_kg=15.0 if is_upper else 140.0,
+                    weight_basis="per_hand" if is_upper else "total",
                     notes="Standard working weight, stop 2 reps shy of failure.",
                 ),
                 RecommendedExerciseItem(
@@ -189,7 +206,8 @@ def generate_workout_recommendation(
                     exercise_name="Dumbbell Bench Press" if is_upper else "Leg Press",
                     target_sets=2,
                     target_reps="8-10 reps",
-                    suggested_weight_kg=30.0 if is_upper else 140.0,
+                    suggested_weight_kg=15.0 if is_upper else 140.0,
+                    weight_basis="per_hand" if is_upper else "total",
                     notes="Attempt +1 rep on first set if feeling strong.",
                 ),
                 RecommendedExerciseItem(
