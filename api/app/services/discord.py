@@ -156,6 +156,31 @@ def post_thread_adjustment_reply(
         return False
 
 
+def _find_existing_active_thread(title: str, channel_id: str) -> str | None:
+    """Checks active forum threads in the channel to prevent duplicate thread creation."""
+    bot_token = settings.discord_bot_token
+    if not bot_token or not channel_id:
+        return None
+
+    url = f"https://discord.com/api/v10/channels/{channel_id}/threads/active"
+    headers = _get_auth_headers(bot_token)
+    req = urllib.request.Request(url, headers=headers, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT_SECONDS) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            threads = data.get("threads", [])
+            target_name = title[:100].strip()
+            for th in threads:
+                th_name = str(th.get("name", "")).strip()
+                if th_name == target_name:
+                    thread_id = str(th.get("id"))
+                    logger.info("Reusing existing active Discord forum thread %s ('%s')", thread_id, target_name)
+                    return thread_id
+    except Exception as exc:
+        logger.warning("Discord API active threads lookup failed: %s", exc)
+    return None
+
+
 def _create_forum_thread(
     title: str,
     content: str,
@@ -164,6 +189,10 @@ def _create_forum_thread(
     bot_token = settings.discord_bot_token
     if not bot_token:
         return None
+
+    existing_id = _find_existing_active_thread(title, channel_id)
+    if existing_id:
+        return existing_id
 
     url = f"https://discord.com/api/v10/channels/{channel_id}/threads"
     headers = _get_auth_headers(bot_token)

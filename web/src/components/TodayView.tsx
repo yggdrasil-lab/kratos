@@ -22,6 +22,8 @@ interface TodayViewProps {
   onDeleteSession: (id: string) => Promise<void> | void
   onConfirmSession: (id: string) => Promise<void> | void
   onEditSession?: (session: SessionPayload) => void
+  isGeneratingWorkout?: boolean
+  isGeneratingFasting?: boolean
 }
 
 const WORKOUT_PILLARS = [
@@ -60,6 +62,8 @@ export function TodayView({
   onDeleteSession,
   onConfirmSession,
   onEditSession,
+  isGeneratingWorkout,
+  isGeneratingFasting,
 }: TodayViewProps) {
   const [selectedRoutineOverride, setSelectedRoutineOverride] = useState<Routine | null>(null)
   const [showRoutinePicker, setShowRoutinePicker] = useState<boolean>(false)
@@ -285,6 +289,7 @@ export function TodayView({
         recommendation={fastingRecommendation}
         onSaveCheckIn={onSaveFastingCheckIn}
         onSynthesizeRecommendation={onSynthesizeFastingRecommendation}
+        isGenerating={isGeneratingFasting}
       />
 
       {/* 3. Today's Training Card */}
@@ -295,6 +300,11 @@ export function TodayView({
               <span className="text-xs text-sky-400 font-semibold uppercase">
                 Today's Training
               </span>
+              {isGeneratingWorkout && (
+                <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold bg-amber-500/25 text-amber-300 animate-pulse">
+                  ⚡ Synthesizing AI Training...
+                </span>
+              )}
               {workoutRecommendation?.is_llm_generated && (
                 <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold bg-blue-500/25 text-blue-300">
                   ⚡ AI Autoregulated
@@ -332,6 +342,13 @@ export function TodayView({
             </Button>
           </div>
         </div>
+
+        {isGeneratingWorkout && !workoutRecommendation && (
+          <div className="bg-sky-500/10 border border-sky-500/20 rounded-xl p-3 mb-4 text-xs text-sky-200 flex items-center gap-2 animate-pulse">
+            <span className="text-sm">⏳</span>
+            <span>Synthesizing today's autoregulated training prescription and Discord thread...</span>
+          </div>
+        )}
 
         {/* Readiness Adaptation Banner */}
         {workoutRecommendation && (
