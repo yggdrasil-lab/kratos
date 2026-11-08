@@ -74,6 +74,8 @@ export function App() {
   const [biometrics, setBiometrics] = useState<DailyBiometrics | null>(null)
   const [fastingRecommendation, setFastingRecommendation] = useState<FastingRecommendation | null>(null)
   const [workoutRecommendation, setWorkoutRecommendation] = useState<WorkoutRecommendation | null>(null)
+  const [isGeneratingFasting, setIsGeneratingFasting] = useState<boolean>(false)
+  const [isGeneratingWorkout, setIsGeneratingWorkout] = useState<boolean>(false)
   const [fastingLogs, setFastingLogs] = useState<FastingCheckIn[]>([])
   const [session, setSession] = useState<SessionPayload | null>(null)
   const [showExercisePicker, setShowExercisePicker] = useState<boolean>(false)
@@ -139,11 +141,13 @@ export function App() {
   }
 
   const loadBiometrics = async () => {
+    setIsGeneratingFasting(true)
+    setIsGeneratingWorkout(true)
     try {
       const [data, rec, workoutRec] = await Promise.all([
         api.getBiometricsToday(),
-        api.getFastingRecommendation(),
-        api.getWorkoutRecommendation(),
+        api.getFastingRecommendation().finally(() => setIsGeneratingFasting(false)),
+        api.getWorkoutRecommendation().finally(() => setIsGeneratingWorkout(false)),
       ])
       if (rec) {
         setFastingRecommendation(rec)
@@ -183,6 +187,9 @@ export function App() {
         })
       }
       void reportClientError(err, { source: 'biometrics_fetch' })
+    } finally {
+      setIsGeneratingFasting(false)
+      setIsGeneratingWorkout(false)
     }
   }
 
@@ -540,6 +547,7 @@ export function App() {
   }
 
   const handleSynthesizeFastingRecommendation = async (customContext?: string) => {
+    setIsGeneratingFasting(true)
     try {
       const updated = await api.synthesizeFastingRecommendation(customContext, circadianDate)
       if (updated) {
@@ -551,10 +559,13 @@ export function App() {
       }
       void reportClientError(err, { source: 'fasting_synthesis' })
       throw err
+    } finally {
+      setIsGeneratingFasting(false)
     }
   }
 
   const handleSynthesizeWorkoutRecommendation = async (customContext?: string) => {
+    setIsGeneratingWorkout(true)
     try {
       const updated = await api.synthesizeWorkoutRecommendation(customContext, circadianDate)
       if (updated) {
@@ -566,6 +577,8 @@ export function App() {
       }
       void reportClientError(err, { source: 'workout_synthesis' })
       throw err
+    } finally {
+      setIsGeneratingWorkout(false)
     }
   }
 
@@ -961,6 +974,8 @@ export function App() {
                 onDeleteSession={handleDeleteSession}
                 onConfirmSession={handleConfirmSession}
                 onEditSession={setEditingSession}
+                isGeneratingWorkout={isGeneratingWorkout}
+                isGeneratingFasting={isGeneratingFasting}
               />
             )}
           </>

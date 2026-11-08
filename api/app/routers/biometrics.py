@@ -7,6 +7,7 @@ Eir service over the aether-net Swarm overlay network. Fails gracefully if Eir i
 from datetime import datetime, timezone, timedelta
 import json
 import logging
+import threading
 import urllib.error
 import urllib.request
 from typing import Any
@@ -39,6 +40,62 @@ from app.services.workout_engine import resolve_exercise_weight_basis
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/biometrics", tags=["biometrics"])
+
+_RECOMMENDATION_LOCKS_MUTEX = threading.Lock()
+_WORKOUT_DATE_LOCKS: dict[str, threading.Lock] = {}
+_FASTING_DATE_LOCKS: dict[str, threading.Lock] = {}
+
+
+def _get_lock_for_date(store: dict[str, threading.Lock], date_key: str) -> threading.Lock:
+    with _RECOMMENDATION_LOCKS_MUTEX:
+        if date_key not in store:
+            store[date_key] = threading.Lock()
+        return store[date_key]
+
+
+def _format_fasting_cached(cached: FastingRecommendation) -> FastingRecommendationRead:
+    return FastingRecommendationRead(
+        date=cached.date,
+        protocol_name=cached.protocol_name,
+        target_window=cached.target_window,
+        window_hours=cached.window_hours,
+        rationale=cached.rationale,
+        fueling_anchors=cached.fueling_anchors,
+        recovery_status=cached.recovery_status,
+        activity_context=cached.activity_context,
+        is_llm_generated=cached.is_llm_generated,
+        research_citation=cached.research_citation,
+        extra=cached.extra or {},
+    )
+
+
+def _format_workout_cached(cached: WorkoutRecommendation) -> WorkoutRecommendationRead:
+    return WorkoutRecommendationRead(
+        date=cached.date,
+        routine_name=cached.routine_name,
+        readiness_adaptation=cached.readiness_adaptation,
+        target_rir=cached.target_rir,
+        volume_landmark=cached.volume_landmark,
+        rationale=cached.rationale,
+        exercises=[
+            RecommendedExerciseItem(
+                exercise_name=ex.get("exercise_name", "Exercise"),
+                target_sets=int(ex.get("target_sets", 2)),
+                target_reps=str(ex.get("target_reps", "8-10 reps")),
+                suggested_weight_kg=float(ex["suggested_weight_kg"]) if ex.get("suggested_weight_kg") is not None else None,
+                weight_basis=resolve_exercise_weight_basis(
+                    ex.get("exercise_name", "Exercise"),
+                    ex.get("weight_basis"),
+                ),
+                notes=ex.get("notes"),
+            )
+            for ex in cached.exercises
+        ],
+        recovery_status=cached.recovery_status,
+        research_citation=cached.research_citation,
+        is_llm_generated=cached.is_llm_generated,
+        extra=cached.extra or {},
+    )
 
 
 class FastingCheckInPayload(BaseModel):
@@ -121,77 +178,77 @@ def get_fasting_recommendation(
         )
     )
     if cached:
-        return FastingRecommendationRead(
-            date=cached.date,
-            protocol_name=cached.protocol_name,
-            target_window=cached.target_window,
-            window_hours=cached.window_hours,
-            rationale=cached.rationale,
-            fueling_anchors=cached.fueling_anchors,
-            recovery_status=cached.recovery_status,
-            activity_context=cached.activity_context,
-            is_llm_generated=cached.is_llm_generated,
-            research_citation=cached.research_citation,
-            extra=cached.extra or {},
+        return _format_fasting_cached(cached)
+
+    lock = _get_lock_for_date(_FASTING_DATE_LOCKS, date_str)
+    with lock:
+        db.expire_all()
+        cached = db.scalar(
+            select(FastingRecommendation).where(
+                FastingRecommendation.date == date_str,
+                FastingRecommendation.deleted_at.is_(None),
+            )
+        )
+        if cached:
+            return _format_fasting_cached(cached)
+
+        # Query weekly plan for this date
+        iso_year, iso_week, _ = t_date.isocalendar()
+        iso_week_str = f"{iso_year}-W{iso_week:02d}"
+        weekly_plan = db.scalar(
+            select(WeeklyPlan).where(
+                WeeklyPlan.iso_week == iso_week_str,
+                WeeklyPlan.deleted_at.is_(None),
+            )
         )
 
-    # Query weekly plan for this date
-    iso_year, iso_week, _ = t_date.isocalendar()
-    iso_week_str = f"{iso_year}-W{iso_week:02d}"
-    weekly_plan = db.scalar(
-        select(WeeklyPlan).where(
-            WeeklyPlan.iso_week == iso_week_str,
-            WeeklyPlan.deleted_at.is_(None),
+        # Fetch biometrics for this date from Eir
+        biometrics = None
+        url = f"{settings.eir_internal_url}/biometrics/daily/{date_str}"
+        req = urllib.request.Request(url, headers={"User-Agent": "Kratos-Bridge/1.0"})
+        try:
+            with urllib.request.urlopen(req, timeout=2.0) as resp:
+                if resp.status == 200:
+                    biometrics = json.loads(resp.read().decode("utf-8"))
+        except Exception as exc:
+            logger.debug("Failed fetching Eir biometrics for fasting recommendation: %s", exc)
+
+        rec = synthesize_fasting_recommendation_llm(t_date, weekly_plan, biometrics, db=db)
+
+        # Dispatch starter thread to Discord #health forum if configured
+        thread_id = None
+        try:
+            thread_id = post_fasting_recommendation_thread(rec, date_str)
+        except Exception as exc:
+            logger.warning("Failed creating Discord thread for fasting recommendation: %s", exc)
+
+        extra_payload: dict[str, Any] = {"source": "llm"}
+        if thread_id:
+            extra_payload["discord_thread_id"] = str(thread_id)
+
+        # Cache recommendation for today
+        record = FastingRecommendation(
+            date=date_str,
+            protocol_name=rec.protocol_name,
+            target_window=rec.target_window,
+            window_hours=rec.window_hours,
+            rationale=rec.rationale,
+            fueling_anchors=rec.fueling_anchors,
+            recovery_status=rec.recovery_status,
+            activity_context=rec.activity_context,
+            is_llm_generated=rec.is_llm_generated,
+            research_citation=rec.research_citation,
+            extra=extra_payload,
         )
-    )
+        db.add(record)
+        try:
+            db.commit()
+        except Exception as exc:
+            db.rollback()
+            logger.debug("Failed saving fasting recommendation cache: %s", exc)
 
-    # Fetch biometrics for this date from Eir
-    biometrics = None
-    url = f"{settings.eir_internal_url}/biometrics/daily/{date_str}"
-    req = urllib.request.Request(url, headers={"User-Agent": "Kratos-Bridge/1.0"})
-    try:
-        with urllib.request.urlopen(req, timeout=2.0) as resp:
-            if resp.status == 200:
-                biometrics = json.loads(resp.read().decode("utf-8"))
-    except Exception as exc:
-        logger.debug("Failed fetching Eir biometrics for fasting recommendation: %s", exc)
-
-    rec = synthesize_fasting_recommendation_llm(t_date, weekly_plan, biometrics, db=db)
-
-    # Dispatch starter thread to Discord #health forum if configured
-    thread_id = None
-    try:
-        thread_id = post_fasting_recommendation_thread(rec, date_str)
-    except Exception as exc:
-        logger.warning("Failed creating Discord thread for fasting recommendation: %s", exc)
-
-    extra_payload: dict[str, Any] = {"source": "llm"}
-    if thread_id:
-        extra_payload["discord_thread_id"] = str(thread_id)
-
-    # Cache recommendation for today
-    record = FastingRecommendation(
-        date=date_str,
-        protocol_name=rec.protocol_name,
-        target_window=rec.target_window,
-        window_hours=rec.window_hours,
-        rationale=rec.rationale,
-        fueling_anchors=rec.fueling_anchors,
-        recovery_status=rec.recovery_status,
-        activity_context=rec.activity_context,
-        is_llm_generated=rec.is_llm_generated,
-        research_citation=rec.research_citation,
-        extra=extra_payload,
-    )
-    db.add(record)
-    try:
-        db.commit()
-    except Exception as exc:
-        db.rollback()
-        logger.debug("Failed saving fasting recommendation cache: %s", exc)
-
-    rec.extra = extra_payload
-    return rec
+        rec.extra = extra_payload
+        return rec
 
 
 @router.post("/fasting-recommendation/synthesize", response_model=FastingRecommendationRead)
@@ -324,87 +381,74 @@ def get_workout_recommendation(
         )
     )
     if cached:
-        return WorkoutRecommendationRead(
-            date=cached.date,
-            routine_name=cached.routine_name,
-            readiness_adaptation=cached.readiness_adaptation,
-            target_rir=cached.target_rir,
-            volume_landmark=cached.volume_landmark,
-            rationale=cached.rationale,
-            exercises=[
-                RecommendedExerciseItem(
-                    exercise_name=ex.get("exercise_name", "Exercise"),
-                    target_sets=int(ex.get("target_sets", 2)),
-                    target_reps=str(ex.get("target_reps", "8-10 reps")),
-                    suggested_weight_kg=float(ex["suggested_weight_kg"]) if ex.get("suggested_weight_kg") is not None else None,
-                    weight_basis=resolve_exercise_weight_basis(
-                        ex.get("exercise_name", "Exercise"),
-                        ex.get("weight_basis"),
-                    ),
-                    notes=ex.get("notes"),
-                )
-                for ex in cached.exercises
-            ],
-            recovery_status=cached.recovery_status,
-            research_citation=cached.research_citation,
-            is_llm_generated=cached.is_llm_generated,
-            extra=cached.extra or {},
+        return _format_workout_cached(cached)
+
+    lock = _get_lock_for_date(_WORKOUT_DATE_LOCKS, date_str)
+    with lock:
+        db.expire_all()
+        cached = db.scalar(
+            select(WorkoutRecommendation).where(
+                WorkoutRecommendation.date == date_str,
+                WorkoutRecommendation.deleted_at.is_(None),
+            )
+        )
+        if cached:
+            return _format_workout_cached(cached)
+
+        iso_year, iso_week, _ = t_date.isocalendar()
+        iso_week_str = f"{iso_year}-W{iso_week:02d}"
+        weekly_plan = db.scalar(
+            select(WeeklyPlan).where(
+                WeeklyPlan.iso_week == iso_week_str,
+                WeeklyPlan.deleted_at.is_(None),
+            )
         )
 
-    iso_year, iso_week, _ = t_date.isocalendar()
-    iso_week_str = f"{iso_year}-W{iso_week:02d}"
-    weekly_plan = db.scalar(
-        select(WeeklyPlan).where(
-            WeeklyPlan.iso_week == iso_week_str,
-            WeeklyPlan.deleted_at.is_(None),
+        biometrics = None
+        url = f"{settings.eir_internal_url}/biometrics/daily/{date_str}"
+        req = urllib.request.Request(url, headers={"User-Agent": "Kratos-Bridge/1.0"})
+        try:
+            with urllib.request.urlopen(req, timeout=2.0) as resp:
+                if resp.status == 200:
+                    biometrics = json.loads(resp.read().decode("utf-8"))
+        except Exception as exc:
+            logger.debug("Failed fetching Eir biometrics for workout recommendation: %s", exc)
+
+        rec = synthesize_workout_recommendation_llm(t_date, weekly_plan, biometrics, db=db)
+
+        # Dispatch starter thread to Discord #health forum if configured
+        thread_id = None
+        try:
+            thread_id = post_workout_recommendation_thread(rec, date_str)
+        except Exception as exc:
+            logger.warning("Failed creating Discord thread for workout recommendation: %s", exc)
+
+        extra_payload: dict[str, Any] = {"source": "llm"}
+        if thread_id:
+            extra_payload["discord_thread_id"] = str(thread_id)
+
+        record = WorkoutRecommendation(
+            date=date_str,
+            routine_name=rec.routine_name,
+            readiness_adaptation=rec.readiness_adaptation,
+            target_rir=rec.target_rir,
+            volume_landmark=rec.volume_landmark,
+            rationale=rec.rationale,
+            exercises=[ex.model_dump() for ex in rec.exercises],
+            recovery_status=rec.recovery_status,
+            research_citation=rec.research_citation,
+            is_llm_generated=rec.is_llm_generated,
+            extra=extra_payload,
         )
-    )
+        db.add(record)
+        try:
+            db.commit()
+        except Exception as exc:
+            db.rollback()
+            logger.debug("Failed saving workout recommendation cache: %s", exc)
 
-    biometrics = None
-    url = f"{settings.eir_internal_url}/biometrics/daily/{date_str}"
-    req = urllib.request.Request(url, headers={"User-Agent": "Kratos-Bridge/1.0"})
-    try:
-        with urllib.request.urlopen(req, timeout=2.0) as resp:
-            if resp.status == 200:
-                biometrics = json.loads(resp.read().decode("utf-8"))
-    except Exception as exc:
-        logger.debug("Failed fetching Eir biometrics for workout recommendation: %s", exc)
-
-    rec = synthesize_workout_recommendation_llm(t_date, weekly_plan, biometrics, db=db)
-
-    # Dispatch starter thread to Discord #health forum if configured
-    thread_id = None
-    try:
-        thread_id = post_workout_recommendation_thread(rec, date_str)
-    except Exception as exc:
-        logger.warning("Failed creating Discord thread for workout recommendation: %s", exc)
-
-    extra_payload: dict[str, Any] = {"source": "llm"}
-    if thread_id:
-        extra_payload["discord_thread_id"] = str(thread_id)
-
-    record = WorkoutRecommendation(
-        date=date_str,
-        routine_name=rec.routine_name,
-        readiness_adaptation=rec.readiness_adaptation,
-        target_rir=rec.target_rir,
-        volume_landmark=rec.volume_landmark,
-        rationale=rec.rationale,
-        exercises=[ex.model_dump() for ex in rec.exercises],
-        recovery_status=rec.recovery_status,
-        research_citation=rec.research_citation,
-        is_llm_generated=rec.is_llm_generated,
-        extra=extra_payload,
-    )
-    db.add(record)
-    try:
-        db.commit()
-    except Exception as exc:
-        db.rollback()
-        logger.debug("Failed saving workout recommendation cache: %s", exc)
-
-    rec.extra = extra_payload
-    return rec
+        rec.extra = extra_payload
+        return rec
 
 
 @router.post("/workout-recommendation/synthesize", response_model=WorkoutRecommendationRead)

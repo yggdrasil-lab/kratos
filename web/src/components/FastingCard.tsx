@@ -10,6 +10,7 @@ interface FastingCardProps {
   recommendation?: FastingRecommendation | null
   onSaveCheckIn: (checkIn: FastingCheckIn) => void
   onSynthesizeRecommendation?: (customContext?: string) => Promise<void>
+  isGenerating?: boolean
 }
 
 const FASTING_PILLARS = [
@@ -38,6 +39,7 @@ export function FastingCard({
   recommendation,
   onSaveCheckIn,
   onSynthesizeRecommendation,
+  isGenerating,
 }: FastingCardProps) {
   const [showModal, setShowModal] = useState<boolean>(false)
   const [showAiModal, setShowAiModal] = useState<boolean>(false)
@@ -112,6 +114,11 @@ export function FastingCard({
                     {recoveryStatus === 'fatigued' ? '🔴 Autoregulated' : recoveryStatus === 'moderate' ? '🟡 Moderate' : '🟢 Primed'}
                   </span>
                 )}
+                {isGenerating && (
+                  <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold bg-amber-500/25 text-amber-300 animate-pulse">
+                    ⚡ Synthesizing AI Protocol...
+                  </span>
+                )}
                 {isLlmGenerated && (
                   <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold bg-blue-500/25 text-blue-300">
                     ⚡ AI Synthesized
@@ -151,6 +158,13 @@ export function FastingCard({
             )}
           </div>
         </div>
+
+        {isGenerating && !recommendation && (
+          <div className="bg-sky-500/10 border border-sky-500/20 rounded-xl p-3 mb-3 text-xs text-sky-200 flex items-center gap-2 animate-pulse">
+            <span className="text-sm">⏳</span>
+            <span>Synthesizing today's circadian fasting protocol and Discord thread...</span>
+          </div>
+        )}
 
         {/* Target Window Bar */}
         <div className="bg-background/70 rounded-xl px-3.5 py-2.5 mb-3 flex justify-between items-center border border-border/50">

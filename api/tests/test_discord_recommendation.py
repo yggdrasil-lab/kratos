@@ -115,6 +115,42 @@ class TestDiscordService(unittest.TestCase):
         self.assertIn("**Barbell Back Squat**: 2 sets x 6-8 reps @ 100.0kg", content)
 
     @patch("urllib.request.urlopen")
+    def test_post_workout_recommendation_thread_reuses_existing_active_thread(self, mock_urlopen):
+        mock_active_resp = MagicMock()
+        mock_active_resp.status = 200
+        mock_active_resp.read.return_value = json.dumps({
+            "threads": [
+                {"id": "existing_thread_7788", "name": "⚡ Workout: Upper Body A - MEV (2026-11-08)"}
+            ]
+        }).encode("utf-8")
+        mock_urlopen.return_value.__enter__.return_value = mock_active_resp
+
+        rec = WorkoutRecommendationRead(
+            date="2026-11-08",
+            routine_name="Upper Body A",
+            readiness_adaptation="Maintain volume",
+            target_rir="RIR 2",
+            volume_landmark="MEV",
+            rationale="Restored baseline",
+            exercises=[],
+            recovery_status="optimal",
+            is_llm_generated=True,
+        )
+
+        with patch("app.config.settings.discord_bot_token", "test-bot-token"):
+            thread_id = post_workout_recommendation_thread(
+                rec=rec,
+                target_date="2026-11-08",
+                channel_id="99887766",
+            )
+
+        self.assertEqual(thread_id, "existing_thread_7788")
+        self.assertEqual(mock_urlopen.call_count, 1)
+        req = mock_urlopen.call_args[0][0]
+        self.assertIn("https://discord.com/api/v10/channels/99887766/threads/active", req.full_url)
+        self.assertEqual(req.get_method(), "GET")
+
+    @patch("urllib.request.urlopen")
     def test_post_workout_recommendation_thread_bot_token(self, mock_urlopen):
         mock_resp = MagicMock()
         mock_resp.status = 200
