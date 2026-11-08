@@ -239,12 +239,20 @@ def generate_workout_recommendation(
                     if recovery_status == "moderate"
                     else "Attempt +1 rep or micro-overload on first set if feeling strong."
                 )
+                if recovery_status == "fatigued" and notes and "hold to failure" in notes.lower():
+                    notes = "Hold with RIR 3-4, stopping before form breaks down."
+
+                target_reps = (
+                    f"{item.target_duration_s}s hold"
+                    if item.target_duration_s
+                    else (f"{item.target_reps} reps" if item.target_reps else "8-10 reps")
+                )
 
                 exercises.append(
                     RecommendedExerciseItem(
                         exercise_name=item.exercise.name,
                         target_sets=target_sets,
-                        target_reps=f"{item.target_reps} reps" if item.target_reps else "8-10 reps",
+                        target_reps=target_reps,
                         suggested_weight_kg=suggested_weight,
                         weight_basis=basis,
                         notes=notes,
