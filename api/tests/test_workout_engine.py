@@ -103,6 +103,34 @@ class TestWorkoutEngine(unittest.TestCase):
         self.assertEqual(rec.exercises[0].target_sets, 2)
         self.assertEqual(rec.exercises[0].suggested_weight_kg, 60.0)
 
+    def test_duration_exercise_and_fatigued_notes(self):
+        plank = Exercise(name="Plank", weight_basis="total", tracking="duration")
+        plank_routine = Routine(name="Core Session")
+        plank_routine.items.append(
+            RoutineItem(
+                exercise=plank,
+                position=0,
+                target_sets=2,
+                target_duration_s=60,
+                notes="Hold to failure.",
+            )
+        )
+        self.db.add_all([plank, plank_routine])
+        self.db.commit()
+
+        target_d = dt.date(2026, 11, 2)
+        plan = WeeklyPlan(
+            iso_week="2026-W45",
+            days=[{"day": "Mon", "activity": "Core Session", "type": "lift"}],
+        )
+        biometrics = {"sleep_duration_hours": 5.0, "hrv_ms": 25.0}
+        rec = generate_workout_recommendation(target_d, plan, biometrics, db=self.db)
+        self.assertEqual(rec.exercises[0].target_reps, "60s hold")
+        self.assertIsNotNone(rec.exercises[0].notes)
+        assert rec.exercises[0].notes is not None
+        self.assertIn("RIR 3-4", rec.exercises[0].notes)
+        self.assertNotIn("Hold to failure.", rec.exercises[0].notes)
+
     def test_workout_engine_sport_day(self):
         target_d = dt.date(2026, 11, 3)  # Tuesday
         plan = WeeklyPlan(
