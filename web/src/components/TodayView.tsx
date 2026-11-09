@@ -106,28 +106,14 @@ export function TodayView({
     ? routines.find((r) => r.name.toLowerCase() === recommendedRoutineName.toLowerCase()) || null
     : null
 
-  const isSportDay = Boolean(
-    workoutRecommendation &&
-      (workoutRecommendation.volume_landmark === 'Sport Fueling' ||
-        /badminton|sport|court|match|tennis|squash|running|cardio/i.test(workoutRecommendation.routine_name))
-  )
-
-  const isRestDay = Boolean(
-    workoutRecommendation &&
-      !isSportDay &&
-      (/rest|recovery/i.test(workoutRecommendation.routine_name) ||
-        workoutRecommendation.volume_landmark === 'Deload' ||
-        (workoutRecommendation.exercises.length === 0 && !matchedRecommendedRoutine))
-  )
-
-  const isNonLiftingDay = isSportDay || isRestDay
-
-  // When a recommendation exists for today, do NOT fall back to day-of-week routines unless user explicitly overrides
+  // If the recommended routine is not found or has no routine exercises, defaultRoutine is null
   const defaultRoutine: Routine | null =
-    isNonLiftingDay
-      ? null
-      : matchedRecommendedRoutine ||
-        (!workoutRecommendation && routines.length > 0 ? routines[dayOfWeek % routines.length] : null)
+    matchedRecommendedRoutine &&
+    matchedRecommendedRoutine.items &&
+    matchedRecommendedRoutine.items.length > 0 &&
+    (!workoutRecommendation || (workoutRecommendation.exercises && workoutRecommendation.exercises.length > 0))
+      ? matchedRecommendedRoutine
+      : null
 
   const activeRoutine = selectedRoutineOverride || defaultRoutine
 
@@ -135,10 +121,10 @@ export function TodayView({
     ? selectedRoutineOverride.name
     : workoutRecommendation?.routine_name || activeRoutine?.name || 'Rest & Recovery'
 
-  const daySubtitle = isSportDay && !selectedRoutineOverride
-    ? `${workoutRecommendation?.volume_landmark || 'Sport Fueling'} • Match play & anaerobic preservation`
-    : isRestDay && !selectedRoutineOverride
-    ? 'Full systemic recovery • Active tissue remodeling & mobility'
+  const daySubtitle = selectedRoutineOverride
+    ? selectedRoutineOverride.items && selectedRoutineOverride.items.length > 0
+      ? `${selectedRoutineOverride.items.length} exercises configured`
+      : 'No exercises configured'
     : workoutRecommendation?.exercises && workoutRecommendation.exercises.length > 0
     ? `${workoutRecommendation.exercises.length} autoregulated exercises`
     : activeRoutine?.items && activeRoutine.items.length > 0
@@ -502,66 +488,6 @@ export function TodayView({
           </div>
         ) : null}
 
-        {/* Sport Day Protocol Details */}
-        {isSportDay && !selectedRoutineOverride && (
-          <div className="bg-sky-500/10 border border-sky-500/20 rounded-xl p-4 mb-5 space-y-3">
-            <div className="flex items-center gap-2">
-              <span className="text-xl">🏸</span>
-              <div>
-                <h4 className="text-sm font-semibold text-sky-200 m-0">
-                  {workoutRecommendation?.routine_name || 'Sport Session'} • Fueling & Readiness
-                </h4>
-                <span className="text-[11px] text-sky-300/80">
-                  {workoutRecommendation?.volume_landmark || 'Sport Fueling'} • {workoutRecommendation?.target_rir || 'Preserve Court Freshness'}
-                </span>
-              </div>
-            </div>
-            <p className="text-xs text-slate-300 m-0 leading-relaxed">
-              No resistance lifting scheduled today. Lower-body volume is withheld to avoid eccentric muscle damage and concurrent interference before match play.
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 text-xs">
-              <div className="bg-background/60 rounded-lg p-2.5 border border-border/50">
-                <span className="font-semibold text-slate-200 block mb-0.5">⚡ Court Readiness</span>
-                <span className="text-slate-400">Prioritize dynamic warm-up, shoulder rotators, and ankle mobility before hitting the court.</span>
-              </div>
-              <div className="bg-background/60 rounded-lg p-2.5 border border-border/50">
-                <span className="font-semibold text-slate-200 block mb-0.5">🍌 Glycogen & Fueling</span>
-                <span className="text-slate-400">Align with the fasting window above. Hydrate with electrolytes and fuel with easily digestible carbs pre-match.</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Rest Day Recovery Details */}
-        {isRestDay && !selectedRoutineOverride && (
-          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 mb-5 space-y-3">
-            <div className="flex items-center gap-2">
-              <span className="text-xl">🧘</span>
-              <div>
-                <h4 className="text-sm font-semibold text-emerald-200 m-0">
-                  {workoutRecommendation?.routine_name || 'Rest & Recovery'}
-                </h4>
-                <span className="text-[11px] text-emerald-300/80">
-                  {workoutRecommendation?.volume_landmark || 'Deload'} • Systemic Regeneration
-                </span>
-              </div>
-            </div>
-            <p className="text-xs text-slate-300 m-0 leading-relaxed">
-              Full recovery day to allow tissue remodeling, tendon adaptation, and central nervous system down-regulation.
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 text-xs">
-              <div className="bg-background/60 rounded-lg p-2.5 border border-border/50">
-                <span className="font-semibold text-slate-200 block mb-0.5">🚶 Active Recovery</span>
-                <span className="text-slate-400">Low-intensity zone 1 walking, diaphragmatic breathing, or light spinal hygiene (McGill Big 3).</span>
-              </div>
-              <div className="bg-background/60 rounded-lg p-2.5 border border-border/50">
-                <span className="font-semibold text-slate-200 block mb-0.5">😴 Sleep & Rebuilding</span>
-                <span className="text-slate-400">Maintain consistent circadian bedtime and protein synthesis for overnight tissue repair.</span>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Research Grounding Accordion */}
         {workoutRecommendation?.research_citation && (
           <CollapsibleSection
@@ -587,28 +513,11 @@ export function TodayView({
           >
             Start Workout ({workoutRecommendation?.routine_name || activeRoutine?.name || 'Session'})
           </Button>
-        ) : isSportDay && !selectedRoutineOverride ? (
-          <div className="text-center p-2">
-            <p className="text-xs text-slate-400 m-0">
-              Sport day in effect. To log an unscheduled lifting session instead, tap <strong className="text-slate-300">Swap Split</strong> above.
-            </p>
-          </div>
-        ) : isRestDay && !selectedRoutineOverride ? (
-          <div className="text-center p-2">
-            <p className="text-xs text-slate-400 m-0">
-              Rest day in effect. To perform a workout today, tap <strong className="text-slate-300">Swap Split</strong> or synthesize with <strong className="text-slate-300">Adapt</strong>.
-            </p>
-          </div>
         ) : (
           <div className="text-center space-y-3">
             <p className="text-xs text-slate-300 m-0">
               No routine scheduled for today. Configure routines in the Plan tab or tap Adapt to synthesize with AI.
             </p>
-            {routines.length > 0 && (
-              <Button variant="secondary" size="md" onClick={() => onStartRoutine(routines[0])}>
-                Start {routines[0].name}
-              </Button>
-            )}
           </div>
         )}
       </GlassCard>

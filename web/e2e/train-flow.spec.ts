@@ -122,7 +122,7 @@ test.describe('Train Flow and Effort Debrief', () => {
     await expect(page.getByText('KG / HAND')).toBeVisible()
   })
 
-  test('sport and rest days do not leak resistance routines and display fueling and recovery details', async ({ page }) => {
+  test('sport and rest days do not leak resistance routines and allow manual split override', async ({ page }) => {
     // Override workout recommendation to a sport session (Badminton with empty exercises)
     await page.route(/\/api\/biometrics\/workout-recommendation(\?.*)?$/, async (route) => {
       await route.fulfill({
@@ -146,20 +146,18 @@ test.describe('Train Flow and Effort Debrief', () => {
 
     // 1. Verify sport headline and subtitle
     await expect(page.getByRole('heading', { name: 'Badminton Match Play' })).toBeVisible()
-    await expect(page.getByText(/Sport Fueling • Match play & anaerobic preservation/i)).toBeVisible()
+    await expect(page.getByText('No routines scheduled for today')).toBeVisible()
 
-    // 2. Verify sport protocol details card is shown
-    await expect(page.getByText('Badminton Match Play • Fueling & Readiness')).toBeVisible()
-    await expect(page.getByText(/No resistance lifting scheduled today/i)).toBeVisible()
-    await expect(page.getByText('⚡ Court Readiness')).toBeVisible()
-    await expect(page.getByText('🍌 Glycogen & Fueling')).toBeVisible()
+    // 2. Verify readiness adaptation banner is shown with rationale and landmark details
+    await expect(page.getByText('Sport activity scheduled. Preserve musculoskeletal freshness and prioritize mobility.')).toBeVisible()
+    await expect(page.getByText(/High-intensity intervals require glycogen/i)).toBeVisible()
 
     // 3. Verify resistance exercises from routines[] are NOT leaked in preview
     await expect(page.getByText('2 sets to failure')).not.toBeVisible()
 
-    // 4. Verify Start Workout button is NOT wired to launch resistance routine
+    // 4. Verify Start Workout button is NOT wired to launch resistance routine and no fallback routine is populated
     await expect(page.getByRole('button', { name: /Start Workout/i })).not.toBeVisible()
-    await expect(page.getByText(/Sport day in effect. To log an unscheduled lifting session instead/i)).toBeVisible()
+    await expect(page.getByText(/No routine scheduled for today/i)).toBeVisible()
 
     // 5. Test Swap Split override: user explicitly picks a split
     await page.getByRole('button', { name: 'Swap Split' }).click()
@@ -173,6 +171,7 @@ test.describe('Train Flow and Effort Debrief', () => {
     await page.getByRole('button', { name: 'Swap Split' }).click()
     await page.getByRole('button', { name: /Reset to Scheduled/i }).click()
     await expect(page.getByRole('heading', { name: 'Badminton Match Play' })).toBeVisible()
-    await expect(page.getByText('Badminton Match Play • Fueling & Readiness')).toBeVisible()
+    await expect(page.getByRole('button', { name: /Start Workout/i })).not.toBeVisible()
+    await expect(page.getByText(/No routine scheduled for today/i)).toBeVisible()
   })
 })
