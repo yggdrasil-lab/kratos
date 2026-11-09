@@ -106,14 +106,26 @@ export function TodayView({
     ? routines.find((r) => r.name.toLowerCase() === recommendedRoutineName.toLowerCase()) || null
     : null
 
+  // If the recommended routine is not found or has no routine exercises, defaultRoutine is null
   const defaultRoutine: Routine | null =
-    matchedRecommendedRoutine ||
-    (routines.length > 0 ? routines[dayOfWeek % routines.length] : null)
+    matchedRecommendedRoutine &&
+    matchedRecommendedRoutine.items &&
+    matchedRecommendedRoutine.items.length > 0 &&
+    (!workoutRecommendation || (workoutRecommendation.exercises && workoutRecommendation.exercises.length > 0))
+      ? matchedRecommendedRoutine
+      : null
 
   const activeRoutine = selectedRoutineOverride || defaultRoutine
 
-  const dayHeadline = workoutRecommendation?.routine_name || activeRoutine?.name || 'Rest & Recovery'
-  const daySubtitle = workoutRecommendation?.exercises && workoutRecommendation.exercises.length > 0
+  const dayHeadline = selectedRoutineOverride
+    ? selectedRoutineOverride.name
+    : workoutRecommendation?.routine_name || activeRoutine?.name || 'Rest & Recovery'
+
+  const daySubtitle = selectedRoutineOverride
+    ? selectedRoutineOverride.items && selectedRoutineOverride.items.length > 0
+      ? `${selectedRoutineOverride.items.length} exercises configured`
+      : 'No exercises configured'
+    : workoutRecommendation?.exercises && workoutRecommendation.exercises.length > 0
     ? `${workoutRecommendation.exercises.length} autoregulated exercises`
     : activeRoutine?.items && activeRoutine.items.length > 0
     ? `${activeRoutine.items.length} exercises configured`
@@ -312,7 +324,7 @@ export function TodayView({
               )}
             </div>
             <h3 className="text-lg font-bold my-0.5 text-slate-100">
-              {workoutRecommendation?.routine_name ?? (activeRoutine ? activeRoutine.name : dayHeadline)}
+              {dayHeadline}
             </h3>
             <p className="text-xs text-slate-400 m-0">
               {daySubtitle}
@@ -374,6 +386,20 @@ export function TodayView({
             <div className="text-xs font-semibold text-slate-300 mb-1">
               Pick another routine for today:
             </div>
+            {selectedRoutineOverride && (
+              <Button
+                variant="outline"
+                size="sm"
+                fullWidth
+                className="justify-start text-sky-300 border-sky-500/40 mb-1"
+                onClick={() => {
+                  setSelectedRoutineOverride(null)
+                  setShowRoutinePicker(false)
+                }}
+              >
+                ↺ Reset to Scheduled ({workoutRecommendation?.routine_name || 'Default'})
+              </Button>
+            )}
             {routines.map((r) => (
               <Button
                 key={r.id}
@@ -492,11 +518,6 @@ export function TodayView({
             <p className="text-xs text-slate-300 m-0">
               No routine scheduled for today. Configure routines in the Plan tab or tap Adapt to synthesize with AI.
             </p>
-            {routines.length > 0 && (
-              <Button variant="secondary" size="md" onClick={() => onStartRoutine(routines[0])}>
-                Start {routines[0].name}
-              </Button>
-            )}
           </div>
         )}
       </GlassCard>

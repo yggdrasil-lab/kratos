@@ -408,7 +408,10 @@ export function App() {
         })
     }
 
-    const sessionRoutineName = workoutRecommendation?.routine_name || routine?.name || 'Current Workout'
+    const sessionRoutineName =
+      workoutRecommendation?.exercises && workoutRecommendation.exercises.length > 0
+        ? workoutRecommendation.routine_name
+        : routine?.name || workoutRecommendation?.routine_name || 'Current Workout'
     updateSession({
       id,
       routine_id: routine?.id ?? null,
