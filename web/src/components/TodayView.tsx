@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { GlassCard, Button, AlertBanner, CollapsibleSection, AiSynthesizerModal } from '@yggdrasil-lab/ui'
 import type { DailyBiometrics, Exercise, FastingCheckIn, FastingRecommendation, Routine, SessionPayload, WorkoutRecommendation } from '../types'
-import { DAY_NAMES, DAY_SHORTS, formatFriendlyDate } from '../utils/circadian'
+import { DAY_NAMES, DAY_SHORTS, formatFriendlyDate, getCircadianDate } from '../utils/circadian'
 import { getSessionLabel } from '../utils/session'
 import { FastingCard } from './FastingCard'
 
@@ -163,6 +163,73 @@ export function TodayView({
   })
 
   const inferredSessions = sessions.filter((s) => Boolean(s.extra?.inferred))
+
+  // Inspect sessions for any completed workout matching today's circadian date or local date
+  const isSessionToday = (s: SessionPayload): boolean => {
+    const timeStr = s.started_at || s.ended_at
+    if (!timeStr) return false
+    const sDate = new Date(timeStr)
+    if (isNaN(sDate.getTime())) return false
+    const sessionCircadian = getCircadianDate(sDate)
+    const sessionLocal = `${sDate.getFullYear()}-${String(sDate.getMonth() + 1).padStart(2, '0')}-${String(sDate.getDate()).padStart(2, '0')}`
+    const rawDatePrefix = timeStr.split('T')[0]
+    return (
+      sessionCircadian === circadianDate ||
+      sessionLocal === circadianDate ||
+      rawDatePrefix === circadianDate
+    )
+  }
+
+  const isCompletedSession = (s: SessionPayload): boolean => {
+    if (s.extra?.inferred) return false
+    if (s.ended_at) return true
+    if (s.extra?.completed) return true
+    return Boolean(s.items && s.items.some((it) => it.sets && it.sets.some((st) => st.status === 'done')))
+  }
+
+  const completedTodaySessions = sessions
+    .filter((s) => isCompletedSession(s) && isSessionToday(s))
+    .sort(
+      (a, b) =>
+        new Date(b.started_at || b.ended_at || 0).getTime() -
+        new Date(a.started_at || a.ended_at || 0).getTime()
+    )
+
+  const hasCompletedWorkoutToday = completedTodaySessions.length > 0
+  const latestCompletedToday = completedTodaySessions[0] || null
+
+  let todayDurationMins = 0
+  let todayTotalSets = 0
+  let todayTotalVolumeKg = 0
+
+  completedTodaySessions.forEach((s) => {
+    let sets = 0
+    let volume = 0
+    s.items?.forEach((it) => {
+      it.sets?.forEach((st) => {
+        if (st.status === 'done') {
+          sets += 1
+          volume += (st.weight_kg ?? 0) * (st.reps ?? 0)
+        }
+      })
+    })
+    if (sets === 0 && typeof s.extra?.completed_sets === 'number') {
+      sets = s.extra.completed_sets
+    }
+    if (volume === 0 && typeof s.extra?.total_volume_kg === 'number') {
+      volume = s.extra.total_volume_kg
+    }
+    const duration =
+      s.ended_at && s.started_at
+        ? Math.max(1, Math.round((new Date(s.ended_at).getTime() - new Date(s.started_at).getTime()) / 60000))
+        : typeof s.extra?.duration_minutes === 'number'
+        ? s.extra.duration_minutes
+        : 0
+
+    todayDurationMins += duration || 0
+    todayTotalSets += sets
+    todayTotalVolumeKg += volume
+  })
 
   return (
     <div className="animate-fade-in pb-16">
@@ -504,7 +571,46 @@ export function TodayView({
         )}
 
         {/* Action Button */}
-        {activeRoutine || (workoutRecommendation?.exercises && workoutRecommendation.exercises.length > 0) ? (
+        {hasCompletedWorkoutToday ? (
+          <div className="space-y-3" data-testid="completed-workout-card">
+            <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-center">
+              <div className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-2">
+                <span>Completed ✓</span>
+              </div>
+              <div className="text-sm font-semibold text-slate-200 mb-2">
+                {String(
+                  latestCompletedToday?.extra?.routine_name ||
+                    (latestCompletedToday && getSessionLabel(latestCompletedToday, routines)) ||
+                    workoutRecommendation?.routine_name ||
+                    activeRoutine?.name ||
+                    "Today's Session"
+                )}
+              </div>
+              <div className="grid grid-cols-3 gap-2 pt-2 border-t border-emerald-500/20 text-center">
+                <div>
+                  <div className="text-[10px] text-slate-400 uppercase font-medium">Duration</div>
+                  <div className="text-sm font-bold text-slate-100">{todayDurationMins}m</div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-slate-400 uppercase font-medium">Total Sets</div>
+                  <div className="text-sm font-bold text-slate-100">{todayTotalSets}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-slate-400 uppercase font-medium">Volume</div>
+                  <div className="text-sm font-bold text-slate-100">{todayTotalVolumeKg.toLocaleString()} kg</div>
+                </div>
+              </div>
+            </div>
+            <Button
+              variant="secondary"
+              size="md"
+              fullWidth
+              onClick={() => onStartRoutine(activeRoutine || undefined)}
+            >
+              Start Another Session ({workoutRecommendation?.routine_name || activeRoutine?.name || 'Workout'})
+            </Button>
+          </div>
+        ) : activeRoutine || (workoutRecommendation?.exercises && workoutRecommendation.exercises.length > 0) ? (
           <Button
             variant="blue"
             size="lg"
