@@ -63,6 +63,14 @@ test.describe('Train Flow and Effort Debrief', () => {
     // Modal closes and returns to Today view
     await expect(page.getByRole('heading', { name: 'Workout Complete!' })).not.toBeVisible()
     await expect(page.getByText(/Today's Training/i)).toBeVisible()
+
+    // Completed card replaces Start Workout CTA
+    await expect(page.getByTestId('completed-workout-card')).toBeVisible()
+    await expect(page.getByText('Completed ✓')).toBeVisible()
+    await expect(page.getByText('Duration')).toBeVisible()
+    await expect(page.getByText('Total Sets')).toBeVisible()
+    await expect(page.getByText('Volume')).toBeVisible()
+    await expect(page.getByRole('button', { name: /Start Another Session/i })).toBeVisible()
   })
 
   test('renders smart workout autoregulation badge, readiness adaptation, and research grounding', async ({ page }) => {
