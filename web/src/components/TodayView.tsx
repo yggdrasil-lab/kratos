@@ -4,6 +4,8 @@ import type { DailyBiometrics, Exercise, FastingCheckIn, FastingRecommendation, 
 import { DAY_NAMES, DAY_SHORTS, formatFriendlyDate, getCircadianDate } from '../utils/circadian'
 import { getSessionLabel } from '../utils/session'
 import { FastingCard } from './FastingCard'
+import { HRZoneBar } from './HRZoneBar'
+import type { HRZonesData } from './HRZoneBar'
 
 interface TodayViewProps {
   circadianDate: string
@@ -252,6 +254,24 @@ export function TodayView({
             const durationMins = infSession.ended_at && infSession.started_at
               ? Math.max(1, Math.round((new Date(infSession.ended_at).getTime() - new Date(infSession.started_at).getTime()) / 60000))
               : (infSession.extra?.duration_minutes as number | undefined) || null
+            const effort = (infSession.extra?.effort_rating as string) || ''
+            const rpe = infSession.extra?.rpe as number | undefined
+            const trimp = infSession.extra?.trimp as number | undefined
+            const hrZones = infSession.extra?.hr_zones as HRZonesData | undefined
+            const peakHr = infSession.extra?.peak_hr as number | undefined
+            const hrRecovery = infSession.extra?.hr_recovery_60s as number | undefined
+            const stepCount = infSession.extra?.step_count as number | undefined
+
+            let effortBadge = null
+            if (effort === 'too_easy') {
+              effortBadge = <span className="text-[11px] px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 font-semibold border border-emerald-500/25">🟢 Too Easy</span>
+            } else if (effort === 'optimal') {
+              effortBadge = <span className="text-[11px] px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-400 font-semibold border border-amber-500/25">🟡 Optimal</span>
+            } else if (effort === 'hard') {
+              effortBadge = <span className="text-[11px] px-2 py-0.5 rounded-md bg-orange-500/15 text-orange-400 font-semibold border border-orange-500/25">🟠 Hard</span>
+            } else if (effort === 'too_hard') {
+              effortBadge = <span className="text-[11px] px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-400 font-semibold border border-rose-500/25">🔴 Too Hard</span>
+            }
 
             return (
               <GlassCard
@@ -268,21 +288,48 @@ export function TodayView({
                       Needs Review
                     </span>
                   </div>
+                  <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                    {effortBadge}
+                    {rpe !== undefined && rpe !== null && (
+                      <span className="text-[11px] px-2 py-0.5 rounded-md bg-purple-500/15 text-purple-300 border border-purple-500/25 font-semibold">
+                        RPE {rpe}
+                      </span>
+                    )}
+                    {trimp !== undefined && trimp !== null && trimp > 0 && (
+                      <span className="text-[11px] px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-300 border border-blue-500/25 font-semibold">
+                        TRIMP {Math.round(trimp)}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="mb-2">
                   <div className="text-base font-bold text-slate-100">
                     {routineName}
                   </div>
-                  <div className="text-xs text-slate-300 mt-0.5 flex gap-3 flex-wrap">
+                  <div className="text-xs text-slate-300 mt-1 flex gap-3 flex-wrap items-center">
                     {durationMins ? <span>⏱️ ~{durationMins} min</span> : null}
                     {infSession.extra?.active_energy_kcal ? (
                       <span>🔥 {String(infSession.extra.active_energy_kcal)} kcal</span>
                     ) : null}
+                    {stepCount ? (
+                      <span>👟 {stepCount.toLocaleString()} steps</span>
+                    ) : null}
                     {infSession.extra?.avg_hr ? (
-                      <span>💓 ~{String(infSession.extra.avg_hr)} bpm</span>
+                      <span>
+                        ❤️ {String(infSession.extra.avg_hr)} bpm
+                        {peakHr ? <span className="text-slate-400"> ({peakHr} max)</span> : null}
+                      </span>
+                    ) : null}
+                    {hrRecovery ? (
+                      <span className="text-emerald-400 font-medium">⏱️ Drop -{hrRecovery} bpm</span>
                     ) : null}
                   </div>
+                  {hrZones && (
+                    <div className="mt-2.5 mb-1">
+                      <HRZoneBar zones={hrZones} />
+                    </div>
+                  )}
                 </div>
 
                 <p className="text-xs text-amber-200/90 mb-3">
