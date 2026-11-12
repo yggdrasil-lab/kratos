@@ -88,8 +88,8 @@ export interface FastingCheckIn {
   date: string
   target_window: string
   adherence: 'completed' | 'early' | 'off_plan'
-  energy: 'high' | 'normal' | 'low'
-  headache: 'none' | 'mild' | 'sugar_spike'
+  energy?: 'high' | 'normal' | 'low'
+  headache?: 'none' | 'mild' | 'sugar_spike'
   notes?: string | null
   logged_at: string
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Modal, OptionCardGroup, ChipSelector, Button } from '@yggdrasil-lab/ui'
+import { Modal, OptionCardGroup, Button } from '@yggdrasil-lab/ui'
 import type { OptionCardItem } from '@yggdrasil-lab/ui'
 import type { FastingCheckIn } from '../types'
 
@@ -37,18 +37,6 @@ const ADHERENCE_OPTIONS: OptionCardItem<AdherenceValue>[] = [
   },
 ]
 
-const ENERGY_OPTIONS = [
-  { value: 'high', label: '⚡ High' },
-  { value: 'normal', label: '😐 Normal' },
-  { value: 'low', label: '🪫 Low' },
-]
-
-const HEADACHE_OPTIONS = [
-  { value: 'none', label: 'None' },
-  { value: 'mild', label: 'Mild' },
-  { value: 'sugar_spike', label: 'Sugar Spike' },
-]
-
 export function FastingCheckInModal({
   date,
   targetWindow,
@@ -59,12 +47,6 @@ export function FastingCheckInModal({
   const [adherence, setAdherence] = useState<AdherenceValue>(
     initialCheckIn?.adherence ?? 'completed'
   )
-  const [energy, setEnergy] = useState<'high' | 'normal' | 'low'>(
-    initialCheckIn?.energy ?? 'normal'
-  )
-  const [headache, setHeadache] = useState<'none' | 'mild' | 'sugar_spike'>(
-    initialCheckIn?.headache ?? 'none'
-  )
   const [notes, setNotes] = useState<string>(initialCheckIn?.notes ?? '')
 
   const handleSave = () => {
@@ -73,8 +55,8 @@ export function FastingCheckInModal({
       date,
       target_window: targetWindow,
       adherence,
-      energy,
-      headache,
+      ...(initialCheckIn?.energy ? { energy: initialCheckIn.energy } : {}),
+      ...(initialCheckIn?.headache ? { headache: initialCheckIn.headache } : {}),
       notes: notes.trim() || null,
       logged_at: new Date().toISOString(),
     }
@@ -95,32 +77,6 @@ export function FastingCheckInModal({
           value={adherence}
           onChange={setAdherence}
         />
-
-        <div className="space-y-1.5">
-          <label className="block font-semibold text-xs text-slate-300">
-            Energy level during the fast:
-          </label>
-          <ChipSelector
-            options={ENERGY_OPTIONS}
-            selected={energy}
-            onChange={(val) => setEnergy(val as 'high' | 'normal' | 'low')}
-            variant="blue"
-            equalWidth
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="block font-semibold text-xs text-slate-300">
-            Headache / Sugar Crash:
-          </label>
-          <ChipSelector
-            options={HEADACHE_OPTIONS}
-            selected={headache}
-            onChange={(val) => setHeadache(val as 'none' | 'mild' | 'sugar_spike')}
-            variant="rose"
-            equalWidth
-          />
-        </div>
 
         <div>
           <input

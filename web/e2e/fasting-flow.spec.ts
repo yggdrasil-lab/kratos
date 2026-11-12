@@ -18,8 +18,7 @@ test.describe('Fasting Check-In Flow', () => {
     await expect(modal).toBeVisible()
     await expect(modal.getByRole('heading', { name: 'Fasting Check-In' })).toBeVisible()
 
-    // 3. Fill in energy and notes
-    await modal.getByRole('button', { name: /High/i }).click()
+    // 3. Fill in notes
     const notesInput = modal.getByPlaceholder(/Notes/i)
     await notesInput.fill('Felt great during 16h fast, drank black coffee')
 
@@ -27,9 +26,9 @@ test.describe('Fasting Check-In Flow', () => {
     await modal.getByRole('button', { name: 'Save Check-In' }).click()
     await expect(modal).not.toBeVisible()
 
-    // 5. Verify FastingCard displays badge, energy, and notes
+    // 5. Verify FastingCard displays badge, notes
     await expect(page.getByText('✓ Completed')).toBeVisible()
-    await expect(page.getByText(/Logged: Energy high • Headache none • "Felt great during 16h fast, drank black coffee"/i)).toBeVisible()
+    await expect(page.getByText(/Logged: "Felt great during 16h fast, drank black coffee"/i)).toBeVisible()
     await expect(page.getByRole('button', { name: 'Edit' })).toBeVisible()
   })
 
@@ -37,7 +36,6 @@ test.describe('Fasting Check-In Flow', () => {
     // Log initial fast
     await page.getByRole('button', { name: 'Log Fast' }).click()
     const modal = page.locator('.modal-backdrop')
-    await modal.getByRole('button', { name: /High/i }).click()
     await modal.getByPlaceholder(/Notes/i).fill('Felt great during 16h fast, drank black coffee')
     await modal.getByRole('button', { name: 'Save Check-In' }).click()
     await expect(modal).not.toBeVisible()
@@ -58,14 +56,13 @@ test.describe('Fasting Check-In Flow', () => {
     await expect(modal).not.toBeVisible()
 
     // Verify card displays updated note
-    await expect(page.getByText(/Logged: Energy high • Headache none • "Felt great during 16h fast, drank black coffee \+ electrolytes"/i)).toBeVisible()
+    await expect(page.getByText(/Logged: "Felt great during 16h fast, drank black coffee \+ electrolytes"/i)).toBeVisible()
   })
 
   test('displays fasting log with notes in Progress tab history', async ({ page }) => {
     // Log fast with notes
     await page.getByRole('button', { name: 'Log Fast' }).click()
     const modal = page.locator('.modal-backdrop')
-    await modal.getByRole('button', { name: /High/i }).click()
     await modal.getByPlaceholder(/Notes/i).fill('Smooth 16h fast')
     await modal.getByRole('button', { name: 'Save Check-In' }).click()
     await expect(modal).not.toBeVisible()
@@ -77,7 +74,7 @@ test.describe('Fasting Check-In Flow', () => {
 
     // Verify Fasting History stream
     await expect(page.getByRole('heading', { name: /Fasting History/i })).toBeVisible()
-    await expect(page.getByText(/Energy: high • Headache: none • "Smooth 16h fast"/i)).toBeVisible()
+    await expect(page.getByText(/"Smooth 16h fast"/i)).toBeVisible()
   })
 
   test('hydrates fasting check-in from server biometrics across devices', async ({ page }) => {

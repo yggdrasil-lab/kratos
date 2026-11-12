@@ -82,10 +82,11 @@ class TestFastingRecommendation(unittest.TestCase):
             "resting_hr_bpm": 62,
         }
         rec = generate_fasting_recommendation(target_d, plan, biometrics)
-        self.assertEqual(rec.target_window, "16:8")
+        self.assertEqual(rec.target_window, "14:10")
+        self.assertEqual(rec.window_hours, "10:30 AM - 8:30 PM")
         self.assertIn("Badminton Court Fueling", rec.protocol_name)
         self.assertEqual(rec.recovery_status, "optimal")
-        self.assertTrue(any("Pre-court fuel" in a for a in rec.fueling_anchors))
+        self.assertTrue(any("Pre-court top-up" in a and "whey" in a for a in rec.fueling_anchors))
 
     def test_fasting_engine_lifting_split(self):
         # Wednesday with lifting
@@ -100,9 +101,10 @@ class TestFastingRecommendation(unittest.TestCase):
             "hrv_ms": 48.0,
         }
         rec = generate_fasting_recommendation(target_d, plan, biometrics)
-        self.assertEqual(rec.target_window, "16:8")
+        self.assertEqual(rec.target_window, "14:10")
+        self.assertEqual(rec.window_hours, "10:30 AM - 8:30 PM")
         self.assertIn("Strength and Hypertrophy Split", rec.protocol_name)
-        self.assertTrue(any("Break fast with 45g protein" in a for a in rec.fueling_anchors))
+        self.assertTrue(any("Plate triage, protein first" in a for a in rec.fueling_anchors))
 
     def test_fasting_engine_rest_metabolic_reset(self):
         # Friday rest day with optimal recovery
@@ -121,12 +123,67 @@ class TestFastingRecommendation(unittest.TestCase):
         self.assertIn("Deep Metabolic Reset", rec.protocol_name)
         self.assertIn("3:30 PM - 8:30 PM", rec.window_hours)
 
+    def test_fasting_engine_midweek_rest_stays_baseline(self):
+        # Thursday rest day with optimal recovery must NOT trigger the 18h+ reset
+        target_d = dt.date(2026, 11, 5)  # Thursday
+        plan = WeeklyPlan(
+            iso_week="2026-W45",
+            days=[{"dayIndex": 3, "sessionName": "Rest Day", "type": "rest"}],
+        )
+        biometrics = {
+            "sleep_duration_hours": 8.0,
+            "sleep_deep_hours": 1.5,
+            "hrv_ms": 60.0,
+        }
+        rec = generate_fasting_recommendation(target_d, plan, biometrics)
+        self.assertEqual(rec.target_window, "14:10")
+        self.assertEqual(rec.window_hours, "10:30 AM - 8:30 PM")
+        self.assertNotIn("Deep Metabolic Reset", rec.protocol_name)
+
+    def test_fasting_engine_friday_non_optimal_stays_baseline(self):
+        # Friday rest day with moderate recovery (one fatigue flag) must stay 14:10
+        target_d = dt.date(2026, 11, 6)  # Friday
+        plan = WeeklyPlan(
+            iso_week="2026-W45",
+            days=[{"dayIndex": 4, "sessionName": "Rest and Reset", "type": "rest"}],
+        )
+        biometrics = {
+            "sleep_duration_hours": 5.5,
+            "sleep_deep_hours": 1.2,
+            "hrv_ms": 55.0,
+        }
+        rec = generate_fasting_recommendation(target_d, plan, biometrics)
+        self.assertEqual(rec.recovery_status, "moderate")
+        self.assertEqual(rec.target_window, "14:10")
+        self.assertNotIn("Deep Metabolic Reset", rec.protocol_name)
+
     def test_fasting_engine_weekend_baseline(self):
         # Sunday with optimal recovery
         target_d = dt.date(2026, 11, 8)  # Sunday
         rec = generate_fasting_recommendation(target_d, None, None)
         self.assertEqual(rec.target_window, "14:10")
+        self.assertEqual(rec.window_hours, "10:30 AM - 8:30 PM")
         self.assertIn("Social Baseline", rec.protocol_name)
+
+    def test_fasting_engine_zero_cooking_anchors(self):
+        # Every rule branch must use zero-cooking anchors and never prescribe prep
+        scenarios = [
+            (dt.date(2026, 11, 3), [{"dayIndex": 1, "sessionName": "Badminton", "type": "sport"}], {"sleep_duration_hours": 7.5, "hrv_ms": 55.0}),
+            (dt.date(2026, 11, 4), [{"dayIndex": 2, "sessionName": "Lower Body A", "type": "lift"}], {"sleep_duration_hours": 7.0, "hrv_ms": 48.0}),
+            (dt.date(2026, 11, 5), [{"dayIndex": 3, "sessionName": "Rest Day", "type": "rest"}], {"sleep_duration_hours": 8.0, "hrv_ms": 60.0}),
+            (dt.date(2026, 11, 6), [{"dayIndex": 4, "sessionName": "Rest and Reset", "type": "rest"}], {"sleep_duration_hours": 8.0, "hrv_ms": 60.0}),
+            (dt.date(2026, 11, 8), [], None),
+            (dt.date(2026, 11, 5), [{"dayIndex": 3, "sessionName": "Badminton", "type": "sport"}], {"sleep_duration_hours": 5.2, "sleep_deep_hours": 0.4, "hrv_ms": 22.0, "resting_hr_bpm": 80}),
+        ]
+        for target_d, days, bio in scenarios:
+            plan = WeeklyPlan(iso_week="2026-W45", days=days)
+            rec = generate_fasting_recommendation(target_d, plan, bio)
+            joined = " ".join(rec.fueling_anchors).lower()
+            self.assertIn("clean fast", joined, msg=str(target_d))
+            self.assertIn("plate triage", joined, msg=str(target_d))
+            for banned in ("oats", "avocado", "cook", "recipe", "meal prep"):
+                self.assertNotIn(banned, joined, msg=f"{target_d}: {banned}")
+            self.assertNotEqual(rec.target_window, "16:8")
 
     def test_fasting_recommendation_api(self):
         res = self.client.get("/biometrics/fasting-recommendation?target_date=2026-11-06")

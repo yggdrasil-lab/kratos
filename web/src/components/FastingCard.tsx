@@ -219,8 +219,15 @@ export function FastingCard({
         {isCheckedInToday && (
           <div className="mt-3 pt-2.5 border-t border-border/50 text-xs text-slate-400 flex justify-between items-center gap-2">
             <span className="truncate">
-              Logged: Energy {latestCheckIn.energy} • Headache {latestCheckIn.headache}
-              {latestCheckIn.notes ? ` • "${latestCheckIn.notes}"` : ''}
+              Logged
+              {[
+                latestCheckIn.energy ? `Energy ${latestCheckIn.energy}` : null,
+                latestCheckIn.headache ? `Headache ${latestCheckIn.headache}` : null,
+                latestCheckIn.notes ? `"${latestCheckIn.notes}"` : null,
+              ]
+                .filter(Boolean)
+                .map((part, i) => `${i === 0 ? ': ' : ' • '}${part}`)
+                .join('')}
             </span>
             <Button
               variant="ghost"
