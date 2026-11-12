@@ -3,6 +3,8 @@ import { GlassCard, GoalProgressCard, CollapsibleSection, Button } from '@yggdra
 import type { DailyBiometrics, Exercise, FastingCheckIn, Routine, SessionPayload } from '../types'
 import { formatFriendlyDate } from '../utils/circadian'
 import { getSessionLabel } from '../utils/session'
+import { HRZoneBar } from './HRZoneBar'
+import type { HRZonesData } from './HRZoneBar'
 
 interface ProgressViewProps {
   sessions: SessionPayload[]
@@ -113,27 +115,35 @@ export function ProgressView({
             {recentSessions.map((s) => {
               const stats = computeSessionStats(s)
               const effort = (s.extra?.effort_rating as string) || ''
+              const rpe = s.extra?.rpe as number | undefined
+              const trimp = s.extra?.trimp as number | undefined
+              const hrZones = s.extra?.hr_zones as HRZonesData | undefined
+              const avgHr = s.extra?.avg_hr as number | undefined
+              const peakHr = s.extra?.peak_hr as number | undefined
+              const activeEnergy = s.extra?.active_energy_kcal as number | undefined
+              const stepCount = s.extra?.step_count as number | undefined
+              const hrRecovery = s.extra?.hr_recovery_60s as number | undefined
               const tags = (s.extra?.effort_tags as string[]) || []
               const routineName = getSessionLabel(s, routines)
               const dateStr = s.started_at.split('T')[0]
               const isInferred = Boolean(s.extra?.inferred)
 
               let effortBadge = null
-              if (isInferred) {
-                effortBadge = (
-                  <span className="text-[11px] px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold flex items-center gap-1">
-                    ⚡ Inferred from Plan
-                  </span>
-                )
-              } else if (effort === 'too_easy') {
-                effortBadge = <span className="text-[11px] px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 font-semibold">🟢 Too Easy</span>
+              if (effort === 'too_easy') {
+                effortBadge = <span className="text-[11px] px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 font-semibold border border-emerald-500/25">🟢 Too Easy</span>
               } else if (effort === 'optimal') {
-                effortBadge = <span className="text-[11px] px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-400 font-semibold">🟡 Optimal</span>
+                effortBadge = <span className="text-[11px] px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-400 font-semibold border border-amber-500/25">🟡 Optimal</span>
               } else if (effort === 'hard') {
-                effortBadge = <span className="text-[11px] px-2 py-0.5 rounded-md bg-orange-500/15 text-orange-400 font-semibold">🟠 Hard</span>
+                effortBadge = <span className="text-[11px] px-2 py-0.5 rounded-md bg-orange-500/15 text-orange-400 font-semibold border border-orange-500/25">🟠 Hard</span>
               } else if (effort === 'too_hard') {
-                effortBadge = <span className="text-[11px] px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-400 font-semibold">🔴 Too Hard</span>
+                effortBadge = <span className="text-[11px] px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-400 font-semibold border border-rose-500/25">🔴 Too Hard</span>
               }
+
+              const inferredBadge = isInferred ? (
+                <span className="text-[11px] px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold flex items-center gap-1">
+                  ⚡ Auto-Detected
+                </span>
+              ) : null
 
               return (
                 <GlassCard key={s.id} className="p-4">
@@ -147,7 +157,18 @@ export function ProgressView({
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                      {inferredBadge}
                       {effortBadge}
+                      {rpe !== undefined && rpe !== null && (
+                        <span className="text-[11px] px-2 py-0.5 rounded-md bg-purple-500/15 text-purple-300 border border-purple-500/25 font-semibold">
+                          RPE {rpe}
+                        </span>
+                      )}
+                      {trimp !== undefined && trimp !== null && trimp > 0 && (
+                        <span className="text-[11px] px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-300 border border-blue-500/25 font-semibold">
+                          TRIMP {Math.round(trimp)}
+                        </span>
+                      )}
                       <Button
                         variant="secondary"
                         size="xs"
@@ -191,11 +212,49 @@ export function ProgressView({
                   )}
 
                   {/* Summary row */}
-                  <div className="text-xs text-slate-300 mb-2 flex gap-3">
-                    {stats.durationMins && <span>⏱️ {stats.durationMins} min</span>}
-                    <span>📦 {stats.volume.toLocaleString()} kg volume</span>
-                    <span>✓ {stats.sets} sets</span>
+                  <div className="text-xs text-slate-300 mb-2 flex gap-3 flex-wrap">
+                    {stats.durationMins ? (
+                      <span>⏱️ {stats.durationMins} min</span>
+                    ) : typeof s.extra?.duration_minutes === 'number' ? (
+                      <span>⏱️ {s.extra.duration_minutes} min</span>
+                    ) : null}
+                    {stats.volume > 0 ? (
+                      <>
+                        <span>📦 {stats.volume.toLocaleString()} kg volume</span>
+                        <span>✓ {stats.sets} sets</span>
+                      </>
+                    ) : null}
+                    {activeEnergy ? (
+                      <span>🔥 {activeEnergy} kcal</span>
+                    ) : null}
+                    {stepCount ? (
+                      <span>👟 {stepCount.toLocaleString()} steps</span>
+                    ) : null}
                   </div>
+
+                  {/* Biometrics row if heart rate telemetry is recorded */}
+                  {(avgHr || hrRecovery) && (
+                    <div className="text-xs text-slate-300 mb-2 flex items-center gap-3 flex-wrap">
+                      {avgHr ? (
+                        <span className="inline-flex items-center gap-1">
+                          ❤️ <span className="font-medium text-slate-200">{avgHr} bpm avg</span>
+                          {peakHr ? <span className="text-slate-400">({peakHr} max)</span> : null}
+                        </span>
+                      ) : null}
+                      {hrRecovery ? (
+                        <span className="inline-flex items-center gap-1 text-emerald-400 font-medium">
+                          ⏱️ <span>Drop -{hrRecovery} bpm</span>
+                        </span>
+                      ) : null}
+                    </div>
+                  )}
+
+                  {/* HR 5-Zone Distribution Bar */}
+                  {hrZones && (
+                    <div className="my-2.5">
+                      <HRZoneBar zones={hrZones} />
+                    </div>
+                  )}
 
                   {/* Tags */}
                   {tags.length > 0 && (
