@@ -316,8 +316,13 @@ export function ProgressView({
                       {formatFriendlyDate(f.date)} ({f.target_window})
                     </div>
                     <div className="text-xs text-slate-400">
-                      Energy: {f.energy} • Headache: {f.headache}
-                      {f.notes ? ` • "${f.notes}"` : ''}
+                      {[
+                        f.energy ? `Energy: ${f.energy}` : null,
+                        f.headache ? `Headache: ${f.headache}` : null,
+                        f.notes ? `"${f.notes}"` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' • ')}
                     </div>
                   </div>
 

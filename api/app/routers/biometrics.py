@@ -103,8 +103,8 @@ class FastingCheckInPayload(BaseModel):
     date: str
     target_window: str
     adherence: str
-    energy: str
-    headache: str
+    energy: str = "normal"
+    headache: str = "none"
     notes: str | None = None
     logged_at: str
 

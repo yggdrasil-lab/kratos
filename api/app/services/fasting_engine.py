@@ -123,15 +123,16 @@ def generate_fasting_recommendation(
             date=date_str,
             protocol_name="14:10 Autoregulated Recovery Split",
             target_window="14:10",
-            window_hours="11:00 AM - 9:00 PM",
+            window_hours="10:30 AM - 8:30 PM",
             rationale=(
                 f"High fatigue detected: {flag_summary}. Fasting duration is relaxed to blunt "
                 f"cortisol, protect lean tissue, and support autonomic rebound."
             ),
             fueling_anchors=[
-                "11:00 AM: Early break-fast with 40g whey/eggs and healthy fats",
-                "02:30 PM: Balanced nutrient-dense lunch with complex carbohydrates",
-                "08:00 PM: High-protein dinner with magnesium and extra hydration",
+                "Morning: Clean fast with water, black coffee, or tea until 10:30 AM",
+                "10:30 AM: Break fast with plate triage: protein first, then carbs and sides to satiety",
+                "Family dinner (done by 8:30 PM): plate triage, protein first, then carbs and sides to satiety",
+                "Optional: whey protein shake in water or milk as a zero-prep top-up",
             ],
             recovery_status="fatigued",
             activity_context=f"{activity_name} ({activity_type})",
@@ -142,17 +143,18 @@ def generate_fasting_recommendation(
     if activity_type == "sport" or is_badminton:
         return FastingRecommendationRead(
             date=date_str,
-            protocol_name="16:8 Badminton Court Fueling",
-            target_window="16:8",
-            window_hours="12:30 PM - 9:30 PM",
+            protocol_name="14:10 Badminton Court Fueling",
+            target_window="14:10",
+            window_hours="10:30 AM - 8:30 PM",
             rationale=(
-                f"Evening court session scheduled ({activity_name}). Window shifted later to allow "
-                f"5:00 PM pre-court fuel and post-court protein recovery before 10:00 PM."
+                f"Evening court session scheduled ({activity_name}). Standard 14:10 window with a "
+                f"zero-prep pre-court top-up and post-court protein recovery."
             ),
             fueling_anchors=[
-                "12:30 PM: Clean balanced lunch with sustained carbs and 40g protein",
-                "05:00 PM: Pre-court fuel (oats + whey, banana, electrolytes)",
-                "09:30 PM: Post-court recovery protein shake (close window by 10:00 PM)",
+                "Morning: Clean fast with water, black coffee, or tea until 10:30 AM",
+                "10:30 AM: Leftovers or eat-out plate triage, protein first, then carbs and sides to satiety",
+                "05:00 PM: Pre-court top-up, whey protein shake in water or milk (optional)",
+                "Post-court or family dinner: plate triage, protein first, then carbs and sides to satiety",
             ],
             recovery_status=recovery_status,
             activity_context=f"{activity_name} (sport)",
@@ -162,17 +164,18 @@ def generate_fasting_recommendation(
     if activity_type == "lift":
         return FastingRecommendationRead(
             date=date_str,
-            protocol_name="16:8 Strength and Hypertrophy Split",
-            target_window="16:8",
-            window_hours="12:30 PM - 8:30 PM",
+            protocol_name="14:10 Strength and Hypertrophy Split",
+            target_window="14:10",
+            window_hours="10:30 AM - 8:30 PM",
             rationale=(
-                f"Resistance training scheduled ({activity_name}). Fasting window timed to break "
-                f"fast post-workout with 45g protein to maximize muscle protein synthesis."
+                f"Resistance training scheduled ({activity_name}). Feeding window opens at 10:30 AM "
+                f"so post-workout protein is prioritized to maximize muscle protein synthesis."
             ),
             fueling_anchors=[
-                "12:30 PM: Break fast with 45g protein + complex carbohydrates",
-                "04:30 PM: Midday protein snack + fresh fruit",
-                "08:00 PM: High-protein dinner + greens (close window by 8:30 PM)",
+                "Morning: Clean fast with water, black coffee, or tea until 10:30 AM",
+                "Post-workout: Plate triage, protein first (40-45g), then carbs and sides to satiety",
+                "Family dinner (done by 8:30 PM): plate triage, protein first, then carbs and sides to satiety",
+                "Optional: whey protein shake in water or milk as a zero-prep top-up",
             ],
             recovery_status=recovery_status,
             activity_context=f"{activity_name} (lift)",
@@ -190,27 +193,51 @@ def generate_fasting_recommendation(
                 "and family meals while maintaining circadian metabolic consistency."
             ),
             fueling_anchors=[
-                "10:30 AM: Mindful brunch with high protein and eggs",
-                "07:30 PM: Dinner with family and friends; avoid high-sugar late snacking",
+                "Morning: Clean fast with water, black coffee, or tea until 10:30 AM",
+                "10:30 AM: Leftovers or eat-out plate triage, protein first, then carbs and sides to satiety",
+                "Family dinner (done by 8:30 PM): plate triage, protein first, then carbs and sides to satiety",
+                "Optional: whey protein shake in water or milk as a zero-prep top-up",
             ],
             recovery_status=recovery_status,
             activity_context=f"{activity_name} (weekend)",
         )
 
-    # Rule E: Weekday Rest / Reset with Solid Recovery -> 18:6 Deep Metabolic Reset
+    # Rule E: Friday Rest and Fast with Green biometrics -> 18:6 Deep Metabolic Reset
+    # The 18h+ fast is gated strictly to Friday with optimal recovery.
+    if day_of_week == 4 and recovery_status == "optimal":
+        return FastingRecommendationRead(
+            date=date_str,
+            protocol_name="18:6 Deep Metabolic Reset",
+            target_window="18:6",
+            window_hours="3:30 PM - 8:30 PM",
+            rationale=(
+                f"Friday rest day with {recovery_status} autonomic recovery. Extended fasting window "
+                f"promotes deep fat oxidation and cellular autophagy without training interference."
+            ),
+            fueling_anchors=[
+                "Morning: Clean fast with water, black coffee, or tea (add electrolytes if desired)",
+                "03:30 PM: Break fast with plate triage, protein first, or a whey shake in water or milk",
+                "Family dinner (done by 8:30 PM): plate triage, protein first, then carbs and sides to satiety",
+            ],
+            recovery_status=recovery_status,
+            activity_context=f"{activity_name} (rest)",
+        )
+
+    # Rule F: Any other rest day, or non-optimal recovery -> 14:10 baseline
     return FastingRecommendationRead(
         date=date_str,
-        protocol_name="18:6 Deep Metabolic Reset",
-        target_window="18:6",
-        window_hours="3:30 PM - 8:30 PM",
+        protocol_name="14:10 Rest Day Baseline",
+        target_window="14:10",
+        window_hours="10:30 AM - 8:30 PM",
         rationale=(
-            f"Rest day with {recovery_status} autonomic recovery. Extended fasting window "
-            f"promotes deep fat oxidation and cellular autophagy without training interference."
+            f"Rest day with {recovery_status} autonomic recovery. Standard 14:10 baseline; "
+            f"18h+ fasts are reserved for Friday rest days with optimal recovery."
         ),
         fueling_anchors=[
-            "Morning: High hydration + black coffee + pink salt/electrolytes",
-            "03:30 PM: Break fast with dense protein, avocado, and vegetables",
-            "08:00 PM: Moderate carb, high-protein dinner to prepare for tomorrow",
+            "Morning: Clean fast with water, black coffee, or tea until 10:30 AM",
+            "10:30 AM: Leftovers or eat-out plate triage, protein first, then carbs and sides to satiety",
+            "Family dinner (done by 8:30 PM): plate triage, protein first, then carbs and sides to satiety",
+            "Optional: whey protein shake in water or milk as a zero-prep top-up",
         ],
         recovery_status=recovery_status,
         activity_context=f"{activity_name} (rest)",
