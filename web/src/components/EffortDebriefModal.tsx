@@ -100,7 +100,7 @@ export function EffortDebriefModal({ session, exercises, onSave, onSkip }: Effor
             placeholder="Add note (e.g. form felt smooth, or tight hamstring)..."
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-slate-100 placeholder-slate-500"
+            className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-base sm:text-xs text-slate-100 placeholder-slate-500"
           />
         </div>
 

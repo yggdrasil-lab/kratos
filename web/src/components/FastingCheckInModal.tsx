@@ -84,7 +84,7 @@ export function FastingCheckInModal({
             placeholder="Notes (e.g. felt hungry at 3pm, drank electrolytes)..."
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-slate-100 placeholder-slate-500"
+            className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-base sm:text-xs text-slate-100 placeholder-slate-500"
           />
         </div>
 
