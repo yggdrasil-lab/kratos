@@ -134,7 +134,7 @@ export function ProgressView({
                     <div className="flex items-center gap-1.5 flex-wrap justify-end">
                       {isInferred && (
                         <span className="text-[11px] px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold flex items-center gap-1">
-                          ⚡ Auto-Detected
+                          ⚡ Inferred from Plan
                         </span>
                       )}
                       <EffortBadge effort={effort} />

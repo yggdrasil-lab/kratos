@@ -1,5 +1,12 @@
 import { useState } from 'react'
-import { Button, EmptyState, GlassCard, NumericKeypadModal } from '@yggdrasil-lab/ui'
+import {
+  Button,
+  EmptyState,
+  GlassCard,
+  NumericKeypadModal,
+  RestTimerBar,
+  useRestTimer,
+} from '@yggdrasil-lab/ui'
 import type { Exercise, SessionPayload } from '../types'
 import { isPerHandExercise } from '../utils/session'
 
@@ -28,7 +35,8 @@ interface ActiveWorkoutViewProps {
 }
 
 /**
- * Active workout logging screen with per-set weight/rep inputs and tactile keypad modal.
+ * Active workout logging screen with per-set weight/rep inputs, rest timer bar,
+ * and tactile keypad modal.
  */
 export function ActiveWorkoutView({
   session,
@@ -43,6 +51,11 @@ export function ActiveWorkoutView({
 }: ActiveWorkoutViewProps) {
   const [keypadTarget, setKeypadTarget] = useState<ActiveKeypadTarget | null>(null)
   const [keypadBuffer, setKeypadBuffer] = useState<string>('')
+  const restTimer = useRestTimer(90)
+
+  const startRestCountdown = () => {
+    restTimer.startTimer(restTimer.activePresetSeconds || 90)
+  }
 
   const openKeypadForSet = (
     itemIndex: number,
@@ -61,13 +74,36 @@ export function ActiveWorkoutView({
       keypadTarget.field === 'weight_kg'
         ? parseFloat(keypadBuffer)
         : parseInt(keypadBuffer, 10)
+    const nextValue = !isNaN(parsed) ? parsed : null
     onUpdateSet(
       keypadTarget.itemIndex,
       keypadTarget.setIndex,
       keypadTarget.field,
-      !isNaN(parsed) ? parsed : null
+      nextValue
     )
+    if (keypadTarget.field === 'reps' && nextValue !== null && nextValue > 0) {
+      startRestCountdown()
+    }
     setKeypadTarget(null)
+  }
+
+  const handleRepsChange = (
+    itemIndex: number,
+    setIndex: number,
+    prevReps: number | null,
+    rawValue: string
+  ) => {
+    const parsed = rawValue ? parseInt(rawValue, 10) : null
+    const nextReps = parsed !== null && !isNaN(parsed) ? parsed : null
+    onUpdateSet(itemIndex, setIndex, 'reps', nextReps)
+    if ((prevReps === null || prevReps <= 0) && nextReps !== null && nextReps > 0) {
+      startRestCountdown()
+    }
+  }
+
+  const handleAddSet = (itemIndex: number) => {
+    onAddSet(itemIndex)
+    startRestCountdown()
   }
 
   return (
@@ -86,6 +122,17 @@ export function ActiveWorkoutView({
             Discard
           </Button>
         </div>
+
+        <RestTimerBar
+          {...restTimer}
+          onStart={restTimer.startTimer}
+          onPause={restTimer.pauseTimer}
+          onResume={restTimer.resumeTimer}
+          onAdjust={restTimer.adjustTimer}
+          onDismiss={restTimer.dismissTimer}
+          variant="blue"
+          className="mb-4"
+        />
 
         <GlassCard>
           {session.items.length === 0 ? (
@@ -173,12 +220,7 @@ export function ActiveWorkoutView({
                             placeholder={targetReps !== null ? String(targetReps) : 'Reps'}
                             value={set.reps !== null ? set.reps : ''}
                             onChange={(e) =>
-                              onUpdateSet(
-                                itemIdx,
-                                setIdx,
-                                'reps',
-                                e.target.value ? parseInt(e.target.value, 10) : null
-                              )
+                              handleRepsChange(itemIdx, setIdx, set.reps, e.target.value)
                             }
                             onDoubleClick={() =>
                               openKeypadForSet(
@@ -207,7 +249,7 @@ export function ActiveWorkoutView({
                       size="sm"
                       fullWidth
                       className="mt-3"
-                      onClick={() => onAddSet(itemIdx)}
+                      onClick={() => handleAddSet(itemIdx)}
                     >
                       + Add Set
                     </Button>

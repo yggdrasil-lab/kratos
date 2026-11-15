@@ -72,7 +72,7 @@ test.describe('Progress and Activity Stream', () => {
       },
       items: [],
     }
-    apiState.sessions.unshift(inferredSess)
+    apiState.sessions = [inferredSess, ...apiState.sessions.filter((s) => !s.extra?.inferred)]
 
     await page.goto('/')
 
@@ -113,7 +113,7 @@ test.describe('Progress and Activity Stream', () => {
       },
       items: [],
     }
-    apiState.sessions.unshift(inferredSess)
+    apiState.sessions = [inferredSess, ...apiState.sessions.filter((s) => !s.extra?.inferred)]
 
     await page.goto('/')
 
@@ -143,7 +143,7 @@ test.describe('Progress and Activity Stream', () => {
       },
       items: [],
     }
-    apiState.sessions.unshift(inferredSess)
+    apiState.sessions = [inferredSess, ...apiState.sessions.filter((s) => !s.extra?.inferred)]
 
     await page.goto('/')
 
@@ -223,7 +223,7 @@ test.describe('Progress and Activity Stream', () => {
       },
       items: [],
     }
-    apiState.sessions.unshift(infSess)
+    apiState.sessions = [infSess, ...apiState.sessions.filter((s) => !s.extra?.inferred)]
 
     await page.goto('/')
 

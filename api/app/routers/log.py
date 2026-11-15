@@ -13,8 +13,8 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
+from app.models import Routine, SessionItem, SetEntry
 from app.models import Session as WorkoutSession
-from app.models import SessionItem, SetEntry
 from app.schemas import SessionCreate, SessionRead
 
 router = APIRouter(prefix="/sessions", tags=["log"])
@@ -47,6 +47,7 @@ def _replace_items(db: Session, session: WorkoutSession, payload: SessionCreate)
             exercise_id=incoming.exercise_id,
             position=incoming.position if incoming.position is not None else position,
             notes=incoming.notes,
+            extra=incoming.extra,
         )
         for number, incoming_set in enumerate(incoming.sets, start=1):
             item.sets.append(
@@ -84,11 +85,15 @@ def upsert_session(
     session_id: uuid.UUID, payload: SessionCreate, db: Session = Depends(get_db)
 ) -> WorkoutSession:
     """Idempotent write. The path ID wins, so a retried flush cannot duplicate."""
+    routine_id = payload.routine_id
+    if routine_id is not None and db.get(Routine, routine_id) is None:
+        routine_id = None
+
     session = _load(db, session_id)
     if session is None:
         session = WorkoutSession(
             id=session_id,
-            routine_id=payload.routine_id,
+            routine_id=routine_id,
             started_at=payload.started_at,
             ended_at=payload.ended_at,
             notes=payload.notes,
@@ -96,7 +101,7 @@ def upsert_session(
         )
         db.add(session)
     else:
-        session.routine_id = payload.routine_id
+        session.routine_id = routine_id
         session.started_at = payload.started_at
         session.ended_at = payload.ended_at
         session.notes = payload.notes

@@ -69,7 +69,7 @@ test.describe('Train Flow and Effort Debrief', () => {
     await expect(page.getByText('Completed ✓')).toBeVisible()
     await expect(page.getByText('Duration')).toBeVisible()
     await expect(page.getByText('Total Sets')).toBeVisible()
-    await expect(page.getByText('Volume')).toBeVisible()
+    await expect(page.getByTestId('completed-workout-card').getByText('Volume')).toBeVisible()
     await expect(page.getByRole('button', { name: /Start Another Session/i })).toBeVisible()
   })
 
@@ -181,5 +181,69 @@ test.describe('Train Flow and Effort Debrief', () => {
     await expect(page.getByRole('heading', { name: 'Badminton Match Play' })).toBeVisible()
     await expect(page.getByRole('button', { name: /Start Workout/i })).not.toBeVisible()
     await expect(page.getByText(/No routine scheduled for today/i)).toBeVisible()
+  })
+
+  test('manages rest timer during active workout and resets mobile viewport zoom on modal close', async ({ page }) => {
+    // 1. Start workout and verify idle RestTimerBar
+    await page.getByRole('button', { name: /Start Workout/i }).click()
+    const restTimerBar = page.getByTestId('rest-timer-bar')
+    await expect(restTimerBar).toBeVisible()
+
+    // 2. Clicking preset 1:30 starts countdown, +15s adjusts, Skip dismisses
+    await restTimerBar.getByRole('button', { name: 'Start 1:30 rest timer' }).click()
+    const countdown = page.getByTestId('rest-timer-countdown')
+    await expect(countdown).toBeVisible()
+    await expect(countdown).toHaveText('1:30')
+
+    await restTimerBar.getByRole('button', { name: 'Add 15 seconds' }).click()
+    await expect(countdown).toHaveText('1:45')
+
+    await restTimerBar.getByRole('button', { name: 'Skip rest timer' }).click()
+    await expect(countdown).not.toBeVisible()
+
+    // 3. Logging positive reps in a set row auto-starts countdown
+    const firstRepsInput = page.locator('.set-row input').nth(1)
+    await firstRepsInput.fill('8')
+    await expect(countdown).toBeVisible()
+    await expect(countdown).toHaveText('1:30')
+
+    // 4. Dismiss and verify + Add Set also auto-starts countdown
+    await restTimerBar.getByRole('button', { name: 'Skip rest timer' }).click()
+    await expect(countdown).not.toBeVisible()
+    await page.getByRole('button', { name: '+ Add Set' }).first().click()
+    await expect(countdown).toBeVisible()
+    await expect(countdown).toHaveText('1:30')
+
+    // 5. Dismiss and verify confirming positive reps in NumericKeypadModal auto-starts countdown
+    await restTimerBar.getByRole('button', { name: 'Skip rest timer' }).click()
+    await expect(countdown).not.toBeVisible()
+    await page.locator('.set-row input').nth(3).dblclick()
+    const keypadModal = page.locator('.modal-card')
+    await expect(keypadModal.getByRole('button', { name: 'Apply Set Value' })).toBeVisible()
+    await keypadModal.getByRole('button', { name: '8', exact: true }).click()
+    await keypadModal.getByRole('button', { name: 'Apply Set Value' }).click()
+    await expect(keypadModal).not.toBeVisible()
+    await expect(countdown).toBeVisible()
+    await expect(countdown).toHaveText('1:30')
+
+    // 6. Open EffortDebriefModal, focus/fill note, save, and verify blur + viewport lock
+    await page.getByRole('button', { name: 'Finish Workout' }).click()
+    await expect(page.getByRole('heading', { name: 'Workout Complete!' })).toBeVisible()
+
+    const noteInput = page.getByPlaceholder(/Add note/i)
+    await noteInput.click()
+    await noteInput.fill('Controlled rest and clean reps')
+    await expect(noteInput).toBeFocused()
+
+    await page.getByRole('button', { name: 'Save and Finish' }).click()
+    await expect(page.getByRole('heading', { name: 'Workout Complete!' })).not.toBeVisible()
+    await expect(noteInput).toHaveCount(0)
+
+    const activeTag = await page.evaluate(() => document.activeElement?.tagName ?? '')
+    expect(activeTag).toBe('BODY')
+
+    const viewportContent = await page.locator('meta[name="viewport"]').getAttribute('content')
+    expect(viewportContent).toContain('initial-scale=1.0')
+    expect(viewportContent).toContain('maximum-scale=1.0')
   })
 })

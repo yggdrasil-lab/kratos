@@ -176,6 +176,7 @@ class SessionItemCreate(BaseModel):
     exercise_id: uuid.UUID
     position: int | None = None
     notes: str | None = None
+    extra: dict = Field(default_factory=dict)
     sets: list[SetEntryCreate] = Field(default_factory=list)
 
 
@@ -185,6 +186,7 @@ class SessionItemRead(ORMModel):
     exercise_id: uuid.UUID
     position: int
     notes: str | None
+    extra: dict = Field(default_factory=dict)
     sets: list[SetEntryRead] = Field(default_factory=list)
 
 

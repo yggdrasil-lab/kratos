@@ -189,3 +189,51 @@ def test_client_errors_endpoint(client) -> None:
     assert res2.status_code == 200
     assert res2.json() == {"status": "ok"}
 
+
+def test_session_upsert_persists_item_extra_and_handles_missing_routine(client) -> None:
+    """Verifies SessionItem.extra is persisted and missing routine_id falls back to None."""
+    exercise_id = client.post("/exercises", json={"name": "Incline Dumbbell Press"}).json()["id"]
+    routine_id = client.post("/routines", json={"name": "Push Day", "items": []}).json()["id"]
+    session_id = str(uuid.uuid4())
+    missing_routine_id = str(uuid.uuid4())
+
+    payload = {
+        "id": session_id,
+        "routine_id": missing_routine_id,
+        "started_at": dt.datetime(2026, 7, 3, 8, 0, tzinfo=dt.timezone.utc).isoformat(),
+        "items": [
+            {
+                "exercise_id": exercise_id,
+                "position": 0,
+                "extra": {
+                    "target_sets": 3,
+                    "target_reps": "8-10",
+                    "weight_basis": "per_hand",
+                },
+                "sets": [{"set_number": 1, "reps": 10, "weight_kg": 22.5}],
+            }
+        ],
+    }
+
+    resp = client.put(f"/sessions/{session_id}", json=payload)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["routine_id"] is None
+    assert len(body["items"]) == 1
+    assert body["items"][0]["extra"] == {
+        "target_sets": 3,
+        "target_reps": "8-10",
+        "weight_basis": "per_hand",
+    }
+
+    fetched = client.get(f"/sessions/{session_id}")
+    assert fetched.status_code == 200
+    assert fetched.json()["routine_id"] is None
+    assert fetched.json()["items"][0]["extra"]["weight_basis"] == "per_hand"
+
+    # Valid existing routine_id is preserved on subsequent upsert.
+    payload["routine_id"] = routine_id
+    updated = client.put(f"/sessions/{session_id}", json=payload)
+    assert updated.status_code == 200
+    assert updated.json()["routine_id"] == routine_id
+

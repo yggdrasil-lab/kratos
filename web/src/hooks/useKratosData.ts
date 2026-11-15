@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { SessionExpiredError } from '@yggdrasil-lab/ui'
+import { clearBrowserCaches, SessionExpiredError } from '@yggdrasil-lab/ui'
 import { api } from '../api'
 import { db, requestPersistence } from '../db'
 import { enqueue, flush, pending } from '../outbox'
@@ -66,6 +66,11 @@ export function useKratosData() {
           : { kind: 'error', message: `${left} still queued - will sync when online.` }
       )
     } catch (err) {
+      if (err instanceof SessionExpiredError) {
+        setSessionExpired(true)
+        setStatus({ kind: 'error', message: SESSION_EXPIRED_MESSAGE })
+        return
+      }
       setStatus({
         kind: 'error',
         message: err instanceof Error ? err.message : 'Sync failed',
@@ -74,17 +79,34 @@ export function useKratosData() {
   }, [])
 
   const loadSessions = useCallback(async () => {
+    const sortByStartedDesc = (a: SessionPayload, b: SessionPayload) => {
+      const timeA = new Date(a.started_at || 0).getTime()
+      const timeB = new Date(b.started_at || 0).getTime()
+      return (Number.isNaN(timeB) ? 0 : timeB) - (Number.isNaN(timeA) ? 0 : timeA)
+    }
+
     try {
-      const data = await api.sessions(50, 0)
-      setSessions(data)
+      const [serverSessions, queuedItems] = await Promise.all([api.sessions(50, 0), pending()])
+      setQueued(queuedItems.length)
+
+      const mergedById = new Map<string, SessionPayload>()
+      for (const s of serverSessions) {
+        mergedById.set(s.id, s)
+      }
+      for (const q of queuedItems) {
+        mergedById.set(q.payload.id, q.payload)
+      }
+      const merged = Array.from(mergedById.values()).sort(sortByStartedDesc)
+      setSessions(merged)
     } catch (err) {
       if (err instanceof SessionExpiredError) {
         setSessionExpired(true)
         setStatus({ kind: 'error', message: SESSION_EXPIRED_MESSAGE })
       }
       const queuedSessions = await pending()
+      setQueued(queuedSessions.length)
       if (queuedSessions.length > 0) {
-        setSessions(queuedSessions.map((q) => q.payload))
+        setSessions(queuedSessions.map((q) => q.payload).sort(sortByStartedDesc))
       }
       void reportClientError(err, { source: 'sessions_fetch' })
     }
@@ -206,45 +228,46 @@ export function useKratosData() {
 
   const refreshAll = useCallback(async () => {
     refreshCircadianClock()
+    await clearBrowserCaches()
+    await sync()
     await Promise.all([
-      sync(),
       loadBiometrics(),
       loadSessions(),
       loadCatalogue(),
       loadRoutines(),
+      loadFastingLogs(),
     ])
-  }, [refreshCircadianClock, sync, loadBiometrics, loadSessions, loadCatalogue, loadRoutines])
+  }, [
+    refreshCircadianClock,
+    sync,
+    loadBiometrics,
+    loadSessions,
+    loadCatalogue,
+    loadRoutines,
+    loadFastingLogs,
+  ])
 
   useEffect(() => {
     void requestPersistence()
-    void refreshQueueCount()
-    void loadCatalogue()
-    void loadRoutines()
-    void loadSessions()
-    void loadBiometrics()
-    void loadFastingLogs()
+    void refreshAll()
 
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
         void refreshAll()
       }
     }
+    const onOnline = () => {
+      void refreshAll()
+    }
     document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('online', onOnline)
     const clockTimer = window.setInterval(refreshCircadianClock, 60_000)
     return () => {
       document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('online', onOnline)
       window.clearInterval(clockTimer)
     }
-  }, [
-    refreshQueueCount,
-    loadCatalogue,
-    loadRoutines,
-    loadSessions,
-    loadBiometrics,
-    loadFastingLogs,
-    refreshAll,
-    refreshCircadianClock,
-  ])
+  }, [refreshAll, refreshCircadianClock])
 
   const persistSession = useCallback(
     async (

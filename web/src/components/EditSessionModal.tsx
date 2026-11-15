@@ -110,7 +110,7 @@ export function EditSessionModal({
             value={routineName}
             onChange={(e) => setRoutineName(e.target.value)}
             placeholder="Enter routine or activity name..."
-            className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-sky-500"
+            className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-base sm:text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-sky-500"
           />
 
           <ChipSelector
@@ -138,7 +138,7 @@ export function EditSessionModal({
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="How did this session feel? Any joint feedback or PRs?"
-            className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-sky-500"
+            className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-base sm:text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-sky-500"
           />
         </div>
 
