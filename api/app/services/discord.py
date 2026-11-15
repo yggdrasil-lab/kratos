@@ -181,6 +181,27 @@ def _find_existing_active_thread(title: str, channel_id: str) -> str | None:
     return None
 
 
+def _chunk_content(content: str, limit: int = 1900) -> list[str]:
+    if len(content) <= limit:
+        return [content]
+    chunks: list[str] = []
+    remaining = content
+    while remaining:
+        if len(remaining) <= limit:
+            chunks.append(remaining)
+            break
+        split_idx = remaining.rfind("\n\n", 0, limit)
+        if split_idx == -1:
+            split_idx = remaining.rfind("\n", 0, limit)
+        if split_idx == -1:
+            split_idx = remaining.rfind(" ", 0, limit)
+        if split_idx == -1:
+            split_idx = limit
+        chunks.append(remaining[:split_idx].rstrip())
+        remaining = remaining[split_idx:].lstrip()
+    return chunks
+
+
 def _create_forum_thread(
     title: str,
     content: str,
@@ -194,11 +215,15 @@ def _create_forum_thread(
     if existing_id:
         return existing_id
 
+    chunks = _chunk_content(content, limit=1900)
+    starter_chunk = chunks[0] if chunks else ""
+    followup_chunks = chunks[1:]
+
     url = f"https://discord.com/api/v10/channels/{channel_id}/threads"
     headers = _get_auth_headers(bot_token)
     payload = json.dumps({
         "name": title[:100],
-        "message": {"content": content[:4000]},
+        "message": {"content": starter_chunk},
     }).encode("utf-8")
 
     req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
@@ -207,7 +232,20 @@ def _create_forum_thread(
             data = json.loads(resp.read().decode("utf-8"))
             thread_id = str(data.get("id"))
             logger.info("Successfully created Discord forum thread %s ('%s')", thread_id, title)
+            for chunk in followup_chunks:
+                try:
+                    msg_url = f"https://discord.com/api/v10/channels/{thread_id}/messages"
+                    msg_payload = json.dumps({"content": chunk}).encode("utf-8")
+                    msg_req = urllib.request.Request(msg_url, data=msg_payload, headers=headers, method="POST")
+                    with urllib.request.urlopen(msg_req, timeout=HTTP_TIMEOUT_SECONDS):
+                        pass
+                except Exception as chunk_exc:
+                    logger.warning("Failed posting thread follow-up chunk to %s: %s", thread_id, chunk_exc)
             return thread_id
+    except urllib.error.HTTPError as exc:
+        err_body = exc.read().decode("utf-8", errors="replace") if hasattr(exc, "read") else ""
+        logger.warning("Discord API bot token thread creation failed: %s (%s)", exc, err_body)
+        return None
     except Exception as exc:
         logger.warning("Discord API bot token thread creation failed: %s", exc)
         return None

@@ -12,7 +12,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models import Exercise, Routine, RoutineItem, Session as WorkoutSession, SessionItem, SetEntry, WeeklyPlan
-from app.schemas import RecommendedExerciseItem, WeightBasis, WorkoutRecommendationRead
+from app.schemas import (
+    RecommendedExerciseItem,
+    WeightBasis,
+    WorkoutRecommendationRead,
+    infer_weight_basis_from_name,
+)
 from app.services.jev_client import classify_recovery_state_jev
 
 
@@ -21,14 +26,7 @@ def resolve_exercise_weight_basis(
     explicit_basis: str | None = None,
 ) -> WeightBasis:
     """Determines whether an exercise's weight is specified per hand (per dumbbell) or total load."""
-    if explicit_basis == "per_hand":
-        return "per_hand"
-    lower_name = (exercise_name or "").lower()
-    if "dumbbell" in lower_name or "db " in lower_name or "per hand" in lower_name or "per dumbbell" in lower_name:
-        return "per_hand"
-    if explicit_basis == "total":
-        return "total"
-    return "total"
+    return infer_weight_basis_from_name(exercise_name, explicit_basis)
 
 
 def get_last_lift_for_exercise(db: Session, exercise_id) -> dict | None:

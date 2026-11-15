@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Modal, OptionCardGroup, ChipSelector, Button } from '@yggdrasil-lab/ui'
 import type { OptionCardItem } from '@yggdrasil-lab/ui'
 import type { EffortRating, Exercise, SessionPayload } from '../types'
+import { computeSessionVolumeAndSets } from '../utils/session'
 
 interface EffortDebriefModalProps {
   session: SessionPayload
@@ -50,24 +51,12 @@ const QUICK_TAGS = [
   '⏱️ Rushed Workout',
 ]
 
-export function EffortDebriefModal({ session, exercises: _exercises, onSave, onSkip }: EffortDebriefModalProps) {
+export function EffortDebriefModal({ session, exercises, onSave, onSkip }: EffortDebriefModalProps) {
   const [selectedRating, setSelectedRating] = useState<EffortRating>('optimal')
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [notes, setNotes] = useState<string>('')
 
-  let totalVolumeKg = 0
-  let completedSetsCount = 0
-
-  session.items.forEach((item) => {
-    item.sets.forEach((set) => {
-      if (set.status === 'done') {
-        completedSetsCount += 1
-        const w = set.weight_kg ?? 0
-        const r = set.reps ?? 0
-        totalVolumeKg += w * r
-      }
-    })
-  })
+  const { volume: totalVolumeKg, sets: completedSetsCount } = computeSessionVolumeAndSets(session, exercises)
 
   const startTime = new Date(session.started_at).getTime()
   const durationMinutes = Math.max(1, Math.round((Date.now() - startTime) / 60000))

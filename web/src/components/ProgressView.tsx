@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { GlassCard, GoalProgressCard, CollapsibleSection, Button } from '@yggdrasil-lab/ui'
 import type { DailyBiometrics, Exercise, FastingCheckIn, Routine, SessionPayload } from '../types'
 import { formatFriendlyDate } from '../utils/circadian'
-import { getSessionLabel } from '../utils/session'
+import { getSessionLabel, computeSessionVolumeAndSets } from '../utils/session'
 import { HRZoneBar } from './HRZoneBar'
 import type { HRZonesData } from './HRZoneBar'
 
@@ -56,20 +56,11 @@ export function ProgressView({
   }
 
   const computeSessionStats = (s: SessionPayload) => {
-    let volume = 0
-    let sets = 0
-    s.items.forEach((it) => {
-      it.sets.forEach((set) => {
-        if (set.status === 'done') {
-          sets += 1
-          volume += (set.weight_kg ?? 0) * (set.reps ?? 0)
-        }
-      })
-    })
+    const { volume, sets } = computeSessionVolumeAndSets(s, exercises)
     const durationMins = s.ended_at
       ? Math.max(1, Math.round((new Date(s.ended_at).getTime() - new Date(s.started_at).getTime()) / 60000))
       : null
-    return { volume: Math.round(volume), sets, durationMins }
+    return { volume, sets, durationMins }
   }
 
   return (

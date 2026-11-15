@@ -1,4 +1,56 @@
-import type { Routine, SessionPayload } from '../types'
+import type { Exercise, Routine, SessionItemPayload, SessionPayload, WeightBasis } from '../types'
+
+/**
+ * Determines whether an exercise's weight is entered and stored per hand (per dumbbell)
+ * rather than total combined load.
+ */
+export function isPerHandExercise(
+  exercise?: Pick<Exercise, 'name' | 'weight_basis'> | null,
+  explicitBasis?: unknown,
+  fallbackName?: string
+): boolean {
+  if (explicitBasis === 'per_hand') return true
+  if (exercise?.weight_basis === 'per_hand') return true
+  const name = (fallbackName || exercise?.name || '').toLowerCase()
+  return (
+    name.includes('dumbbell') ||
+    name.includes('db ') ||
+    name.includes('per hand') ||
+    name.includes('per dumbbell')
+  )
+}
+
+export function resolveWeightBasis(
+  exercise?: Pick<Exercise, 'name' | 'weight_basis'> | null,
+  explicitBasis?: unknown,
+  fallbackName?: string
+): WeightBasis {
+  return isPerHandExercise(exercise, explicitBasis, fallbackName) ? 'per_hand' : 'total'
+}
+
+/**
+ * Computes completed sets and total volume (kg) for a workout session,
+ * multiplying per-hand dumbbell loads by 2 to reflect total load moved.
+ */
+export function computeSessionVolumeAndSets(
+  session: SessionPayload,
+  exercises: Pick<Exercise, 'id' | 'name' | 'weight_basis'>[] = []
+): { volume: number; sets: number } {
+  let volume = 0
+  let sets = 0
+  session.items?.forEach((it: SessionItemPayload) => {
+    const ex = exercises.find((e) => e.id === it.exercise_id)
+    const fallbackName = typeof it.extra?.custom_name === 'string' ? it.extra.custom_name : undefined
+    const multiplier = isPerHandExercise(ex, it.extra?.weight_basis, fallbackName) ? 2 : 1
+    it.sets?.forEach((st) => {
+      if (st.status === 'done') {
+        sets += 1
+        volume += (st.weight_kg ?? 0) * (st.reps ?? 0) * multiplier
+      }
+    })
+  })
+  return { volume: Math.round(volume), sets }
+}
 
 /**
  * Returns a human-friendly, contextual workout title.
