@@ -23,8 +23,15 @@ from app.models import (
     WeeklyPlan,
     WorkoutRecommendation,
 )
-from app.services.llm_workout import synthesize_workout_recommendation_llm
-from app.services.workout_engine import generate_workout_recommendation
+from app.schemas import ExerciseCreate, RecommendedExerciseItem
+from app.services.llm_workout import (
+    get_recent_lift_history,
+    synthesize_workout_recommendation_llm,
+)
+from app.services.workout_engine import (
+    generate_workout_recommendation,
+    resolve_exercise_weight_basis,
+)
 
 
 class TestWorkoutEngine(unittest.TestCase):
@@ -288,6 +295,45 @@ class TestWorkoutEngine(unittest.TestCase):
         self.assertEqual(cached_data["routine_name"], "Upper Body A (Express 35m)")
         self.assertEqual(cached_data["exercises"][0]["weight_basis"], "per_hand")
         self.assertEqual(mock_urlopen.call_count, 0)
+
+    def test_dumbbell_weight_basis_inference_and_total_preservation(self):
+        db_deadlift = ExerciseCreate(name="Deadlift (Dumbbell)", equipment="Dumbbell")
+        self.assertEqual(db_deadlift.weight_basis, "per_hand")
+
+        russian_twist = ExerciseCreate(
+            name="Russian Twist (Weighted)",
+            equipment="Dumbbell/Plate",
+            weight_basis="total",
+        )
+        self.assertEqual(russian_twist.weight_basis, "total")
+
+        rec_item = RecommendedExerciseItem(
+            exercise_name="Deadlift (Dumbbell)",
+            target_sets=2,
+            target_reps="8-10 reps",
+            suggested_weight_kg=22.0,
+        )
+        self.assertEqual(rec_item.weight_basis, "per_hand")
+        self.assertEqual(resolve_exercise_weight_basis("Deadlift (Dumbbell)", "total"), "per_hand")
+
+    def test_recent_lift_history_resolves_per_hand_for_dumbbell(self):
+        dl = Exercise(name="Deadlift (Dumbbell)", weight_basis="total", tracking="reps_weight")
+        self.db.add(dl)
+        self.db.flush()
+        sess = WorkoutSession(started_at=dt.datetime(2026, 11, 11, 15, 0, tzinfo=dt.timezone.utc))
+        self.db.add(sess)
+        self.db.flush()
+        item = SessionItem(session_id=sess.id, exercise_id=dl.id, position=0)
+        self.db.add(item)
+        self.db.flush()
+        self.db.add(SetEntry(session_item_id=item.id, set_number=1, status="done", weight_kg=22.0, reps=10))
+        self.db.commit()
+
+        history = get_recent_lift_history(self.db, limit=5)
+        dl_rows = [row for row in history if row["exercise_name"] == "Deadlift (Dumbbell)"]
+        self.assertEqual(len(dl_rows), 1)
+        self.assertEqual(dl_rows[0]["weight_basis"], "per_hand")
+        self.assertEqual(dl_rows[0]["weight_kg"], 22.0)
 
 
 if __name__ == "__main__":

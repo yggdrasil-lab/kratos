@@ -12,6 +12,21 @@ WeightBasis = Literal["total", "per_hand"]
 SetStatus = Literal["done", "missed", "skipped"]
 
 
+def infer_weight_basis_from_name(name: str | None, explicit_basis: str | None = None) -> WeightBasis:
+    """Infers per-hand weight basis for dumbbell/per-hand exercises unless unambiguously total."""
+    if explicit_basis == "per_hand":
+        return "per_hand"
+    lower_name = (name or "").lower()
+    if (
+        "dumbbell" in lower_name
+        or "db " in lower_name
+        or "per hand" in lower_name
+        or "per dumbbell" in lower_name
+    ):
+        return "per_hand"
+    return "total"
+
+
 class ORMModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -29,6 +44,19 @@ class ExerciseBase(BaseModel):
     video_url: str | None = None
     notes: str | None = None
     extra: dict = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _infer_dumbbell_weight_basis(self) -> "ExerciseBase":
+        if self.weight_basis == "total":
+            inferred = infer_weight_basis_from_name(self.name, self.weight_basis)
+            if inferred == "per_hand":
+                self.weight_basis = "per_hand"
+            elif (
+                "weight_basis" not in self.model_fields_set
+                and (self.equipment or "").strip().lower() == "dumbbell"
+            ):
+                self.weight_basis = "per_hand"
+        return self
 
 
 class ExerciseCreate(ExerciseBase):
@@ -315,15 +343,7 @@ class RecommendedExerciseItem(BaseModel):
 
     @model_validator(mode="after")
     def _infer_dumbbell_weight_basis(self) -> "RecommendedExerciseItem":
-        if self.weight_basis == "total":
-            lower_name = (self.exercise_name or "").lower()
-            if (
-                "dumbbell" in lower_name
-                or "db " in lower_name
-                or "per hand" in lower_name
-                or "per dumbbell" in lower_name
-            ):
-                self.weight_basis = "per_hand"
+        self.weight_basis = infer_weight_basis_from_name(self.exercise_name, self.weight_basis)
         return self
 
 

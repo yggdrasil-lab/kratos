@@ -54,6 +54,7 @@ CRITICAL INSTRUCTIONS:
 - You must strictly prescribe exercises that exist in the provided 'active_exercises' catalog or 'active_routines'. Never invent exercises not present in the user's database.
 - Base 'suggested_weight_kg' on the athlete's actual past lifts in 'recent_lift_history'. For progressive overload when recovery is optimal, suggest +1.25kg to +2.5kg, or +1 rep.
 - For dumbbell exercises, set "weight_basis" to "per_hand" and specify "suggested_weight_kg" as the single-dumbbell weight per hand (e.g. 15.0 for 15kg per dumbbell, never the combined pair load). For barbell, machine, or cable total loads, set "weight_basis" to "total".
+- In 'recent_lift_history', if an exercise has "weight_basis": "per_hand" (or is a dumbbell exercise), the logged "weight_kg" is ALREADY the per-hand weight. NEVER divide it by 2. For example, if recent_lift_history shows Dumbbell Deadlift at 22kg, the athlete lifted 22kg per hand (44kg total), so maintain or progress from 22kg per hand, NEVER 11kg.
 - When 'jev_decision_gates' indicates SHOULDER_SPARING, LUMBAR_SPARING, or KNEE_SPARING, strictly prioritize neutral-grip, chest-supported, or deloaded variations. When TIME_CRUNCH_30M is indicated, limit prescription to 2-3 high-impact exercises.
 - For isometric or duration-based exercises (e.g. Plank), specify 'target_reps' as a timed hold (e.g. '45-60s hold') instead of dynamic reps. If the athlete is in an MEV deload or fatigued (RIR 3-4), never instruct to hold to failure; specify stopping shy of failure before form breaks down.
 - If the database catalog has no exercises, return an empty array for "exercises".
@@ -109,7 +110,7 @@ def get_recent_lift_history(db: Session, limit: int = 15) -> list[dict]:
         return [
             {
                 "exercise_name": row.exercise_name,
-                "weight_basis": row.weight_basis,
+                "weight_basis": resolve_exercise_weight_basis(row.exercise_name, row.weight_basis),
                 "weight_kg": float(row.weight_kg) if row.weight_kg is not None else None,
                 "reps": row.reps,
                 "rpe": float(row.rpe) if row.rpe is not None else None,
@@ -136,7 +137,7 @@ def get_active_exercises(db: Session) -> list[dict]:
                 "id": str(ex.id),
                 "name": ex.name,
                 "tracking": ex.tracking,
-                "weight_basis": ex.weight_basis,
+                "weight_basis": resolve_exercise_weight_basis(ex.name, ex.weight_basis),
                 "primary_muscles": ex.primary_muscles or [],
                 "secondary_muscles": ex.secondary_muscles or [],
                 "equipment": ex.equipment,
@@ -200,7 +201,7 @@ def get_active_routines(db: Session) -> list[dict]:
                         "target_sets": it.target_sets,
                         "target_reps": it.target_reps,
                         "target_weight_kg": float(it.target_weight_kg) if it.target_weight_kg is not None else None,
-                        "weight_basis": it.exercise.weight_basis if it.exercise else "total",
+                        "weight_basis": resolve_exercise_weight_basis(it.exercise.name, it.exercise.weight_basis) if it.exercise else "total",
                         "notes": it.notes,
                     }
                     for it in r.items

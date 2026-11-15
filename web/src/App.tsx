@@ -34,6 +34,7 @@ import { EditSessionModal } from './components/EditSessionModal'
 import { ProgressView } from './components/ProgressView'
 import { TodayView } from './components/TodayView'
 import { getCircadianDate, getCircadianDayOfWeek } from './utils/circadian'
+import { computeSessionVolumeAndSets, isPerHandExercise, resolveWeightBasis } from './utils/session'
 import { usePwaUpdate } from './utils/pwa'
 import { reportClientError } from './utils/telemetry'
 
@@ -343,11 +344,7 @@ export function App() {
             (recEx.exercise_id && e.id === recEx.exercise_id) ||
             e.name.toLowerCase() === recEx.exercise_name.toLowerCase()
         )
-        const isPerHand =
-          recEx.weight_basis === 'per_hand' ||
-          matchEx?.weight_basis === 'per_hand' ||
-          recEx.exercise_name.toLowerCase().includes('dumbbell') ||
-          recEx.exercise_name.toLowerCase().includes('db ')
+        const weightBasis = resolveWeightBasis(matchEx, recEx.weight_basis, recEx.exercise_name)
         const targetSets = recEx.target_sets ?? 2
         return {
           id: newId(),
@@ -358,7 +355,7 @@ export function App() {
             target_sets: targetSets,
             target_reps: recEx.target_reps,
             target_weight_kg: recEx.suggested_weight_kg,
-            weight_basis: isPerHand ? 'per_hand' : 'total',
+            weight_basis: weightBasis,
             custom_name: !matchEx ? recEx.exercise_name : undefined,
           },
           sets: Array.from({ length: targetSets }, (_, setIdx) => ({
@@ -380,6 +377,7 @@ export function App() {
         .slice()
         .sort((a, b) => a.position - b.position)
         .map((it, idx) => {
+          const matchEx = exercises.find((e) => e.id === it.exercise_id)
           const targetSets = it.target_sets ?? 2
           return {
             id: newId(),
@@ -391,6 +389,7 @@ export function App() {
               target_reps: it.target_reps,
               target_weight_kg: it.target_weight_kg,
               target_duration_s: it.target_duration_s,
+              weight_basis: resolveWeightBasis(matchEx),
             },
             sets: Array.from({ length: targetSets }, (_, setIdx) => ({
               id: newId(),
@@ -456,20 +455,7 @@ export function App() {
       const duration = session.started_at
         ? Math.round((new Date(ended_at).getTime() - new Date(session.started_at).getTime()) / 60000)
         : undefined
-      const totalVolume = session.items.reduce((sum, item) => {
-        return (
-          sum +
-          item.sets.reduce(
-            (setSum, s) =>
-              setSum + (s.status === 'done' && s.reps && s.weight_kg ? s.reps * s.weight_kg : 0),
-            0
-          )
-        )
-      }, 0)
-      const completedSets = session.items.reduce(
-        (sum, item) => sum + item.sets.filter((s) => s.status === 'done').length,
-        0
-      )
+      const { volume: totalVolume, sets: completedSets } = computeSessionVolumeAndSets(session, exercises)
       const sessionDate = (session.started_at || ended_at).split('T')[0]
 
       api.saveWorkoutFeedback({
@@ -823,11 +809,7 @@ export function App() {
                   {session.items.map((item, itemIdx) => {
                     const exercise = exercises.find((e) => e.id === item.exercise_id)
                     const exLabel = (item.extra?.custom_name as string) || exercise?.name || 'Unknown Exercise'
-                    const isPerHand =
-                      item.extra?.weight_basis === 'per_hand' ||
-                      exercise?.weight_basis === 'per_hand' ||
-                      exLabel.toLowerCase().includes('dumbbell') ||
-                      exLabel.toLowerCase().includes('db ')
+                    const isPerHand = isPerHandExercise(exercise, item.extra?.weight_basis, exLabel)
                     const targetReps = (item.extra?.target_reps as number | null) ?? null
                     const targetWeight = (item.extra?.target_weight_kg as number | null) ?? null
                     return (

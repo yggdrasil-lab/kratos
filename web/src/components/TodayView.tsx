@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { GlassCard, Button, AlertBanner, CollapsibleSection, AiSynthesizerModal } from '@yggdrasil-lab/ui'
 import type { DailyBiometrics, Exercise, FastingCheckIn, FastingRecommendation, Routine, SessionPayload, WorkoutRecommendation } from '../types'
 import { DAY_NAMES, DAY_SHORTS, formatFriendlyDate, getCircadianDate } from '../utils/circadian'
-import { getSessionLabel } from '../utils/session'
+import { getSessionLabel, computeSessionVolumeAndSets, isPerHandExercise } from '../utils/session'
 import { FastingCard } from './FastingCard'
 import { HRZoneBar } from './HRZoneBar'
 import type { HRZonesData } from './HRZoneBar'
@@ -205,16 +205,7 @@ export function TodayView({
   let todayTotalVolumeKg = 0
 
   completedTodaySessions.forEach((s) => {
-    let sets = 0
-    let volume = 0
-    s.items?.forEach((it) => {
-      it.sets?.forEach((st) => {
-        if (st.status === 'done') {
-          sets += 1
-          volume += (st.weight_kg ?? 0) * (st.reps ?? 0)
-        }
-      })
-    })
+    let { volume, sets } = computeSessionVolumeAndSets(s, exercises)
     if (sets === 0 && typeof s.extra?.completed_sets === 'number') {
       sets = s.extra.completed_sets
     }
@@ -536,10 +527,10 @@ export function TodayView({
         {workoutRecommendation?.exercises && workoutRecommendation.exercises.length > 0 ? (
           <div className="flex flex-col gap-2 mb-5">
             {workoutRecommendation.exercises.map((recEx, idx) => {
-              const isPerHand =
-                recEx.weight_basis === 'per_hand' ||
-                recEx.exercise_name.toLowerCase().includes('dumbbell') ||
-                recEx.exercise_name.toLowerCase().includes('db ')
+              const matchEx = exercises.find(
+                (e) => e.name.toLowerCase() === recEx.exercise_name.toLowerCase()
+              )
+              const isPerHand = isPerHandExercise(matchEx, recEx.weight_basis, recEx.exercise_name)
               return (
                 <div
                   key={idx}
@@ -571,10 +562,7 @@ export function TodayView({
             {activeRoutine.items.map((it, idx) => {
               const ex = exercises.find((e) => e.id === it.exercise_id)
               const exName = ex ? ex.name : `Exercise ${idx + 1}`
-              const isPerHand =
-                ex?.weight_basis === 'per_hand' ||
-                exName.toLowerCase().includes('dumbbell') ||
-                exName.toLowerCase().includes('db ')
+              const isPerHand = isPerHandExercise(ex, undefined, exName)
               const ghost = getExerciseGhostTarget(it.exercise_id)
 
               return (
