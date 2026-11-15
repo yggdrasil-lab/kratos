@@ -143,9 +143,7 @@ export function ActiveWorkoutView({
                             inputMode="decimal"
                             placeholder={
                               targetWeight !== null
-                                ? isPerHand
-                                  ? `${targetWeight} per hand`
-                                  : String(targetWeight)
+                                ? String(targetWeight)
                                 : isPerHand
                                 ? 'Weight (per hand)'
                                 : 'Weight'

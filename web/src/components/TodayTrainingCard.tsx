@@ -23,6 +23,35 @@ interface TodayTrainingCardProps {
   onSynthesizeWorkoutRecommendation?: (customContext?: string) => Promise<void>
 }
 
+interface InlineCitationPillar {
+  icon: string
+  label: string
+  description: string
+}
+
+const INLINE_CITATION_PILLARS: InlineCitationPillar[] = [
+  {
+    icon: '📊',
+    label: 'Israetel (RP):',
+    description: 'Sets scaled between MEV (2 sets deload on fatigue) and MAV (3+ overload sets).',
+  },
+  {
+    icon: '🎯',
+    label: 'Helms:',
+    description: 'Target RIR dictated by recovery score (RIR 1-2 on primed days; RIR 3-4 on fatigue).',
+  },
+  {
+    icon: '🛡️',
+    label: 'McGill / Starrett:',
+    description: 'Neutral grips and joint-sparing substitutions when friction is detected.',
+  },
+  {
+    icon: '🏸',
+    label: 'Concurrent Interference:',
+    description: 'Preserves leg power adjacent to badminton match play.',
+  },
+]
+
 const WORKOUT_PILLARS = [
   {
     label: 'Volume Landmarks (RP)',
@@ -267,22 +296,11 @@ export function TodayTrainingCard({
             title={workoutRecommendation.research_citation}
             className="mb-4"
           >
-            <div>
-              📊 <strong>Israetel (RP):</strong> Sets scaled between MEV (2 sets deload on fatigue)
-              and MAV (3+ overload sets).
-            </div>
-            <div>
-              🎯 <strong>Helms:</strong> Target RIR dictated by recovery score (RIR 1-2 on primed
-              days; RIR 3-4 on fatigue).
-            </div>
-            <div>
-              🛡️ <strong>McGill / Starrett:</strong> Neutral grips and joint-sparing substitutions
-              when friction is detected.
-            </div>
-            <div>
-              🏸 <strong>Concurrent Interference:</strong> Preserves leg power adjacent to badminton
-              match play.
-            </div>
+            {INLINE_CITATION_PILLARS.map((pillar) => (
+              <div key={pillar.label}>
+                {pillar.icon} <strong>{pillar.label}</strong> {pillar.description}
+              </div>
+            ))}
           </CollapsibleSection>
         )}
 
