@@ -1,10 +1,18 @@
 import { useState } from 'react'
-import { GlassCard, GoalProgressCard, CollapsibleSection, Button } from '@yggdrasil-lab/ui'
+import {
+  Button,
+  CollapsibleSection,
+  EmptyState,
+  GlassCard,
+  GoalProgressCard,
+  SearchInput,
+} from '@yggdrasil-lab/ui'
 import type { DailyBiometrics, Exercise, FastingCheckIn, Routine, SessionPayload } from '../types'
 import { formatFriendlyDate } from '../utils/circadian'
-import { getSessionLabel, computeSessionVolumeAndSets } from '../utils/session'
-import { HRZoneBar } from './HRZoneBar'
-import type { HRZonesData } from './HRZoneBar'
+import { computeSessionVolumeAndSets, getSessionLabel } from '../utils/session'
+import { getExerciseDisplayName, getSessionDurationMinutes } from '../utils/sessionMetrics'
+import { EffortBadge } from './EffortBadge'
+import { HRZoneBar, type HRZonesData } from './HRZoneBar'
 
 interface ProgressViewProps {
   sessions: SessionPayload[]
@@ -17,6 +25,16 @@ interface ProgressViewProps {
   onEditSession: (session: SessionPayload) => void
 }
 
+const ADHERENCE_BADGE_MAP: Record<FastingCheckIn['adherence'], { label: string; classes: string }> = {
+  completed: { label: '✓ Completed', classes: 'bg-emerald-500/15 text-emerald-400' },
+  early: { label: '⚡ Broke Early', classes: 'bg-amber-500/15 text-amber-400' },
+  off_plan: { label: '🔴 Off-Plan', classes: 'bg-rose-500/15 text-rose-400' },
+}
+
+/**
+ * Progress and Momentum tab displaying weight milestone trajectory, 7-day activity
+ * telemetry stream, fasting adherence logs, and searchable older session archive.
+ */
 export function ProgressView({
   sessions,
   exercises,
@@ -31,51 +49,36 @@ export function ProgressView({
 
   const startWeight = 90.0
   const targetWeight = 80.0
-  const currentWeight = biometrics?.latest_weight_kg ? Number(biometrics.latest_weight_kg) : 86.65
+  const currentWeight = biometrics?.latest_weight_kg
+    ? Number(biometrics.latest_weight_kg)
+    : 86.65
   const totalToLose = startWeight - targetWeight
   const lostSoFar = Math.max(0, startWeight - currentWeight)
   const progressPercent = Math.min(100, Math.max(0, Math.round((lostSoFar / totalToLose) * 100)))
-
   const nextMilestone = currentWeight > 85.0 ? 85.0 : currentWeight > 82.5 ? 82.5 : 80.0
 
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000)
   const recentSessions = sessions.filter((s) => new Date(s.started_at) >= sevenDaysAgo)
   const olderSessions = sessions.filter((s) => new Date(s.started_at) < sevenDaysAgo)
 
-  const filteredArchive = search.trim()
+  const normalizedQuery = search.trim().toLowerCase()
+  const filteredArchive = normalizedQuery
     ? olderSessions.filter((s) => {
-        const routineName = (s.extra?.routine_name as string) || ''
-        const notes = s.notes || ''
-        return routineName.toLowerCase().includes(search.toLowerCase()) || notes.toLowerCase().includes(search.toLowerCase())
+        const label = ((s.extra?.routine_name as string) || getSessionLabel(s, routines)).toLowerCase()
+        const notes = (s.notes || '').toLowerCase()
+        return label.includes(normalizedQuery) || notes.includes(normalizedQuery)
       })
     : olderSessions
 
-  const getExerciseName = (id: string) => {
-    const ex = exercises.find((e) => e.id === id)
-    return ex ? ex.name : 'Exercise'
-  }
-
-  const computeSessionStats = (s: SessionPayload) => {
-    const { volume, sets } = computeSessionVolumeAndSets(s, exercises)
-    const durationMins = s.ended_at
-      ? Math.max(1, Math.round((new Date(s.ended_at).getTime() - new Date(s.started_at).getTime()) / 60000))
-      : null
-    return { volume, sets, durationMins }
-  }
-
   return (
-    <div className="animate-fade-in pb-16">
-      {/* Title */}
-      <div className="mb-5">
-        <h2 className="text-2xl font-bold m-0 text-slate-100">
-          Progress and Momentum
-        </h2>
+    <div className="animate-fade-in pb-4">
+      <div className="mb-4">
+        <h2 className="text-2xl font-bold m-0 text-slate-100">Progress and Momentum</h2>
         <p className="text-xs text-slate-400 mt-1">
           Milestone tracking, last 7 days activity, and correlations.
         </p>
       </div>
 
-      {/* 1. Goal Milestone Tracker (80kg Goal) */}
       <GoalProgressCard
         eyebrow="Goal: Reach 80 kg"
         currentValueLabel={`${currentWeight.toFixed(1)} kg`}
@@ -88,23 +91,25 @@ export function ProgressView({
         centerLabel={`${progressPercent}% towards 80 kg`}
         targetLabel="Target: 80.0 kg"
         variant="blue"
-        className="mb-6"
+        className="mb-4"
       />
 
-      {/* 2. Last 7 Days Completed Activity Stream */}
-      <div className="mb-6">
+      <div className="mb-4">
         <h3 className="text-base font-bold mb-3 flex items-center gap-2 text-slate-100">
           <span>🏋️</span> Last 7 Days Workouts ({recentSessions.length})
         </h3>
 
         {recentSessions.length === 0 ? (
-          <GlassCard className="p-6 text-center text-slate-400 text-xs">
-            No workouts logged in the last 7 days. Tap &quot;Today&quot; to start your next session!
-          </GlassCard>
+          <EmptyState
+            variant="glass"
+            title="No workouts logged in the last 7 days"
+            description='Tap "Today" to start your next session!'
+          />
         ) : (
           <div className="flex flex-col gap-3">
             {recentSessions.map((s) => {
-              const stats = computeSessionStats(s)
+              const { volume, sets } = computeSessionVolumeAndSets(s, exercises)
+              const durationMins = getSessionDurationMinutes(s)
               const effort = (s.extra?.effort_rating as string) || ''
               const rpe = s.extra?.rpe as number | undefined
               const trimp = s.extra?.trimp as number | undefined
@@ -119,37 +124,20 @@ export function ProgressView({
               const dateStr = s.started_at.split('T')[0]
               const isInferred = Boolean(s.extra?.inferred)
 
-              let effortBadge = null
-              if (effort === 'too_easy') {
-                effortBadge = <span className="text-[11px] px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 font-semibold border border-emerald-500/25">🟢 Too Easy</span>
-              } else if (effort === 'optimal') {
-                effortBadge = <span className="text-[11px] px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-400 font-semibold border border-amber-500/25">🟡 Optimal</span>
-              } else if (effort === 'hard') {
-                effortBadge = <span className="text-[11px] px-2 py-0.5 rounded-md bg-orange-500/15 text-orange-400 font-semibold border border-orange-500/25">🟠 Hard</span>
-              } else if (effort === 'too_hard') {
-                effortBadge = <span className="text-[11px] px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-400 font-semibold border border-rose-500/25">🔴 Too Hard</span>
-              }
-
-              const inferredBadge = isInferred ? (
-                <span className="text-[11px] px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold flex items-center gap-1">
-                  ⚡ Auto-Detected
-                </span>
-              ) : null
-
               return (
                 <GlassCard key={s.id} className="p-4">
                   <div className="flex justify-between items-start mb-1.5 gap-2">
                     <div>
-                      <div className="text-xs text-slate-400">
-                        {formatFriendlyDate(dateStr)}
-                      </div>
-                      <div className="font-bold text-base text-slate-100">
-                        {routineName}
-                      </div>
+                      <div className="text-xs text-slate-400">{formatFriendlyDate(dateStr)}</div>
+                      <div className="font-bold text-base text-slate-100">{routineName}</div>
                     </div>
                     <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                      {inferredBadge}
-                      {effortBadge}
+                      {isInferred && (
+                        <span className="text-[11px] px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold flex items-center gap-1">
+                          ⚡ Auto-Detected
+                        </span>
+                      )}
+                      <EffortBadge effort={effort} />
                       {rpe !== undefined && rpe !== null && (
                         <span className="text-[11px] px-2 py-0.5 rounded-md bg-purple-500/15 text-purple-300 border border-purple-500/25 font-semibold">
                           RPE {rpe}
@@ -177,53 +165,31 @@ export function ProgressView({
                         Auto-detected from plan and biometrics. Keep or dismiss?
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        <Button
-                          variant="blue"
-                          size="xs"
-                          onClick={() => onConfirmSession(s.id)}
-                        >
+                        <Button variant="blue" size="xs" onClick={() => onConfirmSession(s.id)}>
                           ✓ Confirm
                         </Button>
-                        <Button
-                          variant="secondary"
-                          size="xs"
-                          onClick={() => onEditSession(s)}
-                        >
+                        <Button variant="secondary" size="xs" onClick={() => onEditSession(s)}>
                           Change
                         </Button>
-                        <Button
-                          variant="danger"
-                          size="xs"
-                          onClick={() => onDeleteSession(s.id)}
-                        >
+                        <Button variant="danger" size="xs" onClick={() => onDeleteSession(s.id)}>
                           ✕ Dismiss
                         </Button>
                       </div>
                     </div>
                   )}
 
-                  {/* Summary row */}
                   <div className="text-xs text-slate-300 mb-2 flex gap-3 flex-wrap">
-                    {stats.durationMins ? (
-                      <span>⏱️ {stats.durationMins} min</span>
-                    ) : typeof s.extra?.duration_minutes === 'number' ? (
-                      <span>⏱️ {s.extra.duration_minutes} min</span>
-                    ) : null}
-                    {stats.volume > 0 ? (
+                    {durationMins ? <span>⏱️ {durationMins} min</span> : null}
+                    {volume > 0 ? (
                       <>
-                        <span>📦 {stats.volume.toLocaleString()} kg volume</span>
-                        <span>✓ {stats.sets} sets</span>
+                        <span>📦 {volume.toLocaleString()} kg volume</span>
+                        <span>✓ {sets} sets</span>
                       </>
                     ) : null}
-                    {activeEnergy ? (
-                      <span>🔥 {activeEnergy} kcal</span>
-                    ) : null}
-                    {stepCount ? (
-                      <span>👟 {stepCount.toLocaleString()} steps</span>
-                    ) : null}
+                    {activeEnergy ? <span>🔥 {activeEnergy} kcal</span> : null}
+                    {stepCount ? <span>👟 {stepCount.toLocaleString()} steps</span> : null}
                   </div>
 
-                  {/* Biometrics row if heart rate telemetry is recorded */}
                   {(avgHr || hrRecovery) && (
                     <div className="text-xs text-slate-300 mb-2 flex items-center gap-3 flex-wrap">
                       {avgHr ? (
@@ -240,39 +206,38 @@ export function ProgressView({
                     </div>
                   )}
 
-                  {/* HR 5-Zone Distribution Bar */}
                   {hrZones && (
                     <div className="my-2.5">
                       <HRZoneBar zones={hrZones} />
                     </div>
                   )}
 
-                  {/* Tags */}
                   {tags.length > 0 && (
                     <div className="flex gap-1.5 flex-wrap mb-2">
                       {tags.map((t, idx) => (
-                        <span key={idx} className="text-[11px] text-purple-300 bg-purple-500/15 px-2 py-0.5 rounded-md">
+                        <span
+                          key={idx}
+                          className="text-[11px] text-purple-300 bg-purple-500/15 px-2 py-0.5 rounded-md"
+                        >
                           {t}
                         </span>
                       ))}
                     </div>
                   )}
 
-                  {/* Performed exercise pills */}
                   <div className="text-xs text-slate-400 flex flex-wrap gap-1.5">
                     {s.items.map((it) => (
-                      <span key={it.id} className="bg-background/60 px-2 py-0.5 rounded-md border border-border/50">
-                        {getExerciseName(it.exercise_id)} ({it.sets.filter((x) => x.status === 'done').length} sets)
+                      <span
+                        key={it.id}
+                        className="bg-background/60 px-2 py-0.5 rounded-md border border-border/50"
+                      >
+                        {getExerciseDisplayName(it.exercise_id, exercises)} (
+                        {it.sets.filter((x) => x.status === 'done').length} sets)
                       </span>
                     ))}
                   </div>
 
-                  {/* Reflection Notes */}
-                  {s.notes && (
-                    <div className="text-xs text-slate-300 mt-2 italic">
-                      &ldquo;{s.notes}&rdquo;
-                    </div>
-                  )}
+                  {s.notes && <div className="text-xs text-slate-300 mt-2">&ldquo;{s.notes}&rdquo;</div>}
                 </GlassCard>
               )
             })}
@@ -280,25 +245,21 @@ export function ProgressView({
         )}
       </div>
 
-      {/* 3. Fasting History Stream */}
-      <div className="mb-6">
+      <div className="mb-4">
         <h3 className="text-base font-bold mb-3 flex items-center gap-2 text-slate-100">
           <span>⏱️</span> Fasting History ({fastingLogs.length})
         </h3>
 
         {fastingLogs.length === 0 ? (
-          <GlassCard className="p-5 text-center text-slate-400 text-xs">
-            No fasting logs recorded yet. Use the Fasting Card on &quot;Today&quot; to log your check-ins!
-          </GlassCard>
+          <EmptyState
+            variant="glass"
+            title="No fasting logs recorded yet"
+            description='Use the Fasting Card on "Today" to log your check-ins!'
+          />
         ) : (
           <div className="flex flex-col gap-2">
             {fastingLogs.slice(0, 7).map((f) => {
-              const badgeClass =
-                f.adherence === 'completed'
-                  ? 'bg-emerald-500/15 text-emerald-400'
-                  : f.adherence === 'early'
-                  ? 'bg-amber-500/15 text-amber-400'
-                  : 'bg-rose-500/15 text-rose-400'
+              const badge = ADHERENCE_BADGE_MAP[f.adherence] || ADHERENCE_BADGE_MAP.off_plan
 
               return (
                 <GlassCard key={f.id} className="px-4 py-3 flex justify-between items-center gap-2">
@@ -317,8 +278,8 @@ export function ProgressView({
                     </div>
                   </div>
 
-                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-md shrink-0 ${badgeClass}`}>
-                    {f.adherence === 'completed' ? '✓ Completed' : f.adherence === 'early' ? '⚡ Broke Early' : '🔴 Off-Plan'}
+                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-md shrink-0 ${badge.classes}`}>
+                    {badge.label}
                   </span>
                 </GlassCard>
               )
@@ -327,23 +288,27 @@ export function ProgressView({
         )}
       </div>
 
-      {/* 4. Older History Collapsible Archive */}
       <CollapsibleSection
         variant="card"
         title={`Older Sessions Archive (${olderSessions.length})`}
       >
-        <input
-          type="text"
-          placeholder="Search older sessions..."
+        <SearchInput
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-slate-100 mb-3"
+          onChange={setSearch}
+          placeholder="Search older sessions..."
+          variant="blue"
+          className="mb-3"
         />
 
         {filteredArchive.length === 0 ? (
-          <div className="text-xs text-slate-400 text-center py-4">
-            No older sessions match your search.
-          </div>
+          <EmptyState
+            variant="dashed"
+            title={
+              olderSessions.length === 0
+                ? 'No older sessions match your search.'
+                : 'No matching archived sessions'
+            }
+          />
         ) : (
           <div className="flex flex-col gap-2">
             {filteredArchive.map((s) => (
@@ -360,18 +325,10 @@ export function ProgressView({
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <Button
-                    variant="secondary"
-                    size="xs"
-                    onClick={() => onEditSession(s)}
-                  >
+                  <Button variant="secondary" size="xs" onClick={() => onEditSession(s)}>
                     Change
                   </Button>
-                  <Button
-                    variant="danger"
-                    size="xs"
-                    onClick={() => onDeleteSession(s.id)}
-                  >
+                  <Button variant="danger" size="xs" onClick={() => onDeleteSession(s.id)}>
                     Delete
                   </Button>
                 </div>

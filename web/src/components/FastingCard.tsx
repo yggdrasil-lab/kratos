@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { GlassCard, Button, AlertBanner, CollapsibleSection, AiSynthesizerModal } from '@yggdrasil-lab/ui'
 import type { FastingCheckIn, FastingRecommendation } from '../types'
+import { resolveFastingProtocol } from '../utils/circadian'
 import { FastingCheckInModal } from './FastingCheckInModal'
 
 interface FastingCardProps {
@@ -44,39 +45,16 @@ export function FastingCard({
   const [showModal, setShowModal] = useState<boolean>(false)
   const [showAiModal, setShowAiModal] = useState<boolean>(false)
 
-  let protocolName = recommendation?.protocol_name ?? '16:8 Standard Split'
-  let targetWindow = recommendation?.target_window ?? '16:8'
-  let windowHours = recommendation?.window_hours ?? '12:30 PM - 8:30 PM'
-  let fuelingAnchors: string[] = recommendation?.fueling_anchors ?? [
-    '12:30 PM: Break fast with 40g protein + complex carbs',
-    '07:00 PM: High protein dinner + greens',
-    'Post-Dinner: 15-20 min walk to blunt glucose spike',
-  ]
-  const rationale = recommendation?.rationale
-  const recoveryStatus = recommendation?.recovery_status
-  const isLlmGenerated = recommendation?.is_llm_generated ?? false
-  const researchCitation = recommendation?.research_citation
-
-  if (!recommendation) {
-    if (dayOfWeek === 5 || dayOfWeek === 6) {
-      protocolName = '14:10 Social Baseline'
-      targetWindow = '14:10'
-      windowHours = '10:30 AM - 8:30 PM'
-      fuelingAnchors = [
-        'Mindful portions with family and friends',
-        'Prioritize hydration and avoid high-sugar snacks',
-      ]
-    } else {
-      protocolName = '16:8 Circadian Protocol'
-      targetWindow = '16:8'
-      windowHours = '12:00 PM - 8:00 PM'
-      fuelingAnchors = [
-        'Morning: High water intake and electrolyte hydration',
-        '12:00 PM: Balanced lunch with clean complex carbs and protein',
-        '07:00 PM: High-protein dinner (close window by 8:00 PM)',
-      ]
-    }
-  }
+  const {
+    protocolName,
+    targetWindow,
+    windowHours,
+    fuelingAnchors,
+    rationale,
+    recoveryStatus,
+    isLlmGenerated,
+    researchCitation,
+  } = resolveFastingProtocol(dayOfWeek, recommendation)
 
   const isCheckedInToday = latestCheckIn && latestCheckIn.date === circadianDate
 
@@ -96,7 +74,7 @@ export function FastingCard({
 
   return (
     <>
-      <GlassCard className="animate-slide-up mb-5">
+      <GlassCard className="animate-slide-up mb-4">
         {/* Header */}
         <div className="flex justify-between items-center mb-3 gap-2">
           <div className="flex items-center gap-2">
