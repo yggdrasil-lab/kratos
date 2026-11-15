@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { db } from '../db'
-import { newId } from '../outbox'
+import { isValidUuid, newId } from '../outbox'
 import type {
   Exercise,
   Routine,
@@ -32,30 +32,53 @@ function buildRecommendedItems(
   exercises: Exercise[],
   recommendation: WorkoutRecommendation
 ): SessionItemPayload[] {
-  return recommendation.exercises.map((recEx, idx) => {
-    const matchEx = exercises.find(
-      (e) =>
-        (recEx.exercise_id && e.id === recEx.exercise_id) ||
-        e.name.toLowerCase() === recEx.exercise_name.toLowerCase()
-    )
+  const items: SessionItemPayload[] = []
+  const fallbackExerciseId = isValidUuid(exercises[0]?.id) ? exercises[0].id : null
+
+  for (const recEx of recommendation.exercises) {
+    const targetName = (recEx.exercise_name || '').trim().toLowerCase()
+    const matchEx =
+      (recEx.exercise_id ? exercises.find((e) => e.id === recEx.exercise_id) : undefined) ||
+      (targetName ? exercises.find((e) => e.name.trim().toLowerCase() === targetName) : undefined) ||
+      (targetName
+        ? exercises.find((e) => {
+            const candidate = e.name.trim().toLowerCase()
+            return (
+              candidate.length > 0 &&
+              (candidate.includes(targetName) || targetName.includes(candidate))
+            )
+          })
+        : undefined)
+
+    const resolvedExerciseId =
+      (isValidUuid(matchEx?.id) ? matchEx.id : null) ||
+      (isValidUuid(recEx.exercise_id) ? recEx.exercise_id : null) ||
+      fallbackExerciseId
+
+    if (!resolvedExerciseId) {
+      continue
+    }
+
     const weightBasis = resolveWeightBasis(matchEx, recEx.weight_basis, recEx.exercise_name)
     const targetSets = recEx.target_sets ?? 2
 
-    return {
+    items.push({
       id: newId(),
-      exercise_id: matchEx?.id || recEx.exercise_id || exercises[0]?.id || `rec-${idx}`,
-      position: idx,
+      exercise_id: resolvedExerciseId,
+      position: items.length,
       notes: recEx.notes || null,
       extra: {
         target_sets: targetSets,
         target_reps: recEx.target_reps,
         target_weight_kg: recEx.suggested_weight_kg,
         weight_basis: weightBasis,
-        custom_name: !matchEx ? recEx.exercise_name : undefined,
+        custom_name: !matchEx || !isValidUuid(matchEx.id) ? recEx.exercise_name : undefined,
       },
       sets: createSkippedSets(targetSets),
-    }
-  })
+    })
+  }
+
+  return items
 }
 
 function buildRoutineItems(exercises: Exercise[], routine?: Routine): SessionItemPayload[] {

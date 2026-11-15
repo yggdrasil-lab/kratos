@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import {
+  clearBrowserCaches,
   SW_UPDATE_POLL_INTERVAL_MS,
   usePwaUpdate as useSharedPwaUpdate,
   type UsePwaUpdateResult,
@@ -15,6 +16,10 @@ export type { UsePwaUpdateResult }
  */
 export function usePwaUpdate(): UsePwaUpdateResult {
   const [registration, setRegistration] = useState<ServiceWorkerRegistration | null>(null)
+
+  useEffect(() => {
+    void clearBrowserCaches()
+  }, [])
 
   const {
     needRefresh: [needRefresh, setNeedRefresh],

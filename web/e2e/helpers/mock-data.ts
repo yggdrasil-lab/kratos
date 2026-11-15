@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test'
 
 export const MOCK_EXERCISES = [
   {
-    id: 'ex-bench-press',
+    id: '00000000-0000-4000-8000-000000000101',
     name: 'Bench Press (Dumbbell)',
     tracking: 'reps_weight',
     equipment: 'Dumbbell',
@@ -16,7 +16,7 @@ export const MOCK_EXERCISES = [
     extra: {},
   },
   {
-    id: 'ex-squat',
+    id: '00000000-0000-4000-8000-000000000102',
     name: 'Barbell Squat',
     tracking: 'reps_weight',
     equipment: 'Barbell',
@@ -30,7 +30,7 @@ export const MOCK_EXERCISES = [
     extra: {},
   },
   {
-    id: 'ex-overhead-press',
+    id: '00000000-0000-4000-8000-000000000103',
     name: 'Overhead Press',
     tracking: 'reps_weight',
     equipment: 'Barbell',
@@ -47,15 +47,15 @@ export const MOCK_EXERCISES = [
 
 export const MOCK_ROUTINES = [
   {
-    id: 'routine-upper-a',
+    id: '00000000-0000-4000-8000-000000000201',
     name: 'Upper Body A',
     notes: 'Primary heavy upper day',
     extra: {},
     items: [
       {
-        id: 'ri-1',
-        routine_id: 'routine-upper-a',
-        exercise_id: 'ex-bench-press',
+        id: '00000000-0000-4000-8000-000000000301',
+        routine_id: '00000000-0000-4000-8000-000000000201',
+        exercise_id: '00000000-0000-4000-8000-000000000101',
         position: 0,
         target_sets: 3,
         target_reps: 8,
@@ -64,9 +64,9 @@ export const MOCK_ROUTINES = [
         notes: null,
       },
       {
-        id: 'ri-2',
-        routine_id: 'routine-upper-a',
-        exercise_id: 'ex-overhead-press',
+        id: '00000000-0000-4000-8000-000000000302',
+        routine_id: '00000000-0000-4000-8000-000000000201',
+        exercise_id: '00000000-0000-4000-8000-000000000103',
         position: 1,
         target_sets: 3,
         target_reps: 10,
@@ -77,15 +77,15 @@ export const MOCK_ROUTINES = [
     ],
   },
   {
-    id: 'routine-lower-a',
+    id: '00000000-0000-4000-8000-000000000202',
     name: 'Lower Body A',
     notes: 'Squat and hinge focus',
     extra: {},
     items: [
       {
-        id: 'ri-lower-1',
-        routine_id: 'routine-lower-a',
-        exercise_id: 'ex-squat',
+        id: '00000000-0000-4000-8000-000000000303',
+        routine_id: '00000000-0000-4000-8000-000000000202',
+        exercise_id: '00000000-0000-4000-8000-000000000102',
         position: 0,
         target_sets: 3,
         target_reps: 8,
@@ -96,7 +96,7 @@ export const MOCK_ROUTINES = [
     ],
   },
   {
-    id: 'routine-badminton',
+    id: '00000000-0000-4000-8000-000000000203',
     name: '🏸 Badminton Match Play',
     notes: 'Court play session',
     extra: {},
@@ -106,22 +106,22 @@ export const MOCK_ROUTINES = [
 
 export const MOCK_SESSIONS = [
   {
-    id: 'sess-history-1',
-    routine_id: 'routine-upper-a',
+    id: '00000000-0000-4000-8000-000000000401',
+    routine_id: '00000000-0000-4000-8000-000000000201',
     started_at: '2026-11-01T10:00:00.000Z',
     ended_at: '2026-11-01T11:00:00.000Z',
     notes: 'Solid session',
     extra: { routine_name: 'Upper Body A', effort_rating: 'optimal', effort_tags: ['Felt Strong'] },
     items: [
       {
-        id: 'si-1',
-        exercise_id: 'ex-bench-press',
+        id: '00000000-0000-4000-8000-000000000501',
+        exercise_id: '00000000-0000-4000-8000-000000000101',
         position: 0,
         notes: null,
         extra: {},
         sets: [
           {
-            id: 'set-1',
+            id: '00000000-0000-4000-8000-000000000601',
             set_number: 1,
             status: 'done',
             reps: 8,
@@ -137,7 +137,7 @@ export const MOCK_SESSIONS = [
     ],
   },
   {
-    id: 'sess-badminton-1',
+    id: '00000000-0000-4000-8000-000000000402',
     routine_id: null,
     started_at: '2026-11-02T19:00:00.000Z',
     ended_at: '2026-11-02T20:05:00.000Z',

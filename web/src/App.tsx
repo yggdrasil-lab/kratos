@@ -48,7 +48,6 @@ export function App() {
     circadianDate,
     dayOfWeek,
     todayFastingCheckIn,
-    sync,
     refreshAll,
     persistSession,
     deleteSession,
@@ -161,7 +160,7 @@ export function App() {
                 <Button
                   variant="secondary"
                   size="xs"
-                  onClick={sync}
+                  onClick={() => void refreshAll()}
                   disabled={status.kind === 'busy'}
                 >
                   Force Sync

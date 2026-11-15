@@ -10,6 +10,7 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      selfDestroying: true,
       // autoUpdate: new service workers activate immediately. With 'prompt' they sat in
       // 'waiting' forever in standalone home-screen PWAs, serving stale bundles.
       registerType: 'autoUpdate',

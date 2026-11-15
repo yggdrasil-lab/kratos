@@ -69,7 +69,7 @@ test.describe('Train Flow and Effort Debrief', () => {
     await expect(page.getByText('Completed ✓')).toBeVisible()
     await expect(page.getByText('Duration')).toBeVisible()
     await expect(page.getByText('Total Sets')).toBeVisible()
-    await expect(page.getByText('Volume')).toBeVisible()
+    await expect(page.getByTestId('completed-workout-card').getByText('Volume')).toBeVisible()
     await expect(page.getByRole('button', { name: /Start Another Session/i })).toBeVisible()
   })
 
