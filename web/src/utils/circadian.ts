@@ -1,3 +1,5 @@
+import type { DailyBiometrics, FastingCheckIn, FastingRecommendation } from '../types'
+
 /**
  * Circadian day utilities for Kratos.
  *
@@ -38,4 +40,85 @@ export function formatFriendlyDate(dateStr: string): string {
   const dayName = DAY_NAMES[(dt.getDay() + 6) % 7]
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
   return `${dayName}, ${months[dt.getMonth()]} ${dt.getDate()}`
+}
+
+/**
+ * Normalizes server-synced fasting feedback from daily biometrics into a FastingCheckIn.
+ */
+export function parseServerFasting(fb?: DailyBiometrics['fasting']): FastingCheckIn | undefined {
+  if (!fb || !fb.date) return undefined
+  const payload = fb.payload || {}
+  return {
+    id: fb.id || `server-${fb.date}`,
+    date: fb.date,
+    target_window: (payload.target_window as string) || '16:8',
+    adherence: (fb.rating as 'completed' | 'early' | 'off_plan') || 'completed',
+    energy: (payload.energy as 'high' | 'normal' | 'low') || 'normal',
+    headache: (payload.headache as 'none' | 'mild' | 'sugar_spike') || 'none',
+    notes: fb.notes || null,
+    logged_at: fb.logged_at || new Date().toISOString(),
+  }
+}
+
+export interface ResolvedFastingProtocol {
+  protocolName: string
+  targetWindow: string
+  windowHours: string
+  fuelingAnchors: string[]
+  rationale?: string
+  recoveryStatus?: FastingRecommendation['recovery_status']
+  isLlmGenerated: boolean
+  researchCitation?: string | null
+}
+
+/**
+ * Resolves the active circadian fasting protocol from an AI recommendation or
+ * falls back to weekend (14:10 social) vs weekday (16:8 circadian) baseline defaults.
+ */
+export function resolveFastingProtocol(
+  dayOfWeek: number,
+  recommendation?: FastingRecommendation | null
+): ResolvedFastingProtocol {
+  if (recommendation) {
+    return {
+      protocolName: recommendation.protocol_name ?? '16:8 Standard Split',
+      targetWindow: recommendation.target_window ?? '16:8',
+      windowHours: recommendation.window_hours ?? '12:30 PM - 8:30 PM',
+      fuelingAnchors: recommendation.fueling_anchors ?? [
+        '12:30 PM: Break fast with 40g protein + complex carbs',
+        '07:00 PM: High protein dinner + greens',
+        'Post-Dinner: 15-20 min walk to blunt glucose spike',
+      ],
+      rationale: recommendation.rationale,
+      recoveryStatus: recommendation.recovery_status,
+      isLlmGenerated: recommendation.is_llm_generated ?? false,
+      researchCitation: recommendation.research_citation,
+    }
+  }
+
+  const isWeekend = dayOfWeek === 5 || dayOfWeek === 6
+  if (isWeekend) {
+    return {
+      protocolName: '14:10 Social Baseline',
+      targetWindow: '14:10',
+      windowHours: '10:30 AM - 8:30 PM',
+      fuelingAnchors: [
+        'Mindful portions with family and friends',
+        'Prioritize hydration and avoid high-sugar snacks',
+      ],
+      isLlmGenerated: false,
+    }
+  }
+
+  return {
+    protocolName: '16:8 Circadian Protocol',
+    targetWindow: '16:8',
+    windowHours: '12:00 PM - 8:00 PM',
+    fuelingAnchors: [
+      'Morning: High water intake and electrolyte hydration',
+      '12:00 PM: Balanced lunch with clean complex carbs and protein',
+      '07:00 PM: High-protein dinner (close window by 8:00 PM)',
+    ],
+    isLlmGenerated: false,
+  }
 }
