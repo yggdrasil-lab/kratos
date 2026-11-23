@@ -19,7 +19,7 @@ except ModuleNotFoundError:
     raise SystemExit(
         "[FATAL] 'pgserver' is not installed in this environment.\n"
         "On Gaia, Kratos backend tests must run via the containerized test harness:\n"
-        "  python3 /opt/odin/hermes/skills/devops/forge-pr-workflow/scripts/run_kratos_unit_tests.py [test-files...]\n"
+        "  python3 /opt/atlas/vault/.agents/plugins/court-of-odin/skills/forge-pr-workflow/scripts/run_kratos_unit_tests.py [test-files...]\n"
     ) from None
 import pytest
 from alembic import command
