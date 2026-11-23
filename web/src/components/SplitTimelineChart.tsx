@@ -25,24 +25,26 @@ function TimelineBinsBar({ bins }: { bins: WorkoutTimelineBin[] }) {
   const maxHr = hrValues.length > 0 ? Math.max(...hrValues) : 175
 
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-end gap-1 h-20 pt-2">
+    <div className="space-y-2">
+      <div className="kratos-timeline-bars" data-testid="timeline-bars-track">
         {bins.map((bin) => {
           const heightPct = computeBarHeightPct(bin.avg_hr_bpm, minHr, maxHr)
           const startLabel = formatIsoToLocalHHMM(bin.started_at)
           const hrText = typeof bin.avg_hr_bpm === 'number' ? `${bin.avg_hr_bpm} bpm` : 'No HR'
-          const barColor = bin.is_active_watch_mode
-            ? 'bg-sky-400 border-t-2 border-emerald-300'
-            : 'bg-amber-400/70'
+          const barClass = bin.is_active_watch_mode
+            ? 'kratos-timeline-bin-bar kratos-timeline-bin-bar--active'
+            : 'kratos-timeline-bin-bar kratos-timeline-bin-bar--passive'
 
           return (
             <div
               key={bin.started_at}
-              className="flex-1 h-full flex flex-col justify-end items-center min-w-[10px]"
+              className="kratos-timeline-bin-col"
+              data-testid="timeline-bin-col"
               title={`${startLabel}: ${hrText}, ${bin.step_count} steps, ${Math.round(bin.active_energy_kcal)} kcal`}
             >
               <div
-                className={`w-full rounded-t-md transition-all ${barColor}`}
+                className={barClass}
+                data-testid="timeline-bin-bar"
                 style={{ height: `${heightPct}%` }}
               />
             </div>
@@ -66,7 +68,7 @@ function SuggestedSplitsList({
 }) {
   if (suggestedSplits.length === 0) return null
   return (
-    <div className="space-y-1.5 pt-1 border-t border-border/60">
+    <div className="space-y-2 pt-2 border-t border-border/60">
       {suggestedSplits.map((split) => {
         const splitLabel = formatIsoToLocalHHMM(split.split_at)
         const resumeLabel = formatIsoToLocalHHMM(split.resume_at)
@@ -76,18 +78,19 @@ function SuggestedSplitsList({
         return (
           <div
             key={`${split.split_at}-${split.resume_at}`}
-            className="flex items-center justify-between gap-2 bg-sky-500/10 border border-sky-500/30 rounded-xl px-2.5 py-2"
+            className="kratos-suggested-split-card"
+            data-testid="suggested-split-card"
           >
-            <div className="min-w-0">
-              <div className="text-xs font-semibold text-sky-200 truncate">
+            <div>
+              <div className="text-xs font-semibold text-sky-300">
                 Suggested Split: {windowText}
               </div>
-              <div className="text-[11px] text-slate-300 truncate">{split.reason}</div>
+              <div className="text-[11px] text-slate-300">{split.reason}</div>
             </div>
             <Button
               variant="blue"
-              size="xs"
-              className="shrink-0"
+              size="sm"
+              className="kratos-touch-target shrink-0"
               onClick={() => onApplySuggestedSplit(split)}
             >
               Apply Suggested Split
@@ -113,17 +116,14 @@ export function SplitTimelineChart({
   const activeWatchBins = bins.filter((b) => b.is_active_watch_mode).length
 
   return (
-    <div
-      className="rounded-2xl bg-background/70 border border-border p-3 space-y-2.5"
-      data-testid="split-timeline-chart"
-    >
+    <div className="kratos-timeline-panel" data-testid="split-timeline-chart">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <span className="text-xs font-semibold text-slate-200">5-Min HR &amp; Step Timeline</span>
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-[11px] px-2 py-0.5 rounded-md bg-sky-500/20 text-sky-300 border border-sky-500/30 font-semibold">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] px-2 py-1 rounded-md bg-sky-500/20 text-sky-300 border border-sky-500/30 font-semibold">
             ⌚ Active Watch ({activeWatchBins})
           </span>
-          <span className="text-[11px] px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/25 font-medium">
+          <span className="text-[11px] px-2 py-1 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/25 font-medium">
             Passive HR
           </span>
         </div>

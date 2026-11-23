@@ -359,6 +359,7 @@ async function registerBiometricProxyRoutes(page: Page, state: MockApiState): Pr
       1,
       Math.round((new Date(endedAt).getTime() - new Date(startedAt).getTime()) / 60_000)
     )
+    const emptyWindow = mins <= 10
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -366,17 +367,19 @@ async function registerBiometricProxyRoutes(page: Page, state: MockApiState): Pr
         started_at: startedAt,
         ended_at: endedAt,
         duration_minutes: mins,
-        active_energy_kcal: mins * 8,
-        avg_hr_bpm: activityType === 'class' ? 151 : 138,
-        peak_hr_bpm: activityType === 'class' ? 170 : 158,
-        step_count: mins * 35,
-        confidence: 'high',
+        active_energy_kcal: emptyWindow ? null : mins * 8,
+        avg_hr_bpm: emptyWindow ? null : activityType === 'class' ? 151 : 138,
+        peak_hr_bpm: emptyWindow ? null : activityType === 'class' ? 170 : 158,
+        step_count: emptyWindow ? null : mins * 35,
+        confidence: emptyWindow ? 'none' : 'high',
         activity_type: activityType,
         classification: activityType,
         routine_name: routineName,
-        effort_rating: 'optimal',
-        rpe: 7.9,
-        trimp: Math.round(mins * 2.8),
+        effort_rating: emptyWindow ? null : 'optimal',
+        rpe: emptyWindow ? null : 7.9,
+        trimp: emptyWindow ? null : Math.round(mins * 2.8),
+        hr_zones: null,
+        hr_recovery_60s: null,
       }),
     })
   })

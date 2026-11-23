@@ -72,13 +72,16 @@ export const api = {
       body: JSON.stringify({ segments }),
     }),
 
-  getWorkoutMetrics: (params: {
-    started_at: string
-    ended_at: string
-    classification?: string | null
-    activity_type?: string | null
-    routine_name?: string | null
-  }) => {
+  getWorkoutMetrics: (
+    params: {
+      started_at: string
+      ended_at: string
+      classification?: string | null
+      activity_type?: string | null
+      routine_name?: string | null
+    },
+    signal?: AbortSignal
+  ) => {
     const query = new URLSearchParams({
       started_at: params.started_at,
       ended_at: params.ended_at,
@@ -86,15 +89,15 @@ export const api = {
     if (params.classification) query.set('classification', params.classification)
     if (params.activity_type) query.set('activity_type', params.activity_type)
     if (params.routine_name) query.set('routine_name', params.routine_name)
-    return request<WorkoutMetrics>(`/biometrics/workout-metrics?${query}`)
+    return request<WorkoutMetrics>(`/biometrics/workout-metrics?${query}`, { signal })
   },
 
-  getWorkoutTimeline: (startedAt: string, endedAt: string) => {
+  getWorkoutTimeline: (startedAt: string, endedAt: string, signal?: AbortSignal) => {
     const query = new URLSearchParams({
       started_at: startedAt,
       ended_at: endedAt,
     })
-    return request<WorkoutTimelineResponse>(`/biometrics/workout-timeline?${query}`)
+    return request<WorkoutTimelineResponse>(`/biometrics/workout-timeline?${query}`, { signal })
   },
 
   getWeeklyPlan: async (isoWeek: string): Promise<WeeklyPlanRead | null> => {

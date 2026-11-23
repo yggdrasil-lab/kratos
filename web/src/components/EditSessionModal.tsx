@@ -41,6 +41,17 @@ const ACTIVITY_TYPE_OPTIONS: { value: ActivityType; label: string }[] = [
   { value: 'swim', label: 'Swim' },
 ]
 
+const CLEARABLE_METRIC_KEYS = [
+  'active_energy_kcal',
+  'avg_hr',
+  'peak_hr',
+  'step_count',
+  'rpe',
+  'trimp',
+  'hr_zones',
+  'hr_recovery_60s',
+] as const
+
 function inferInitialActivityType(session: SessionPayload): ActivityType {
   const raw =
     (typeof session.extra?.activity_type === 'string' && session.extra.activity_type) ||
@@ -56,23 +67,42 @@ function inferInitialActivityType(session: SessionPayload): ActivityType {
 function mergeRefreshedMetricsIntoExtra(
   baseExtra: Record<string, unknown>,
   refreshed: WorkoutMetrics | null,
-  timesChanged: boolean
+  timesChanged: boolean,
+  explicitEffort: EffortRating | null
 ): Record<string, unknown> {
-  if (!refreshed) return timesChanged ? { ...baseExtra, telemetry_locked: true } : baseExtra
+  if (!refreshed) {
+    return timesChanged ? { ...baseExtra, telemetry_locked: true } : baseExtra
+  }
   const next: Record<string, unknown> = {
     ...baseExtra,
     telemetry_locked: true,
     telemetry_reconciled: true,
     duration_minutes: refreshed.duration_minutes,
-    active_energy_kcal: refreshed.active_energy_kcal,
   }
-  if (refreshed.avg_hr_bpm != null) next.avg_hr = refreshed.avg_hr_bpm
-  if (refreshed.peak_hr_bpm != null) next.peak_hr = refreshed.peak_hr_bpm
-  if (refreshed.step_count != null) next.step_count = refreshed.step_count
-  if (refreshed.rpe != null) next.rpe = refreshed.rpe
-  if (refreshed.trimp != null) next.trimp = refreshed.trimp
-  if (refreshed.hr_zones) next.hr_zones = refreshed.hr_zones
-  if (refreshed.hr_recovery_60s != null) next.hr_recovery_60s = refreshed.hr_recovery_60s
+  const valueMap: Record<(typeof CLEARABLE_METRIC_KEYS)[number], unknown> = {
+    active_energy_kcal: refreshed.active_energy_kcal,
+    avg_hr: refreshed.avg_hr_bpm,
+    peak_hr: refreshed.peak_hr_bpm,
+    step_count: refreshed.step_count,
+    rpe: refreshed.rpe,
+    trimp: refreshed.trimp,
+    hr_zones: refreshed.hr_zones,
+    hr_recovery_60s: refreshed.hr_recovery_60s,
+  }
+  for (const key of CLEARABLE_METRIC_KEYS) {
+    const val = valueMap[key]
+    if (val === null || val === undefined) {
+      delete next[key]
+    } else {
+      next[key] = val
+    }
+  }
+  const resolvedEffort = explicitEffort ?? refreshed.effort_rating ?? null
+  if (resolvedEffort === null || resolvedEffort === undefined) {
+    delete next.effort_rating
+  } else {
+    next.effort_rating = resolvedEffort
+  }
   return next
 }
 
@@ -103,9 +133,13 @@ function buildUpdatedEditSession(
     activity_name: finalName,
     activity_type: params.activityType,
     classification: params.activityType,
-    effort_rating: params.effortRating || undefined,
     inferred: false,
     confirmed: true,
+  }
+  if (params.effortRating) {
+    baseExtra.effort_rating = params.effortRating
+  } else {
+    delete baseExtra.effort_rating
   }
   return {
     ...session,
@@ -113,7 +147,12 @@ function buildUpdatedEditSession(
     started_at: params.windowIso.startedAt,
     ended_at: params.windowIso.endedAt,
     notes: params.notes.trim() || null,
-    extra: mergeRefreshedMetricsIntoExtra(baseExtra, params.refreshedMetrics, timesChanged),
+    extra: mergeRefreshedMetricsIntoExtra(
+      baseExtra,
+      params.refreshedMetrics,
+      timesChanged,
+      params.effortRating
+    ),
   }
 }
 
@@ -142,7 +181,7 @@ function EditTimeAndTypeInputs({
             aria-label="Start Time"
             value={startTime}
             onChange={(e) => onStartTimeChange(e.target.value)}
-            className="w-full min-h-[44px] px-3 py-2 rounded-xl bg-background border border-border text-base sm:text-xs text-slate-100"
+            className="kratos-time-input"
           />
         </div>
         <div>
@@ -152,13 +191,13 @@ function EditTimeAndTypeInputs({
             aria-label="End Time"
             value={endTime}
             onChange={(e) => onEndTimeChange(e.target.value)}
-            className="w-full min-h-[44px] px-3 py-2 rounded-xl bg-background border border-border text-base sm:text-xs text-slate-100"
+            className="kratos-time-input"
           />
         </div>
       </div>
 
       <div>
-        <label className="block text-xs font-semibold text-slate-300 mb-1.5">Activity Type</label>
+        <label className="block text-xs font-semibold text-slate-300 mb-1">Activity Type</label>
         <ChipSelector
           options={ACTIVITY_TYPE_OPTIONS}
           selected={activityType}
@@ -183,20 +222,26 @@ function EditTelemetryRefreshBar({
   refreshError: string | null
   onRefresh: () => void
 }) {
-  const duration =
-    refreshedMetrics?.duration_minutes ??
-    (typeof session.extra?.duration_minutes === 'number' ? session.extra.duration_minutes : null)
-  const kcal =
-    refreshedMetrics?.active_energy_kcal ??
-    (typeof session.extra?.active_energy_kcal === 'number' ? session.extra.active_energy_kcal : null)
-  const avgHr =
-    refreshedMetrics?.avg_hr_bpm ??
-    (typeof session.extra?.avg_hr === 'number' ? session.extra.avg_hr : null)
+  const duration = refreshedMetrics
+    ? refreshedMetrics.duration_minutes
+    : typeof session.extra?.duration_minutes === 'number'
+    ? session.extra.duration_minutes
+    : null
+  const kcal = refreshedMetrics
+    ? refreshedMetrics.active_energy_kcal ?? null
+    : typeof session.extra?.active_energy_kcal === 'number'
+    ? session.extra.active_energy_kcal
+    : null
+  const avgHr = refreshedMetrics
+    ? refreshedMetrics.avg_hr_bpm ?? null
+    : typeof session.extra?.avg_hr === 'number'
+    ? session.extra.avg_hr
+    : null
 
   return (
     <div className="rounded-xl bg-background/70 border border-border p-3 space-y-2">
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="text-xs text-slate-300 flex items-center gap-2.5 flex-wrap">
+        <div className="text-xs text-slate-300 flex items-center gap-2 flex-wrap">
           {duration !== null && <span>⏱️ {duration}m</span>}
           {kcal !== null && <span>🔥 {kcal} kcal</span>}
           {avgHr !== null && <span>❤️ {avgHr} bpm</span>}
@@ -204,7 +249,13 @@ function EditTelemetryRefreshBar({
             <span className="text-slate-400">No wearable telemetry attached yet</span>
           )}
         </div>
-        <Button variant="outline" size="xs" onClick={onRefresh} disabled={isRefreshing}>
+        <Button
+          variant="outline"
+          size="sm"
+          className="kratos-touch-target"
+          onClick={onRefresh}
+          disabled={isRefreshing}
+        >
           {isRefreshing ? 'Refreshing...' : 'Refresh Eir Telemetry'}
         </Button>
       </div>
@@ -235,7 +286,7 @@ function EditLabelAndNotesFields({
   return (
     <>
       <div>
-        <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+        <label className="block text-xs font-semibold text-slate-300 mb-1">
           Workout / Routine Name
         </label>
         <input
@@ -243,7 +294,7 @@ function EditLabelAndNotesFields({
           value={routineName}
           onChange={(e) => onRoutineNameChange(e.target.value)}
           placeholder="Enter routine or activity name..."
-          className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-base sm:text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-sky-500"
+          className="w-full px-3 py-2 rounded-xl bg-background border border-border text-base sm:text-sm text-slate-100"
         />
         <ChipSelector
           options={presetOptions}
@@ -262,7 +313,7 @@ function EditLabelAndNotesFields({
       />
 
       <div>
-        <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+        <label className="block text-xs font-semibold text-slate-300 mb-1">
           Notes &amp; Observations
         </label>
         <textarea
@@ -270,7 +321,7 @@ function EditLabelAndNotesFields({
           value={notes}
           onChange={(e) => onNotesChange(e.target.value)}
           placeholder="How did this session feel? Any joint feedback or PRs?"
-          className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-base sm:text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-sky-500"
+          className="w-full px-3 py-2 rounded-xl bg-background border border-border text-base sm:text-xs text-slate-100"
         />
       </div>
     </>
@@ -360,6 +411,7 @@ function useEditSessionActions(
         routine_name: form.routineName.trim() || undefined,
       })
       form.setRefreshedMetrics(data)
+      form.setEffortRating((data.effort_rating as EffortRating | null) ?? null)
     } catch (err) {
       form.setErrorMessage(err instanceof Error ? err.message : 'Failed to refresh Eir telemetry')
     } finally {

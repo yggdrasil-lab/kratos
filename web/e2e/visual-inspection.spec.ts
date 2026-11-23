@@ -24,6 +24,61 @@ const PLATFORMS = [
   },
 ]
 
+async function captureSplitModalWithAssertions(page: import('@playwright/test').Page, platform: string) {
+  const splitBtn = page.getByRole('button', { name: 'Split' }).first()
+  if (!(await splitBtn.isVisible())) return
+  await splitBtn.click()
+  await expect(page.getByRole('heading', { name: 'Split Workout Session' })).toBeVisible()
+  await expect(page.getByTestId('timeline-bin-bar').first()).toBeVisible()
+  await page.waitForTimeout(450)
+
+  const barHeights = await page
+    .getByTestId('timeline-bin-bar')
+    .evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height))
+  expect(barHeights.length).toBeGreaterThan(0)
+  expect(Math.max(...barHeights)).toBeGreaterThan(0)
+
+  const splitTitle = page.getByText(/Suggested Split: \d{2}:\d{2} -> \d{2}:\d{2}/).first()
+  await expect(splitTitle).toBeVisible()
+  const overflow = await splitTitle.evaluate((el) => el.scrollWidth > el.clientWidth + 1)
+  expect(overflow).toBe(false)
+
+  const applyBtnBox = await page.getByRole('button', { name: 'Apply Suggested Split' }).first().boundingBox()
+  expect(applyBtnBox?.height ?? 0).toBeGreaterThanOrEqual(44)
+  const routineBtnBox = await page
+    .getByTestId('split-segment-2')
+    .getByRole('button', { name: /Lower Body A/i })
+    .boundingBox()
+  expect(routineBtnBox?.height ?? 0).toBeGreaterThanOrEqual(44)
+  const segStartBox = await page.getByLabel('Segment 1 Start').boundingBox()
+  expect(segStartBox?.height ?? 0).toBeGreaterThanOrEqual(44)
+
+  await page.screenshot({ path: `screenshots/${platform}/07-split-session-modal.png` })
+  await page.getByRole('button', { name: 'Cancel' }).click()
+  await page.waitForTimeout(200)
+}
+
+async function captureEditModalWithAssertions(
+  page: import('@playwright/test').Page,
+  progressTabBtn: import('@playwright/test').Locator,
+  platform: string
+) {
+  await progressTabBtn.click()
+  const changeBtn = page.getByRole('button', { name: 'Change' }).first()
+  if (!(await changeBtn.isVisible())) return
+  await changeBtn.click()
+  await expect(page.getByRole('heading', { name: 'Edit Workout Details' })).toBeVisible()
+  await page.waitForTimeout(450)
+
+  const refreshBox = await page.getByRole('button', { name: 'Refresh Eir Telemetry' }).boundingBox()
+  expect(refreshBox?.height ?? 0).toBeGreaterThanOrEqual(44)
+  const startInputBox = await page.getByLabel('Start Time').boundingBox()
+  expect(startInputBox?.height ?? 0).toBeGreaterThanOrEqual(44)
+
+  await page.screenshot({ path: `screenshots/${platform}/08-edit-session-modal.png` })
+  await page.getByRole('button', { name: 'Cancel' }).click()
+}
+
 for (const { name: platform, options } of PLATFORMS) {
   test.describe(`Visual Inspection - ${platform.toUpperCase()}`, () => {
     test.use({
@@ -53,7 +108,6 @@ for (const { name: platform, options } of PLATFORMS) {
       await page.screenshot({
         path: `screenshots/${platform}/02-fasting-modal.png`,
       })
-      // Close modal
       await page.getByRole('button', { name: 'Cancel' }).click()
       await page.waitForTimeout(200)
 
@@ -62,6 +116,10 @@ for (const { name: platform, options } of PLATFORMS) {
       await expect(startBtn).toBeVisible()
       await startBtn.click()
       await expect(page.getByRole('heading', { name: /Upper Body A|Current Workout/i })).toBeVisible()
+      const workoutPadBottom = await page.evaluate(() =>
+        parseFloat(getComputedStyle(document.querySelector('.kratos-active-workout-section')!).paddingBottom)
+      )
+      expect(workoutPadBottom).toBeGreaterThanOrEqual(110)
       await page.waitForTimeout(200)
       await page.screenshot({
         path: `screenshots/${platform}/03-active-workout.png`,
@@ -69,66 +127,34 @@ for (const { name: platform, options } of PLATFORMS) {
       })
 
       // 4. Effort Debrief Modal
-      const finishBtn = page.getByRole('button', { name: 'Finish Workout' })
-      await finishBtn.click()
+      await page.getByRole('button', { name: 'Finish Workout' }).click()
       await expect(page.getByRole('heading', { name: 'Workout Complete!' })).toBeVisible()
       await page.waitForTimeout(350)
-      await page.screenshot({
-        path: `screenshots/${platform}/04-effort-debrief-modal.png`,
-      })
-      // Save debrief to return to home
+      await page.screenshot({ path: `screenshots/${platform}/04-effort-debrief-modal.png` })
       await page.getByRole('button', { name: 'Save and Finish' }).click()
 
       // 5. Progress View
       const progressTabBtn = page.locator('nav.bottom-nav').getByRole('button', { name: /Progress/i })
       await progressTabBtn.click()
       await expect(page.getByRole('heading', { name: 'Progress and Momentum' })).toBeVisible()
-      await page.screenshot({
-        path: `screenshots/${platform}/05-progress-view.png`,
-        fullPage: true,
-      })
+      await page.screenshot({ path: `screenshots/${platform}/05-progress-view.png`, fullPage: true })
 
       // 6. Workout AI Modal
-      const todayTabBtn = page.locator('nav.bottom-nav').getByRole('button', { name: /Today/i })
-      await todayTabBtn.click()
+      await page.locator('nav.bottom-nav').getByRole('button', { name: /Today/i }).click()
       await expect(page.getByText("Today's Training")).toBeVisible()
       const adaptBtn = page.getByTitle('Autoregulate training with AI sports physiology')
       if (await adaptBtn.isVisible()) {
         await adaptBtn.click()
         await expect(page.getByRole('heading', { name: 'Adaptive Workout Synthesizer' })).toBeVisible()
         await page.waitForTimeout(350)
-        await page.screenshot({
-          path: `screenshots/${platform}/06-workout-ai-modal.png`,
-        })
+        await page.screenshot({ path: `screenshots/${platform}/06-workout-ai-modal.png` })
         await page.getByRole('button', { name: 'Cancel' }).click()
         await page.waitForTimeout(200)
       }
 
-      // 7. Split Session Modal
-      const splitBtn = page.getByRole('button', { name: 'Split' }).first()
-      if (await splitBtn.isVisible()) {
-        await splitBtn.click()
-        await expect(page.getByRole('heading', { name: 'Split Workout Session' })).toBeVisible()
-        await page.waitForTimeout(350)
-        await page.screenshot({
-          path: `screenshots/${platform}/07-split-session-modal.png`,
-        })
-        await page.getByRole('button', { name: 'Cancel' }).click()
-        await page.waitForTimeout(200)
-      }
-
-      // 8. Edit Session Modal (Progress Tab)
-      await progressTabBtn.click()
-      const changeBtn = page.getByRole('button', { name: 'Change' }).first()
-      if (await changeBtn.isVisible()) {
-        await changeBtn.click()
-        await expect(page.getByRole('heading', { name: 'Edit Workout Details' })).toBeVisible()
-        await page.waitForTimeout(300)
-        await page.screenshot({
-          path: `screenshots/${platform}/08-edit-session-modal.png`,
-        })
-        await page.getByRole('button', { name: 'Cancel' }).click()
-      }
+      // 7 & 8. Split & Edit Modals with geometry invariants
+      await captureSplitModalWithAssertions(page, platform)
+      await captureEditModalWithAssertions(page, progressTabBtn, platform)
     })
   })
 }

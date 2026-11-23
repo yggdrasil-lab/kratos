@@ -7,7 +7,6 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -19,6 +18,14 @@ from app.services.eir_client import fetch_workout_metrics
 MetricsFetcher = Callable[..., WorkoutMetricsRead]
 
 
+class SessionNotFoundError(LookupError):
+    """Raised when the target session does not exist or has been deleted."""
+
+
+class InvalidSplitError(ValueError):
+    """Raised when a split request references missing routines or invalid state."""
+
+
 def _resolve_segment_routine(
     db: Session,
     segment: SplitSegmentInput,
@@ -27,11 +34,26 @@ def _resolve_segment_routine(
         return None, segment.routine_name
     routine = db.get(Routine, segment.routine_id)
     if routine is None or routine.deleted_at is not None:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Routine {segment.routine_id} not found",
-        )
+        raise InvalidSplitError(f"Routine {segment.routine_id} not found")
     return routine.id, segment.routine_name or routine.name
+
+
+def _extract_optional_telemetry(
+    segment: SplitSegmentInput,
+    metrics: WorkoutMetricsRead,
+) -> dict[str, Any]:
+    candidates: dict[str, Any] = {
+        "avg_hr": metrics.avg_hr_bpm,
+        "peak_hr": metrics.peak_hr_bpm,
+        "step_count": metrics.step_count,
+        "confidence": metrics.confidence,
+        "effort_rating": segment.effort_rating or metrics.effort_rating,
+        "rpe": metrics.rpe,
+        "trimp": metrics.trimp,
+        "hr_zones": metrics.hr_zones,
+        "hr_recovery_60s": metrics.hr_recovery_60s,
+    }
+    return {key: value for key, value in candidates.items() if value is not None}
 
 
 def build_split_child_extra(
@@ -60,20 +82,7 @@ def build_split_child_extra(
         "duration_minutes": metrics.duration_minutes,
         "active_energy_kcal": metrics.active_energy_kcal,
     }
-    optional_fields: dict[str, Any] = {
-        "avg_hr": metrics.avg_hr_bpm,
-        "peak_hr": metrics.peak_hr_bpm,
-        "step_count": metrics.step_count,
-        "confidence": metrics.confidence,
-        "effort_rating": segment.effort_rating or metrics.effort_rating,
-        "rpe": metrics.rpe,
-        "trimp": metrics.trimp,
-        "hr_zones": metrics.hr_zones,
-        "hr_recovery_60s": metrics.hr_recovery_60s,
-    }
-    for key, value in optional_fields.items():
-        if value is not None:
-            extra[key] = value
+    extra.update(_extract_optional_telemetry(segment, metrics))
     return extra
 
 
@@ -115,7 +124,7 @@ def split_session_atomically(
     """Fetches per-segment Eir biometrics and atomically replaces parent with split sessions."""
     parent = db.get(WorkoutSession, session_id)
     if parent is None or parent.deleted_at is not None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Session not found")
+        raise SessionNotFoundError("Session not found")
 
     plans = _fetch_segment_plans(db, payload, metrics_fetcher)
     children: list[WorkoutSession] = []

@@ -160,7 +160,7 @@ function RoutineModeFields({
   onUpdate: (next: SplitSegmentDraft) => void
 }) {
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <div className="flex flex-wrap gap-2">
       {routines.map((routine) => {
         const isSelected = segment.routineId === routine.id
         const isToday = Boolean(recommendedName) && routine.name.toLowerCase() === recommendedName
@@ -169,7 +169,7 @@ function RoutineModeFields({
             key={routine.id}
             type="button"
             onClick={() => onUpdate({ ...segment, routineId: routine.id, routineName: routine.name })}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+            className={`kratos-touch-target px-3 py-2 rounded-lg text-xs font-medium border transition-all ${
               isSelected
                 ? 'bg-blue-500/25 text-blue-200 border-blue-500 font-semibold'
                 : 'bg-background text-slate-300 border-border hover:text-white'
@@ -210,7 +210,7 @@ function SegmentTimeInputs({
             const iso = resolveBoundaryIsoWithinWindow(parentStartIso, parentEndIso, e.target.value)
             if (iso) onUpdate({ ...segment, startedAt: iso })
           }}
-          className="w-full min-h-[44px] px-2.5 py-2 rounded-xl bg-background border border-border text-base sm:text-xs text-slate-100"
+          className="kratos-time-input"
         />
       </div>
       <div>
@@ -223,7 +223,7 @@ function SegmentTimeInputs({
             const iso = resolveBoundaryIsoWithinWindow(parentStartIso, parentEndIso, e.target.value)
             if (iso) onUpdate({ ...segment, endedAt: iso })
           }}
-          className="w-full min-h-[44px] px-2.5 py-2 rounded-xl bg-background border border-border text-base sm:text-xs text-slate-100"
+          className="kratos-time-input"
         />
       </div>
     </div>
@@ -240,14 +240,16 @@ function SegmentMetricsPreview({
   metricsError: string | undefined
 }) {
   return (
-    <div className="rounded-xl bg-card/60 border border-border/60 px-2.5 py-2 text-[11px] text-slate-300 flex items-center gap-2.5 flex-wrap">
+    <div className="rounded-xl bg-card/60 border border-border/60 px-3 py-2 text-[11px] text-slate-300 flex items-center gap-3 flex-wrap">
       {metricsLoading ? (
         <span className="text-slate-400 animate-pulse">Calculating Eir telemetry...</span>
       ) : metricsError ? (
         <span className="text-amber-300">{metricsError}</span>
       ) : metrics ? (
         <>
-          <span>🔥 {metrics.active_energy_kcal} kcal</span>
+          {typeof metrics.active_energy_kcal === 'number' && (
+            <span>🔥 {metrics.active_energy_kcal} kcal</span>
+          )}
           {typeof metrics.avg_hr_bpm === 'number' && (
             <span>
               ❤️ {metrics.avg_hr_bpm} bpm
@@ -293,7 +295,7 @@ export function SplitSegmentCard({
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold text-slate-100">Segment {index + 1}</span>
-          <span className="text-[11px] px-2 py-0.5 rounded-md bg-sky-500/15 text-sky-300 font-semibold">
+          <span className="text-[11px] px-2 py-1 rounded-md bg-sky-500/15 text-sky-300 font-semibold">
             {computeDurationBadge(segment.startedAt, segment.endedAt)}
           </span>
         </div>

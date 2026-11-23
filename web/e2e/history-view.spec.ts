@@ -264,14 +264,28 @@ test.describe('Progress and Activity Stream', () => {
     await expect(page.getByRole('heading', { name: 'Split Workout Session' })).toBeVisible()
     await expect(page.getByTestId('split-timeline-chart')).toBeVisible()
     await expect(page.getByText(/⌚ Active Watch/)).toBeVisible()
+    await expect(page.getByText(/Suggested Split: \d{2}:\d{2} -> \d{2}:\d{2}/)).toBeVisible()
+
+    const barHeights = await page
+      .getByTestId('timeline-bin-bar')
+      .evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height))
+    expect(barHeights.length).toBeGreaterThan(0)
+    expect(Math.max(...barHeights)).toBeGreaterThan(0)
 
     const applySplitBtn = page.getByRole('button', { name: 'Apply Suggested Split' }).first()
     await expect(applySplitBtn).toBeVisible()
+    const applySplitBox = await applySplitBtn.boundingBox()
+    expect(applySplitBox?.height ?? 0).toBeGreaterThanOrEqual(44)
     await applySplitBtn.click()
 
     // Segment 1 defaults to Gym Class ("Group Core"), Segment 2 defaults to Routine ("Upper Body A")
     const seg2 = page.getByTestId('split-segment-2')
-    await seg2.getByRole('button', { name: /Lower Body A/i }).click()
+    const lowerBodyBtn = seg2.getByRole('button', { name: /Lower Body A/i })
+    const routineBtnBox = await lowerBodyBtn.boundingBox()
+    expect(routineBtnBox?.height ?? 0).toBeGreaterThanOrEqual(44)
+    const seg1StartBox = await page.getByLabel('Segment 1 Start').boundingBox()
+    expect(seg1StartBox?.height ?? 0).toBeGreaterThanOrEqual(44)
+    await lowerBodyBtn.click()
 
     // Live Eir preview metrics appear inside segment card
     await expect(seg2.getByText(/kcal/)).toBeVisible()
@@ -405,5 +419,45 @@ test.describe('Progress and Activity Stream', () => {
     expect(saved.extra.telemetry_locked).toBe(true)
     expect(saved.extra.avg_hr).toBe(138)
     await expect(page.getByRole('button', { name: 'Edit Sets' })).toBeVisible()
+  })
+
+  test('clears prior HR, effort, and energy metrics when Refresh Eir Telemetry returns nulls', async ({ page }) => {
+    const apiState = await setupMockApi(page)
+    await page.goto('/')
+
+    const bottomNav = page.locator('nav.bottom-nav')
+    await bottomNav.getByRole('button', { name: 'Progress, 80kg Goal and Activity' }).click()
+
+    await page.getByRole('button', { name: 'Change' }).first().click()
+    await expect(page.getByRole('heading', { name: 'Edit Workout Details' })).toBeVisible()
+
+    const refreshBtn = page.getByRole('button', { name: 'Refresh Eir Telemetry' })
+    const refreshBox = await refreshBtn.boundingBox()
+    expect(refreshBox?.height ?? 0).toBeGreaterThanOrEqual(44)
+    const startBox = await page.getByLabel('Start Time').boundingBox()
+    expect(startBox?.height ?? 0).toBeGreaterThanOrEqual(44)
+
+    await page.getByLabel('Start Time').fill('09:00')
+    await page.getByLabel('End Time').fill('09:08')
+    await refreshBtn.click()
+    await expect.poll(() => apiState.metricsQueries.length).toBeGreaterThan(0)
+
+    const dialog = page.locator('.modal-card')
+    await expect(dialog.getByText('⏱️ 8m')).toBeVisible()
+    await expect(dialog.getByText(/157 bpm/)).not.toBeVisible()
+    await expect(dialog.getByText(/91 kcal/)).not.toBeVisible()
+
+    await page.getByRole('button', { name: 'Save Changes' }).click()
+    await expect.poll(() => apiState.savedSessions.length).toBe(1)
+    const saved = apiState.savedSessions[0]
+    expect(saved.extra.avg_hr).toBeUndefined()
+    expect(saved.extra.peak_hr).toBeUndefined()
+    expect(saved.extra.rpe).toBeUndefined()
+    expect(saved.extra.trimp).toBeUndefined()
+    expect(saved.extra.hr_zones).toBeUndefined()
+    expect(saved.extra.hr_recovery_60s).toBeUndefined()
+    expect(saved.extra.step_count).toBeUndefined()
+    expect(saved.extra.active_energy_kcal).toBeUndefined()
+    expect(saved.extra.effort_rating).toBeUndefined()
   })
 })

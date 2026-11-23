@@ -16,7 +16,11 @@ from app.db import get_db
 from app.models import Routine, SessionItem, SetEntry
 from app.models import Session as WorkoutSession
 from app.schemas import SessionCreate, SessionRead, SessionSplitRequest, SessionSplitResponse
-from app.services.session_split import split_session_atomically
+from app.services.session_split import (
+    InvalidSplitError,
+    SessionNotFoundError,
+    split_session_atomically,
+)
 
 router = APIRouter(prefix="/sessions", tags=["log"])
 
@@ -148,7 +152,12 @@ def split_session(
     db: Session = Depends(get_db),
 ) -> SessionSplitResponse:
     """Atomically splits a session into 2-4 confirmed segments with per-window Eir metrics."""
-    parent_id, created = split_session_atomically(db, session_id, payload)
+    try:
+        parent_id, created = split_session_atomically(db, session_id, payload)
+    except SessionNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except InvalidSplitError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return SessionSplitResponse(
         parent_id=parent_id,
         sessions=[SessionRead.model_validate(item) for item in created],

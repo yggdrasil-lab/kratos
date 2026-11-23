@@ -121,13 +121,13 @@ function InferredSessionCard({
         <div className="text-base font-bold text-slate-100">{routineName}</div>
         <InferredSessionMetricsRow session={infSession} durationMins={durationMins} />
         {Boolean(hrZones) && hrZones && (
-          <div className="mt-2.5 mb-1">
+          <div className="mt-3 mb-1">
             <HRZoneBar zones={hrZones} />
           </div>
         )}
       </div>
 
-      <p className="text-xs text-amber-200/90 mb-3">
+      <p className="text-xs text-amber-200 mb-3">
         Auto-attached from plan and wearable biometrics. Did you complete this workout?
       </p>
 

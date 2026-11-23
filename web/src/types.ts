@@ -77,7 +77,7 @@ export interface WorkoutMetrics {
   started_at: string
   ended_at: string
   duration_minutes: number
-  active_energy_kcal: number
+  active_energy_kcal?: number | null
   avg_hr_bpm?: number | null
   peak_hr_bpm?: number | null
   step_count?: number | null

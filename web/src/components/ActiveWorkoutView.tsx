@@ -172,9 +172,9 @@ function WorkoutExerciseItem({
         isPerHand={isPerHand}
         onRemove={() => onRemoveExercise(item.id)}
       />
-      <div className="flex flex-col gap-2.5">
+      <div className="flex flex-col gap-2">
         {item.sets.length > 0 && (
-          <div className="set-row text-slate-400 text-xs pb-1">
+          <div className="set-row text-slate-400 text-xs" style={{ paddingBottom: '0.5rem' }}>
             <div className="text-center">SET</div>
             <div className="text-center">{isPerHand ? 'KG / HAND' : 'KG'}</div>
             <div className="text-center">REPS</div>
@@ -380,7 +380,7 @@ export function ActiveWorkoutView({
 
   return (
     <>
-      <section className="animate-slide-up">
+      <section className="animate-slide-up kratos-active-workout-section">
         <ActiveWorkoutHeader session={session} isRetroactive={isRetroactive} onDiscard={onDiscard} />
         {!isRetroactive && (
           <RestTimerBar

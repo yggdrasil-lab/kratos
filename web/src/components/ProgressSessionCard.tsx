@@ -109,7 +109,7 @@ function SessionCardTelemetry({
       )}
 
       {Boolean(hrZones) && hrZones && (
-        <div className="my-2.5">
+        <div className="mt-3 mb-2">
           <HRZoneBar zones={hrZones} />
         </div>
       )}
@@ -154,8 +154,8 @@ function SessionCardActions({
     )
   }
   return (
-    <div className="bg-amber-500/10 border border-amber-500/25 rounded-lg p-2.5 my-2 flex items-center justify-between gap-2 flex-wrap">
-      <div className="text-xs text-amber-200/90 flex-1 min-w-[180px]">
+    <div className="bg-amber-500/10 border border-amber-500/25 rounded-lg p-2.5 mt-2 mb-2 flex items-center justify-between gap-2 flex-wrap">
+      <div className="text-xs text-amber-200 flex-1 min-w-[180px]">
         Auto-detected from plan and biometrics. Keep or dismiss?
       </div>
       <div className="flex items-center gap-2 flex-wrap shrink-0">

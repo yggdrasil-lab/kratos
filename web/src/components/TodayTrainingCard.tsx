@@ -79,7 +79,7 @@ function LoggedClassChips({
 }) {
   if (classSessions.length === 0) return null
   return (
-    <div className="flex flex-wrap gap-1.5 mb-3" data-testid="logged-class-chips">
+    <div className="flex flex-wrap gap-2 mb-3" data-testid="logged-class-chips">
       {classSessions.map((cls) => {
         const label = getSessionLabel(cls, routines)
         const duration = getSessionDurationMinutes(cls)
@@ -90,7 +90,7 @@ function LoggedClassChips({
         return (
           <span
             key={cls.id}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+            className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
           >
             ✓ {label}
             {durationText} completed today{kcalText}
@@ -124,7 +124,8 @@ function RoutinePickerPanel({
           variant="outline"
           size="sm"
           fullWidth
-          className="justify-start text-sky-300 border-sky-500/40 mb-1"
+          className="text-sky-300 border-sky-500/40 mb-1"
+          style={{ justifyContent: 'flex-start' }}
           onClick={onReset}
         >
           ↺ Reset to Scheduled ({recommendedRoutineName || 'Default'})
@@ -136,7 +137,7 @@ function RoutinePickerPanel({
           variant={activeRoutine?.id === r.id ? 'blue' : 'secondary'}
           size="sm"
           fullWidth
-          className="justify-start"
+          style={{ justifyContent: 'flex-start' }}
           onClick={() => onSelectRoutine(r)}
         >
           {r.name}
@@ -247,7 +248,7 @@ function TodayTrainingHeader({
             </span>
           )}
           {isGeneratingWorkout && (
-            <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold bg-amber-500/25 text-amber-300 animate-pulse">
+            <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold bg-amber-500/20 text-amber-300 animate-pulse">
               ⚡ Synthesizing AI Training...
             </span>
           )}
@@ -257,7 +258,7 @@ function TodayTrainingHeader({
             </span>
           )}
         </div>
-        <h3 className="text-lg font-bold my-0.5 text-slate-100">{dayHeadline}</h3>
+        <h3 className="text-lg font-bold mt-1 mb-1 text-slate-100">{dayHeadline}</h3>
         <p className="text-xs text-slate-400 m-0">{daySubtitle}</p>
       </div>
 
@@ -349,7 +350,7 @@ function TodayWorkoutRecommendationAlerts({
   return (
     <>
       {isGeneratingWorkout && !workoutRecommendation && (
-        <div className="bg-sky-500/10 border border-sky-500/20 rounded-xl p-3 mb-4 text-xs text-sky-200 flex items-center gap-2 animate-pulse">
+        <div className="bg-sky-500/10 border border-sky-500/20 rounded-xl p-3 mb-4 text-xs text-sky-300 flex items-center gap-2 animate-pulse">
           <span className="text-sm">⏳</span>
           <span>Synthesizing today&apos;s autoregulated training prescription and Discord thread...</span>
         </div>
