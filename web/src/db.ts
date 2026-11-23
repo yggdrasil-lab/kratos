@@ -18,6 +18,7 @@ export interface DraftSession {
   id: string
   session: SessionPayload
   savedAt: number
+  isRetroactive?: boolean
 }
 
 class KratosDb extends Dexie {

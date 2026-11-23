@@ -101,6 +101,33 @@ for (const { name: platform, options } of PLATFORMS) {
           path: `screenshots/${platform}/06-workout-ai-modal.png`,
         })
         await page.getByRole('button', { name: 'Cancel' }).click()
+        await page.waitForTimeout(200)
+      }
+
+      // 7. Split Session Modal
+      const splitBtn = page.getByRole('button', { name: 'Split' }).first()
+      if (await splitBtn.isVisible()) {
+        await splitBtn.click()
+        await expect(page.getByRole('heading', { name: 'Split Workout Session' })).toBeVisible()
+        await page.waitForTimeout(350)
+        await page.screenshot({
+          path: `screenshots/${platform}/07-split-session-modal.png`,
+        })
+        await page.getByRole('button', { name: 'Cancel' }).click()
+        await page.waitForTimeout(200)
+      }
+
+      // 8. Edit Session Modal (Progress Tab)
+      await progressTabBtn.click()
+      const changeBtn = page.getByRole('button', { name: 'Change' }).first()
+      if (await changeBtn.isVisible()) {
+        await changeBtn.click()
+        await expect(page.getByRole('heading', { name: 'Edit Workout Details' })).toBeVisible()
+        await page.waitForTimeout(300)
+        await page.screenshot({
+          path: `screenshots/${platform}/08-edit-session-modal.png`,
+        })
+        await page.getByRole('button', { name: 'Cancel' }).click()
       }
     })
   })

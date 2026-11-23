@@ -253,4 +253,157 @@ test.describe('Progress and Activity Stream', () => {
     expect(saved?.extra?.inferred).toBe(false)
     expect(saved?.extra?.confirmed).toBe(true)
   })
+
+  test('splits an inferred workout using timeline suggestions and launches retroactive set logging', async ({ page }) => {
+    const apiState = await setupMockApi(page)
+    await page.goto('/')
+
+    await expect(page.getByText('Auto-Detected Workout')).toBeVisible()
+    await page.getByRole('button', { name: 'Split' }).first().click()
+
+    await expect(page.getByRole('heading', { name: 'Split Workout Session' })).toBeVisible()
+    await expect(page.getByTestId('split-timeline-chart')).toBeVisible()
+    await expect(page.getByText(/⌚ Active Watch/)).toBeVisible()
+
+    const applySplitBtn = page.getByRole('button', { name: 'Apply Suggested Split' }).first()
+    await expect(applySplitBtn).toBeVisible()
+    await applySplitBtn.click()
+
+    // Segment 1 defaults to Gym Class ("Group Core"), Segment 2 defaults to Routine ("Upper Body A")
+    const seg2 = page.getByTestId('split-segment-2')
+    await seg2.getByRole('button', { name: /Lower Body A/i }).click()
+
+    // Live Eir preview metrics appear inside segment card
+    await expect(seg2.getByText(/kcal/)).toBeVisible()
+
+    // Click Split & Log Sets
+    await page.getByRole('button', { name: 'Split & Log Sets' }).click()
+
+    await expect.poll(() => apiState.splitRequests.length).toBe(1)
+    expect(apiState.splitRequests[0].parentId).toBe('00000000-0000-4000-8000-000000000402')
+    expect(apiState.splitRequests[0].segments[0].activity_type).toBe('class')
+    expect(apiState.splitRequests[0].segments[1].routine_id).toBe('00000000-0000-4000-8000-000000000202')
+
+    // Retroactive workout view opens immediately with preserved timestamps and no stopwatch
+    await expect(page.getByTestId('retroactive-log-badge')).toContainText('Retroactive Log -')
+    await expect(page.getByTestId('rest-timer-bar')).not.toBeVisible()
+    await expect(page.locator('.workout-item h3', { hasText: 'Barbell Squat' })).toBeVisible()
+
+    await page.locator('.set-row input[inputmode="decimal"]').first().fill('80')
+    await page.locator('.set-row input[inputmode="numeric"]').first().fill('8')
+    await page.getByRole('button', { name: 'Save Sets' }).click()
+
+    await expect.poll(() => apiState.savedSessions.length).toBe(1)
+    const saved = apiState.savedSessions[0]
+    expect(saved.id).toBe('00000000-0000-4000-8000-000000000902')
+    expect(saved.extra.telemetry_locked).toBe(true)
+    expect(saved.extra.manual_split).toBe(true)
+    expect(saved.extra.avg_hr).toBe(136)
+  })
+
+  test('edits start/end times, switches to custom class clearing routine_id, and refreshes Eir telemetry', async ({ page }) => {
+    const apiState = await setupMockApi(page)
+    await page.goto('/')
+
+    const bottomNav = page.locator('nav.bottom-nav')
+    await bottomNav.getByRole('button', { name: 'Progress, 80kg Goal and Activity' }).click()
+
+    await page.getByRole('button', { name: 'Change' }).first().click()
+    await expect(page.getByRole('heading', { name: 'Edit Workout Details' })).toBeVisible()
+
+    await page.getByLabel('Start Time').fill('09:00')
+    await page.getByLabel('End Time').fill('09:35')
+    await page.getByRole('button', { name: 'Class', exact: true }).click()
+    await page.getByPlaceholder('Enter routine or activity name...').fill('Group Core')
+
+    await page.getByRole('button', { name: 'Refresh Eir Telemetry' }).click()
+    await expect.poll(() => apiState.metricsQueries.length).toBeGreaterThan(0)
+    await expect(page.getByText('280 kcal')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Save Changes' }).click()
+    await expect.poll(() => apiState.savedSessions.length).toBe(1)
+    const saved = apiState.savedSessions[0]
+    expect(saved.routine_id).toBeNull()
+    expect(saved.extra.activity_type).toBe('class')
+    expect(saved.extra.classification).toBe('class')
+    expect(saved.extra.telemetry_locked).toBe(true)
+    expect(saved.extra.active_energy_kcal).toBe(280)
+  })
+
+  test('shows logged class badge on Today card while keeping scheduled strength lift actionable', async ({ page }) => {
+    const apiState = await setupMockApi(page)
+    apiState.sessions = [
+      {
+        id: '00000000-0000-4000-8000-000000000777',
+        routine_id: null,
+        started_at: '2026-11-02T05:00:00.000Z',
+        ended_at: '2026-11-02T05:30:00.000Z',
+        notes: null,
+        extra: {
+          routine_name: 'Group Core',
+          activity_type: 'class',
+          classification: 'class',
+          inferred: false,
+          confirmed: true,
+          duration_minutes: 30,
+          active_energy_kcal: 220,
+        },
+        items: [],
+      },
+    ]
+
+    await page.goto('/')
+
+    await expect(page.getByTestId('logged-class-chips')).toContainText('Group Core (30m) completed today')
+    await expect(page.getByText('Pending', { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Start Workout/i })).toBeVisible()
+    await expect(page.getByTestId('completed-workout-card')).not.toBeVisible()
+  })
+
+  test('allows retroactive Log Sets on a confirmed routine session without items', async ({ page }) => {
+    const apiState = await setupMockApi(page)
+    const originalStarted = '2026-11-02T06:00:00.000Z'
+    const originalEnded = '2026-11-02T06:35:00.000Z'
+    apiState.sessions = [
+      {
+        id: '00000000-0000-4000-8000-000000000888',
+        routine_id: '00000000-0000-4000-8000-000000000202',
+        started_at: originalStarted,
+        ended_at: originalEnded,
+        notes: 'Split strength slice',
+        extra: {
+          routine_name: 'Lower Body A',
+          activity_type: 'gym',
+          inferred: false,
+          confirmed: true,
+          telemetry_locked: true,
+          manual_split: true,
+          avg_hr: 138,
+          active_energy_kcal: 245,
+        },
+        items: [],
+      },
+    ]
+
+    await page.goto('/')
+
+    const bottomNav = page.locator('nav.bottom-nav')
+    await bottomNav.getByRole('button', { name: 'Progress, 80kg Goal and Activity' }).click()
+
+    await page.getByRole('button', { name: 'Log Sets' }).click()
+    await expect(page.getByTestId('retroactive-log-badge')).toBeVisible()
+
+    await page.locator('.set-row input[inputmode="decimal"]').first().fill('90')
+    await page.locator('.set-row input[inputmode="numeric"]').first().fill('6')
+    await page.getByRole('button', { name: 'Save Sets' }).click()
+
+    await expect.poll(() => apiState.savedSessions.length).toBe(1)
+    const saved = apiState.savedSessions[0]
+    expect(saved.id).toBe('00000000-0000-4000-8000-000000000888')
+    expect(saved.started_at).toBe(originalStarted)
+    expect(saved.ended_at).toBe(originalEnded)
+    expect(saved.extra.telemetry_locked).toBe(true)
+    expect(saved.extra.avg_hr).toBe(138)
+    await expect(page.getByRole('button', { name: 'Edit Sets' })).toBeVisible()
+  })
 })

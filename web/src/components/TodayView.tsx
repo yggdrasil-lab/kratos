@@ -32,6 +32,7 @@ interface TodayViewProps {
   onDeleteSession: (id: string) => Promise<void> | void
   onConfirmSession: (id: string) => Promise<void> | void
   onEditSession?: (session: SessionPayload) => void
+  onSplitSession?: (session: SessionPayload) => void
   isGeneratingWorkout?: boolean
   isGeneratingFasting?: boolean
 }
@@ -57,6 +58,7 @@ export function TodayView({
   onDeleteSession,
   onConfirmSession,
   onEditSession,
+  onSplitSession,
   isGeneratingWorkout,
   isGeneratingFasting,
 }: TodayViewProps) {
@@ -81,6 +83,7 @@ export function TodayView({
         onConfirmSession={onConfirmSession}
         onDeleteSession={onDeleteSession}
         onEditSession={onEditSession}
+        onSplitSession={onSplitSession}
       />
 
       <ReadinessVitalsCard biometrics={biometrics} />

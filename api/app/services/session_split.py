@@ -1,0 +1,141 @@
+"""Domain service for atomically splitting a workout session into locked segments."""
+
+from __future__ import annotations
+
+import uuid
+from collections.abc import Callable
+from datetime import datetime, timezone
+from typing import Any
+
+from fastapi import HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.orm import Session, selectinload
+
+from app.models import Routine, SessionItem
+from app.models import Session as WorkoutSession
+from app.schemas import SessionSplitRequest, SplitSegmentInput, WorkoutMetricsRead
+from app.services.eir_client import fetch_workout_metrics
+
+MetricsFetcher = Callable[..., WorkoutMetricsRead]
+
+
+def _resolve_segment_routine(
+    db: Session,
+    segment: SplitSegmentInput,
+) -> tuple[uuid.UUID | None, str | None]:
+    if segment.routine_id is None:
+        return None, segment.routine_name
+    routine = db.get(Routine, segment.routine_id)
+    if routine is None or routine.deleted_at is not None:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Routine {segment.routine_id} not found",
+        )
+    return routine.id, segment.routine_name or routine.name
+
+
+def build_split_child_extra(
+    segment: SplitSegmentInput,
+    metrics: WorkoutMetricsRead,
+    parent_id: uuid.UUID,
+    resolved_routine_name: str | None,
+) -> dict[str, Any]:
+    """Builds child session extra payload locking Eir telemetry and split lineage."""
+    activity_type = segment.activity_type or metrics.activity_type or "gym"
+    default_classification = "class" if activity_type == "class" else metrics.classification
+    classification = segment.classification or default_classification or activity_type
+    routine_name = resolved_routine_name or metrics.routine_name or "Workout"
+
+    extra: dict[str, Any] = {
+        "inferred": False,
+        "confirmed": True,
+        "telemetry_locked": True,
+        "manual_split": True,
+        "split_from_id": str(parent_id),
+        "telemetry_reconciled": True,
+        "telemetry_source": "eir_split",
+        "routine_name": routine_name,
+        "activity_type": activity_type,
+        "classification": classification,
+        "duration_minutes": metrics.duration_minutes,
+        "active_energy_kcal": metrics.active_energy_kcal,
+    }
+    optional_fields: dict[str, Any] = {
+        "avg_hr": metrics.avg_hr_bpm,
+        "peak_hr": metrics.peak_hr_bpm,
+        "step_count": metrics.step_count,
+        "confidence": metrics.confidence,
+        "effort_rating": segment.effort_rating or metrics.effort_rating,
+        "rpe": metrics.rpe,
+        "trimp": metrics.trimp,
+        "hr_zones": metrics.hr_zones,
+        "hr_recovery_60s": metrics.hr_recovery_60s,
+    }
+    for key, value in optional_fields.items():
+        if value is not None:
+            extra[key] = value
+    return extra
+
+
+def _fetch_segment_plans(
+    db: Session,
+    payload: SessionSplitRequest,
+    metrics_fetcher: MetricsFetcher,
+) -> list[tuple[SplitSegmentInput, uuid.UUID | None, str | None, WorkoutMetricsRead]]:
+    resolved_routines = [_resolve_segment_routine(db, segment) for segment in payload.segments]
+    plans: list[tuple[SplitSegmentInput, uuid.UUID | None, str | None, WorkoutMetricsRead]] = []
+    for segment, (routine_id, routine_name) in zip(payload.segments, resolved_routines):
+        metrics = metrics_fetcher(
+            segment.started_at,
+            segment.ended_at,
+            classification=segment.classification,
+            activity_type=segment.activity_type,
+            routine_name=routine_name,
+        )
+        plans.append((segment, routine_id, routine_name, metrics))
+    return plans
+
+
+def _load_ordered_sessions(db: Session, session_ids: list[uuid.UUID]) -> list[WorkoutSession]:
+    stmt = (
+        select(WorkoutSession)
+        .where(WorkoutSession.id.in_(session_ids))
+        .options(selectinload(WorkoutSession.items).selectinload(SessionItem.sets))
+    )
+    by_id = {row.id: row for row in db.scalars(stmt)}
+    return [by_id[sid] for sid in session_ids]
+
+
+def split_session_atomically(
+    db: Session,
+    session_id: uuid.UUID,
+    payload: SessionSplitRequest,
+    metrics_fetcher: MetricsFetcher = fetch_workout_metrics,
+) -> tuple[uuid.UUID, list[WorkoutSession]]:
+    """Fetches per-segment Eir biometrics and atomically replaces parent with split sessions."""
+    parent = db.get(WorkoutSession, session_id)
+    if parent is None or parent.deleted_at is not None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Session not found")
+
+    plans = _fetch_segment_plans(db, payload, metrics_fetcher)
+    children: list[WorkoutSession] = []
+    for segment, routine_id, routine_name, metrics in plans:
+        child = WorkoutSession(
+            id=uuid.uuid4(),
+            routine_id=routine_id,
+            started_at=segment.started_at,
+            ended_at=segment.ended_at,
+            notes=segment.notes,
+            extra=build_split_child_extra(segment, metrics, parent.id, routine_name),
+        )
+        db.add(child)
+        children.append(child)
+
+    parent.extra = {
+        **(parent.extra or {}),
+        "dismissed": True,
+        "split_into_ids": [str(child.id) for child in children],
+    }
+    parent.deleted_at = datetime.now(timezone.utc)
+    db.commit()
+    return parent.id, _load_ordered_sessions(db, [child.id for child in children])

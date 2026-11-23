@@ -1,9 +1,9 @@
 """Pydantic schemas — the request and response shapes, and the OpenAPI contract."""
 
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -215,7 +215,93 @@ class SessionRead(ORMModel):
     extra: dict
     created_at: datetime
     updated_at: datetime
+    deleted_at: datetime | None = None
     items: list[SessionItemRead] = Field(default_factory=list)
+
+
+def _ensure_utc_aware(value: datetime) -> datetime:
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+
+
+class SplitSegmentInput(BaseModel):
+    started_at: datetime
+    ended_at: datetime
+    routine_id: uuid.UUID | None = None
+    routine_name: str | None = None
+    activity_type: str | None = None
+    classification: str | None = None
+    effort_rating: str | None = None
+    notes: str | None = None
+
+    @model_validator(mode="after")
+    def _validate_window(self) -> "SplitSegmentInput":
+        self.started_at = _ensure_utc_aware(self.started_at)
+        self.ended_at = _ensure_utc_aware(self.ended_at)
+        if self.started_at >= self.ended_at:
+            raise ValueError("Segment started_at must be strictly before ended_at")
+        return self
+
+
+class SessionSplitRequest(BaseModel):
+    segments: list[SplitSegmentInput] = Field(min_length=2, max_length=4)
+
+    @model_validator(mode="after")
+    def _validate_non_overlapping_order(self) -> "SessionSplitRequest":
+        for idx in range(len(self.segments) - 1):
+            if self.segments[idx].ended_at > self.segments[idx + 1].started_at:
+                raise ValueError(
+                    f"Segment {idx + 1} overlaps segment {idx + 2}; segments must be ordered and non-overlapping"
+                )
+        return self
+
+
+class SessionSplitResponse(BaseModel):
+    parent_id: uuid.UUID
+    sessions: list[SessionRead]
+
+
+class WorkoutMetricsRead(BaseModel):
+    started_at: datetime
+    ended_at: datetime
+    duration_minutes: int
+    active_energy_kcal: int
+    avg_hr_bpm: int | None = None
+    peak_hr_bpm: int | None = None
+    step_count: int | None = None
+    confidence: str | None = "medium"
+    activity_type: str | None = None
+    classification: str | None = None
+    routine_name: str | None = None
+    effort_rating: str | None = None
+    rpe: float | None = None
+    trimp: float | None = None
+    hr_zones: dict[str, Any] | None = None
+    hr_recovery_60s: int | None = None
+
+
+class WorkoutTimelineBin(BaseModel):
+    started_at: datetime
+    ended_at: datetime
+    avg_hr_bpm: int | None = None
+    peak_hr_bpm: int | None = None
+    hr_sample_count: int = 0
+    step_count: int = 0
+    active_energy_kcal: int | float = 0
+    is_active_watch_mode: bool = False
+
+
+class SuggestedSplitPoint(BaseModel):
+    split_at: datetime
+    resume_at: datetime
+    reason: str
+    confidence: str = "medium"
+
+
+class WorkoutTimelineRead(BaseModel):
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+    bins: list[WorkoutTimelineBin] = Field(default_factory=list)
+    suggested_splits: list[SuggestedSplitPoint] = Field(default_factory=list)
 
 
 # --------------------------------------------------------------------- derived

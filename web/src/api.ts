@@ -11,9 +11,13 @@ import type {
   FastingRecommendation,
   Routine,
   SessionPayload,
+  SessionSplitResponse,
+  SplitSegmentInput,
   WeeklyPlanPayload,
   WeeklyPlanRead,
+  WorkoutMetrics,
   WorkoutRecommendation,
+  WorkoutTimelineResponse,
 } from './types'
 
 export { SessionExpiredError }
@@ -57,10 +61,41 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
-  deleteSession: (id: string) =>
-    request<void>(`/sessions/${id}`, {
+  deleteSession: (id: string, dismissed = false) =>
+    request<void>(`/sessions/${id}${dismissed ? '?dismissed=true' : ''}`, {
       method: 'DELETE',
     }),
+
+  splitSession: (id: string, segments: SplitSegmentInput[]) =>
+    request<SessionSplitResponse>(`/sessions/${id}/split`, {
+      method: 'POST',
+      body: JSON.stringify({ segments }),
+    }),
+
+  getWorkoutMetrics: (params: {
+    started_at: string
+    ended_at: string
+    classification?: string | null
+    activity_type?: string | null
+    routine_name?: string | null
+  }) => {
+    const query = new URLSearchParams({
+      started_at: params.started_at,
+      ended_at: params.ended_at,
+    })
+    if (params.classification) query.set('classification', params.classification)
+    if (params.activity_type) query.set('activity_type', params.activity_type)
+    if (params.routine_name) query.set('routine_name', params.routine_name)
+    return request<WorkoutMetrics>(`/biometrics/workout-metrics?${query}`)
+  },
+
+  getWorkoutTimeline: (startedAt: string, endedAt: string) => {
+    const query = new URLSearchParams({
+      started_at: startedAt,
+      ended_at: endedAt,
+    })
+    return request<WorkoutTimelineResponse>(`/biometrics/workout-timeline?${query}`)
+  },
 
   getWeeklyPlan: async (isoWeek: string): Promise<WeeklyPlanRead | null> => {
     try {
