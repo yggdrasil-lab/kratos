@@ -52,14 +52,22 @@ const QUICK_TAGS = [
 ]
 
 export function EffortDebriefModal({ session, exercises, onSave, onSkip }: EffortDebriefModalProps) {
-  const [selectedRating, setSelectedRating] = useState<EffortRating>('optimal')
-  const [selectedTags, setSelectedTags] = useState<string[]>([])
-  const [notes, setNotes] = useState<string>('')
+  const initialRating =
+    typeof session.extra?.effort_rating === 'string'
+      ? (session.extra.effort_rating as EffortRating)
+      : 'optimal'
+  const initialTags = Array.isArray(session.extra?.effort_tags)
+    ? (session.extra.effort_tags as string[])
+    : []
+  const [selectedRating, setSelectedRating] = useState<EffortRating>(initialRating)
+  const [selectedTags, setSelectedTags] = useState<string[]>(initialTags)
+  const [notes, setNotes] = useState<string>(session.notes || '')
 
   const { volume: totalVolumeKg, sets: completedSetsCount } = computeSessionVolumeAndSets(session, exercises)
 
   const startTime = new Date(session.started_at).getTime()
-  const durationMinutes = Math.max(1, Math.round((Date.now() - startTime) / 60000))
+  const endTime = session.ended_at ? new Date(session.ended_at).getTime() : Date.now()
+  const durationMinutes = Math.max(1, Math.round((endTime - startTime) / 60000))
 
   const handleComplete = () => {
     onSave(selectedRating, selectedTags, notes.trim())

@@ -67,7 +67,70 @@ export interface SessionPayload {
   ended_at: string | null
   notes: string | null
   extra: Record<string, unknown>
+  deleted_at?: string | null
   items: SessionItemPayload[]
+}
+
+export type ActivityType = 'gym' | 'class' | 'walk' | 'badminton' | 'swim'
+
+export interface WorkoutMetrics {
+  started_at: string
+  ended_at: string
+  duration_minutes: number
+  active_energy_kcal?: number | null
+  avg_hr_bpm?: number | null
+  peak_hr_bpm?: number | null
+  step_count?: number | null
+  confidence?: string | null
+  activity_type?: string | null
+  classification?: string | null
+  routine_name?: string | null
+  effort_rating?: EffortRating | string | null
+  rpe?: number | null
+  trimp?: number | null
+  hr_zones?: Record<string, number> | null
+  hr_recovery_60s?: number | null
+}
+
+export interface WorkoutTimelineBin {
+  started_at: string
+  ended_at: string
+  avg_hr_bpm?: number | null
+  peak_hr_bpm?: number | null
+  hr_sample_count: number
+  step_count: number
+  active_energy_kcal: number
+  is_active_watch_mode: boolean
+}
+
+export interface SuggestedSplitPoint {
+  split_at: string
+  resume_at: string
+  reason: string
+  confidence: string
+}
+
+export interface WorkoutTimelineResponse {
+  started_at?: string | null
+  ended_at?: string | null
+  bins: WorkoutTimelineBin[]
+  suggested_splits: SuggestedSplitPoint[]
+}
+
+export interface SplitSegmentInput {
+  started_at: string
+  ended_at: string
+  routine_id: string | null
+  routine_name: string | null
+  activity_type: string | null
+  classification: string | null
+  effort_rating: EffortRating | null
+  notes: string | null
+}
+
+export interface SessionSplitResponse {
+  parent_id: string
+  sessions: SessionPayload[]
 }
 
 export interface SessionItemPayload {

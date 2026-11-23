@@ -121,15 +121,46 @@ export function getExerciseDisplayName(
 
 export interface TodayCompletedSummary {
   completedSessions: SessionPayload[]
+  classSessions: SessionPayload[]
+  primarySessions: SessionPayload[]
   latestSession: SessionPayload | null
   hasCompletedToday: boolean
+  hasCompletedPrimaryToday: boolean
   totalDurationMins: number
   totalSets: number
   totalVolumeKg: number
 }
 
+const CLASS_LABEL_PATTERN =
+  /(\bclass\b|\bgroup\b|\bcore\b|\bpilates\b|\byoga\b|\bspin\b|\bcycle\b|\bhiit\b|\bboxing\b|\bpump\b)/i
+
 /**
- * Aggregates completed workout sessions, duration, sets, and total volume for today.
+ * Returns true when a confirmed session is a gym class rather than a scheduled strength lift.
+ */
+export function isClassWorkoutSession(session: SessionPayload): boolean {
+  const activityType =
+    typeof session.extra?.activity_type === 'string'
+      ? session.extra.activity_type.trim().toLowerCase()
+      : ''
+  const classification =
+    typeof session.extra?.classification === 'string'
+      ? session.extra.classification.trim().toLowerCase()
+      : ''
+  if (activityType === 'class' || classification === 'class') {
+    return true
+  }
+  if (!session.routine_id && (session.items?.length ?? 0) === 0) {
+    const rawName =
+      (typeof session.extra?.routine_name === 'string' && session.extra.routine_name) ||
+      (typeof session.extra?.activity_name === 'string' && session.extra.activity_name) ||
+      ''
+    return CLASS_LABEL_PATTERN.test(rawName)
+  }
+  return false
+}
+
+/**
+ * Aggregates completed workout sessions, separating class-only workouts from primary training.
  */
 export function getCompletedTodaySummary(
   sessions: SessionPayload[],
@@ -144,11 +175,15 @@ export function getCompletedTodaySummary(
         new Date(a.started_at || a.ended_at || 0).getTime()
     )
 
+  const classSessions = completedSessions.filter((s) => isClassWorkoutSession(s))
+  const primarySessions = completedSessions.filter((s) => !isClassWorkoutSession(s))
+  const metricSource = primarySessions.length > 0 ? primarySessions : completedSessions
+
   let totalDurationMins = 0
   let totalSets = 0
   let totalVolumeKg = 0
 
-  for (const s of completedSessions) {
+  for (const s of metricSource) {
     let { volume, sets } = computeSessionVolumeAndSets(s, exercises)
     if (sets === 0 && typeof s.extra?.completed_sets === 'number') {
       sets = s.extra.completed_sets
@@ -165,8 +200,11 @@ export function getCompletedTodaySummary(
 
   return {
     completedSessions,
-    latestSession: completedSessions[0] || null,
+    classSessions,
+    primarySessions,
+    latestSession: primarySessions[0] || completedSessions[0] || null,
     hasCompletedToday: completedSessions.length > 0,
+    hasCompletedPrimaryToday: primarySessions.length > 0,
     totalDurationMins,
     totalSets,
     totalVolumeKg,

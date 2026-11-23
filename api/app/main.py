@@ -5,8 +5,9 @@ The OpenAPI schema at /openapi.json is the contract the TypeScript client is
 generated from, so response models are declared on every route.
 """
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from starlette.datastructures import MutableHeaders
@@ -18,6 +19,7 @@ from app.db import get_db
 from app.routers import biometrics, catalogue, client_errors, log, plan, stats
 from app.routers.mcp import install_mcp
 from app.schemas import HealthRead
+from app.services.eir_client import EirUpstreamError
 
 app = FastAPI(
     title="Kratos API",
@@ -75,6 +77,12 @@ app.include_router(client_errors.router, prefix="/api")
 # The MCP endpoint at /mcp is not an APIRouter: it registers the SDK's own
 # streamable-HTTP routes on this app and adds its bearer-token guard.
 install_mcp(app)
+
+
+@app.exception_handler(EirUpstreamError)
+def handle_eir_upstream_error(_request: Request, exc: EirUpstreamError) -> JSONResponse:
+    """Fail loudly with HTTP 502 when a required Eir upstream call fails."""
+    return JSONResponse(status_code=502, content={"detail": str(exc)})
 
 
 @app.get("/health", response_model=HealthRead, tags=["meta"])

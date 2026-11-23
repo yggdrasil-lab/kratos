@@ -9,7 +9,9 @@ import type {
   SetEntry,
   WorkoutRecommendation,
 } from '../types'
+import { getCircadianDate } from '../utils/circadian'
 import { resolveWeightBasis } from '../utils/session'
+import { isSessionOnCircadianDate } from '../utils/sessionMetrics'
 
 const DRAFT_KEY = 'current'
 
@@ -28,6 +30,26 @@ function createSkippedSets(count: number): SetEntry[] {
   }))
 }
 
+function matchExerciseForRecommendation(
+  exercises: Exercise[],
+  exerciseId: string | null | undefined,
+  rawName: string | undefined
+): Exercise | undefined {
+  const targetName = (rawName || '').trim().toLowerCase()
+  if (exerciseId) {
+    const byId = exercises.find((e) => e.id === exerciseId)
+    if (byId) return byId
+  }
+  if (!targetName) return undefined
+  return (
+    exercises.find((e) => e.name.trim().toLowerCase() === targetName) ||
+    exercises.find((e) => {
+      const candidate = e.name.trim().toLowerCase()
+      return candidate.length > 0 && (candidate.includes(targetName) || targetName.includes(candidate))
+    })
+  )
+}
+
 function buildRecommendedItems(
   exercises: Exercise[],
   recommendation: WorkoutRecommendation
@@ -36,32 +58,14 @@ function buildRecommendedItems(
   const fallbackExerciseId = isValidUuid(exercises[0]?.id) ? exercises[0].id : null
 
   for (const recEx of recommendation.exercises) {
-    const targetName = (recEx.exercise_name || '').trim().toLowerCase()
-    const matchEx =
-      (recEx.exercise_id ? exercises.find((e) => e.id === recEx.exercise_id) : undefined) ||
-      (targetName ? exercises.find((e) => e.name.trim().toLowerCase() === targetName) : undefined) ||
-      (targetName
-        ? exercises.find((e) => {
-            const candidate = e.name.trim().toLowerCase()
-            return (
-              candidate.length > 0 &&
-              (candidate.includes(targetName) || targetName.includes(candidate))
-            )
-          })
-        : undefined)
-
+    const matchEx = matchExerciseForRecommendation(exercises, recEx.exercise_id, recEx.exercise_name)
     const resolvedExerciseId =
       (isValidUuid(matchEx?.id) ? matchEx.id : null) ||
       (isValidUuid(recEx.exercise_id) ? recEx.exercise_id : null) ||
       fallbackExerciseId
+    if (!resolvedExerciseId) continue
 
-    if (!resolvedExerciseId) {
-      continue
-    }
-
-    const weightBasis = resolveWeightBasis(matchEx, recEx.weight_basis, recEx.exercise_name)
     const targetSets = recEx.target_sets ?? 2
-
     items.push({
       id: newId(),
       exercise_id: resolvedExerciseId,
@@ -71,13 +75,12 @@ function buildRecommendedItems(
         target_sets: targetSets,
         target_reps: recEx.target_reps,
         target_weight_kg: recEx.suggested_weight_kg,
-        weight_basis: weightBasis,
+        weight_basis: resolveWeightBasis(matchEx, recEx.weight_basis, recEx.exercise_name),
         custom_name: !matchEx || !isValidUuid(matchEx.id) ? recEx.exercise_name : undefined,
       },
       sets: createSkippedSets(targetSets),
     })
   }
-
   return items
 }
 
@@ -88,7 +91,6 @@ function buildRoutineItems(exercises: Exercise[], routine?: Routine): SessionIte
     .map((it, idx) => {
       const matchEx = exercises.find((e) => e.id === it.exercise_id)
       const targetSets = it.target_sets ?? 2
-
       return {
         id: newId(),
         exercise_id: it.exercise_id,
@@ -106,162 +108,220 @@ function buildRoutineItems(exercises: Exercise[], routine?: Routine): SessionIte
     })
 }
 
+function resolveRetroactiveItems(
+  existingSession: SessionPayload,
+  exercises: Exercise[],
+  workoutRecommendation: WorkoutRecommendation | null,
+  routine?: Routine
+): SessionItemPayload[] {
+  if (existingSession.items && existingSession.items.length > 0) {
+    return existingSession.items
+  }
+  const recommendationMatchesRoutine = Boolean(
+    routine &&
+      workoutRecommendation?.routine_name &&
+      routine.name.toLowerCase() === workoutRecommendation.routine_name.toLowerCase()
+  )
+  const isToday = isSessionOnCircadianDate(existingSession, getCircadianDate())
+  const hasRecExercises = Boolean(
+    workoutRecommendation?.exercises && workoutRecommendation.exercises.length > 0
+  )
+  const useRecommended = Boolean(
+    recommendationMatchesRoutine &&
+      hasRecExercises &&
+      (isToday || !(routine?.items && routine.items.length > 0))
+  )
+  return useRecommended && workoutRecommendation
+    ? buildRecommendedItems(exercises, workoutRecommendation)
+    : buildRoutineItems(exercises, routine)
+}
+
+function buildNewSessionPayload(
+  exercises: Exercise[],
+  workoutRecommendation: WorkoutRecommendation | null,
+  routine?: Routine
+): SessionPayload {
+  const recommendationMatchesRoutine =
+    !routine ||
+    !workoutRecommendation?.routine_name ||
+    routine.name.toLowerCase() === workoutRecommendation.routine_name.toLowerCase()
+  const useRecommended = Boolean(
+    recommendationMatchesRoutine &&
+      workoutRecommendation?.exercises &&
+      workoutRecommendation.exercises.length > 0
+  )
+  const items =
+    useRecommended && workoutRecommendation
+      ? buildRecommendedItems(exercises, workoutRecommendation)
+      : buildRoutineItems(exercises, routine)
+  const routineName = useRecommended
+    ? workoutRecommendation?.routine_name
+    : routine?.name || workoutRecommendation?.routine_name || 'Current Workout'
+
+  return {
+    id: newId(),
+    routine_id: routine?.id ?? null,
+    started_at: new Date().toISOString(),
+    ended_at: null,
+    notes: null,
+    extra: { routine_name: routineName },
+    items,
+  }
+}
+
+function buildUpdatedSetItems(
+  items: SessionItemPayload[],
+  itemIndex: number,
+  setIndex: number,
+  field: 'weight_kg' | 'reps',
+  value: number | null
+): SessionItemPayload[] {
+  const newItems = [...items]
+  const sets = [...newItems[itemIndex].sets]
+  const prev = sets[setIndex]
+  const nextReps = field === 'reps' ? value : prev.reps
+  const nextWeight = field === 'weight_kg' ? value : prev.weight_kg
+  const status = nextReps === null && nextWeight === null ? 'skipped' : 'done'
+  sets[setIndex] = { ...prev, [field]: value, status }
+  newItems[itemIndex] = { ...newItems[itemIndex], sets }
+  return newItems
+}
+
+function buildAppendedSetItems(items: SessionItemPayload[], itemIndex: number): SessionItemPayload[] {
+  const newItems = [...items]
+  const item = { ...newItems[itemIndex] }
+  const lastSet = item.sets[item.sets.length - 1]
+  item.sets = [
+    ...item.sets,
+    {
+      id: newId(),
+      set_number: item.sets.length + 1,
+      status: 'done',
+      reps: lastSet?.reps ?? null,
+      weight_kg: lastSet?.weight_kg ?? null,
+      duration_s: null,
+      distance_m: null,
+      rpe: null,
+      notes: null,
+      extra: {},
+    },
+  ]
+  newItems[itemIndex] = item
+  return newItems
+}
+
+function buildRetroactivePayload(
+  existingSession: SessionPayload,
+  exercises: Exercise[],
+  workoutRecommendation: WorkoutRecommendation | null,
+  routine?: Routine
+): SessionPayload {
+  const resolvedName =
+    (typeof existingSession.extra?.routine_name === 'string' && existingSession.extra.routine_name) ||
+    routine?.name ||
+    'Workout'
+  return {
+    ...existingSession,
+    routine_id: existingSession.routine_id ?? routine?.id ?? null,
+    extra: { ...(existingSession.extra || {}), routine_name: resolvedName },
+    items: resolveRetroactiveItems(existingSession, exercises, workoutRecommendation, routine),
+  }
+}
+
+function buildAddedExerciseItems(items: SessionItemPayload[], exercise: Exercise): SessionItemPayload[] {
+  const newItem: SessionItemPayload = {
+    id: newId(),
+    exercise_id: exercise.id,
+    position: items.length,
+    notes: null,
+    extra: {},
+    sets: createSkippedSets(1),
+  }
+  return [...items, newItem]
+}
+
+function buildRemovedSetItems(items: SessionItemPayload[], itemIndex: number, setIndex: number): SessionItemPayload[] {
+  return items.map((it, idx) =>
+    idx === itemIndex
+      ? { ...it, sets: it.sets.filter((_, j) => j !== setIndex).map((s, j) => ({ ...s, set_number: j + 1 })) }
+      : it
+  )
+}
+
 interface UseWorkoutSessionOptions {
   exercises: Exercise[]
   workoutRecommendation: WorkoutRecommendation | null
 }
 
 /**
- * Manages the active workout session draft in IndexedDB and provides factory
- * and mutation helpers for exercises and sets.
+ * Manages active and retroactive workout drafts in IndexedDB and provides set mutation helpers.
  */
-export function useWorkoutSession({
-  exercises,
-  workoutRecommendation,
-}: UseWorkoutSessionOptions) {
+export function useWorkoutSession({ exercises, workoutRecommendation }: UseWorkoutSessionOptions) {
   const [session, setSession] = useState<SessionPayload | null>(null)
+  const [isRetroactive, setIsRetroactive] = useState<boolean>(false)
 
   useEffect(() => {
     void db.drafts.get(DRAFT_KEY).then((draft) => {
-      if (draft) setSession(draft.session)
+      if (!draft) return
+      setSession(draft.session)
+      setIsRetroactive(Boolean(draft.isRetroactive))
     })
   }, [])
 
-  const updateSession = useCallback((next: SessionPayload | null) => {
-    setSession(next)
-    if (next) {
-      void db.drafts.put({ id: DRAFT_KEY, session: next, savedAt: Date.now() })
-    } else {
-      void db.drafts.delete(DRAFT_KEY)
-    }
-  }, [])
-
-  const startSession = useCallback(
-    (routine?: Routine) => {
-      const recommendationMatchesRoutine =
-        !routine ||
-        !workoutRecommendation?.routine_name ||
-        routine.name.toLowerCase() === workoutRecommendation.routine_name.toLowerCase()
-      const useRecommended = Boolean(
-        recommendationMatchesRoutine &&
-          workoutRecommendation?.exercises &&
-          workoutRecommendation.exercises.length > 0
-      )
-      const items =
-        useRecommended && workoutRecommendation
-          ? buildRecommendedItems(exercises, workoutRecommendation)
-          : buildRoutineItems(exercises, routine)
-
-      const routineName = useRecommended
-        ? workoutRecommendation?.routine_name
-        : routine?.name || workoutRecommendation?.routine_name || 'Current Workout'
-
-      updateSession({
-        id: newId(),
-        routine_id: routine?.id ?? null,
-        started_at: new Date().toISOString(),
-        ended_at: null,
-        notes: null,
-        extra: { routine_name: routineName },
-        items,
-      })
-    },
-    [exercises, workoutRecommendation, updateSession]
-  )
-
-  const addExercise = useCallback(
-    (exercise: Exercise) => {
-      if (!session) return
-      const newItem: SessionItemPayload = {
-        id: newId(),
-        exercise_id: exercise.id,
-        position: session.items.length,
-        notes: null,
-        extra: {},
-        sets: createSkippedSets(1),
+  const updateSession = useCallback(
+    (next: SessionPayload | null, retroactiveOverride?: boolean) => {
+      setSession(next)
+      if (!next) {
+        setIsRetroactive(false)
+        void db.drafts.delete(DRAFT_KEY)
+        return
       }
-      updateSession({ ...session, items: [...session.items, newItem] })
+      const nextRetro = retroactiveOverride !== undefined ? retroactiveOverride : isRetroactive
+      if (retroactiveOverride !== undefined) setIsRetroactive(retroactiveOverride)
+      void db.drafts.put({ id: DRAFT_KEY, session: next, savedAt: Date.now(), isRetroactive: nextRetro })
     },
-    [session, updateSession]
-  )
-
-  const removeExercise = useCallback(
-    (itemId: string) => {
-      if (!session) return
-      updateSession({
-        ...session,
-        items: session.items.filter((it) => it.id !== itemId),
-      })
-    },
-    [session, updateSession]
-  )
-
-  const addSet = useCallback(
-    (itemIndex: number) => {
-      if (!session) return
-      const newItems = [...session.items]
-      const item = { ...newItems[itemIndex] }
-      const lastSet = item.sets[item.sets.length - 1]
-      item.sets = [
-        ...item.sets,
-        {
-          id: newId(),
-          set_number: item.sets.length + 1,
-          status: 'done',
-          reps: lastSet?.reps ?? null,
-          weight_kg: lastSet?.weight_kg ?? null,
-          duration_s: null,
-          distance_m: null,
-          rpe: null,
-          notes: null,
-          extra: {},
-        },
-      ]
-      newItems[itemIndex] = item
-      updateSession({ ...session, items: newItems })
-    },
-    [session, updateSession]
-  )
-
-  const updateSet = useCallback(
-    (itemIndex: number, setIndex: number, field: 'weight_kg' | 'reps', value: number | null) => {
-      if (!session) return
-      const newItems = [...session.items]
-      const sets = [...newItems[itemIndex].sets]
-      const prev = sets[setIndex]
-      const nextReps = field === 'reps' ? value : prev.reps
-      const nextWeight = field === 'weight_kg' ? value : prev.weight_kg
-      const status = nextReps === null && nextWeight === null ? 'skipped' : 'done'
-      sets[setIndex] = { ...prev, [field]: value, status }
-      newItems[itemIndex] = { ...newItems[itemIndex], sets }
-      updateSession({ ...session, items: newItems })
-    },
-    [session, updateSession]
-  )
-
-  const removeSet = useCallback(
-    (itemIndex: number, setIndex: number) => {
-      if (!session) return
-      const newItems = session.items.map((it, i) => {
-        if (i !== itemIndex) return it
-        const sets = it.sets
-          .filter((_, j) => j !== setIndex)
-          .map((s, j) => ({ ...s, set_number: j + 1 }))
-        return { ...it, sets }
-      })
-      updateSession({ ...session, items: newItems })
-    },
-    [session, updateSession]
+    [isRetroactive]
   )
 
   return {
     session,
+    isRetroactive,
     updateSession,
-    startSession,
-    addExercise,
-    removeExercise,
-    addSet,
-    updateSet,
-    removeSet,
+    startSession: useCallback(
+      (routine?: Routine) =>
+        updateSession(buildNewSessionPayload(exercises, workoutRecommendation, routine), false),
+      [exercises, workoutRecommendation, updateSession]
+    ),
+    editExistingSession: useCallback(
+      (existingSession: SessionPayload, routine?: Routine) =>
+        updateSession(buildRetroactivePayload(existingSession, exercises, workoutRecommendation, routine), true),
+      [exercises, workoutRecommendation, updateSession]
+    ),
+    addExercise: useCallback(
+      (exercise: Exercise) =>
+        session && updateSession({ ...session, items: buildAddedExerciseItems(session.items, exercise) }),
+      [session, updateSession]
+    ),
+    removeExercise: useCallback(
+      (itemId: string) =>
+        session && updateSession({ ...session, items: session.items.filter((it) => it.id !== itemId) }),
+      [session, updateSession]
+    ),
+    addSet: useCallback(
+      (itemIndex: number) =>
+        session && updateSession({ ...session, items: buildAppendedSetItems(session.items, itemIndex) }),
+      [session, updateSession]
+    ),
+    updateSet: useCallback(
+      (itemIndex: number, setIndex: number, field: 'weight_kg' | 'reps', value: number | null) =>
+        session &&
+        updateSession({ ...session, items: buildUpdatedSetItems(session.items, itemIndex, setIndex, field, value) }),
+      [session, updateSession]
+    ),
+    removeSet: useCallback(
+      (itemIndex: number, setIndex: number) =>
+        session && updateSession({ ...session, items: buildRemovedSetItems(session.items, itemIndex, setIndex) }),
+      [session, updateSession]
+    ),
   }
 }
