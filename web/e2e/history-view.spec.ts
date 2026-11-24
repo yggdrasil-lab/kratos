@@ -460,4 +460,65 @@ test.describe('Progress and Activity Stream', () => {
     expect(saved.extra.active_energy_kcal).toBeUndefined()
     expect(saved.extra.effort_rating).toBeUndefined()
   })
+
+  test('displays local 12-hour session time windows on inferred review and history cards including null ended_at', async ({ page }) => {
+    const apiState = await setupMockApi(page)
+    apiState.sessions = [
+      {
+        id: '00000000-0000-4000-8000-000000000951',
+        routine_id: null,
+        started_at: '2026-11-02T11:30:00',
+        ended_at: '2026-11-02T12:25:00',
+        notes: null,
+        extra: {
+          inferred: true,
+          routine_name: 'Swimming',
+          activity_type: 'swim',
+          effort_rating: 'hard',
+          rpe: 8.2,
+          trimp: 194,
+        },
+        items: [],
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000952',
+        routine_id: '00000000-0000-4000-8000-000000000201',
+        started_at: '2026-11-01T00:05:00',
+        ended_at: null,
+        notes: 'In-progress midnight session',
+        extra: {
+          routine_name: 'Upper Body A',
+          effort_rating: 'optimal',
+        },
+        items: [],
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000953',
+        routine_id: null,
+        started_at: '2026-11-01T12:00:00',
+        ended_at: '2026-11-01T12:20:00',
+        notes: null,
+        extra: {
+          routine_name: 'Walk / Cardio',
+          activity_type: 'walk',
+          confirmed: true,
+          inferred: false,
+        },
+        items: [],
+      },
+    ]
+
+    await page.goto('/')
+
+    const inferredRange = page.getByTestId('inferred-session-time-range')
+    await expect(inferredRange).toBeVisible()
+    await expect(inferredRange).toHaveText('11:30 AM - 12:25 PM')
+
+    const bottomNav = page.locator('nav.bottom-nav')
+    await bottomNav.getByRole('button', { name: 'Progress, 80kg Goal and Activity' }).click()
+
+    await expect(page.getByTestId('session-time-range').filter({ hasText: '11:30 AM - 12:25 PM' })).toBeVisible()
+    await expect(page.getByTestId('session-time-range').filter({ hasText: '12:05 AM' })).toHaveText('12:05 AM')
+    await expect(page.getByTestId('session-time-range').filter({ hasText: '12:00 PM - 12:20 PM' })).toBeVisible()
+  })
 })

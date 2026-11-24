@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import type { EffortRating } from '../types'
 
 interface EffortBadgeProps {
@@ -33,9 +34,46 @@ export function EffortBadge({ effort, className = '' }: EffortBadgeProps) {
 
   return (
     <span
-      className={`text-[11px] px-2 py-0.5 rounded-md font-semibold border ${config.classes} ${className}`}
+      className={`text-[11px] px-2 py-0.5 rounded-md font-semibold border whitespace-nowrap ${config.classes} ${className}`}
     >
       {config.label}
     </span>
+  )
+}
+
+/**
+ * Renders the right-aligned effort, RPE, and TRIMP badge cluster for session cards.
+ */
+export function SessionMetricBadges({
+  effort,
+  rpe,
+  trimp,
+  prefix,
+}: {
+  effort?: EffortRating | string | null
+  rpe: number | null
+  trimp: number | null
+  prefix?: ReactNode
+}) {
+  const hasEffort = Boolean(effort && effort in EFFORT_BADGE_MAP)
+  const hasRpe = rpe !== null
+  const hasTrimp = trimp !== null && trimp > 0
+  if (!prefix && !hasEffort && !hasRpe && !hasTrimp) return null
+
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap justify-end">
+      {prefix}
+      <EffortBadge effort={effort} />
+      {hasRpe && (
+        <span className="text-[11px] px-2 py-0.5 rounded-md bg-purple-500/15 text-purple-300 border border-purple-500/25 font-semibold whitespace-nowrap">
+          RPE {rpe}
+        </span>
+      )}
+      {hasTrimp && (
+        <span className="text-[11px] px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-300 border border-blue-500/25 font-semibold whitespace-nowrap">
+          TRIMP {Math.round(trimp)}
+        </span>
+      )}
+    </div>
   )
 }

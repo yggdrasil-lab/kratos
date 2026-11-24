@@ -94,6 +94,10 @@ for (const { name: platform, options } of PLATFORMS) {
       // 1. Today View
       await expect(page.locator('header h1')).toHaveText('Kratos')
       await expect(page.getByText("Today's Training")).toBeVisible()
+      const inferredTime = page.getByTestId('inferred-session-time-range').first()
+      await expect(inferredTime).toBeVisible()
+      const inferredOverflow = await inferredTime.evaluate((el) => el.scrollWidth > el.clientWidth + 1)
+      expect(inferredOverflow).toBe(false)
       await page.screenshot({
         path: `screenshots/${platform}/01-today-view.png`,
         fullPage: true,
@@ -137,6 +141,10 @@ for (const { name: platform, options } of PLATFORMS) {
       const progressTabBtn = page.locator('nav.bottom-nav').getByRole('button', { name: /Progress/i })
       await progressTabBtn.click()
       await expect(page.getByRole('heading', { name: 'Progress and Momentum' })).toBeVisible()
+      const sessionTime = page.getByTestId('session-time-range').first()
+      await expect(sessionTime).toBeVisible()
+      const sessionTimeOverflow = await sessionTime.evaluate((el) => el.scrollWidth > el.clientWidth + 1)
+      expect(sessionTimeOverflow).toBe(false)
       await page.screenshot({ path: `screenshots/${platform}/05-progress-view.png`, fullPage: true })
 
       // 6. Workout AI Modal
