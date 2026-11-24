@@ -1,9 +1,9 @@
 import { Button, GlassCard } from '@yggdrasil-lab/ui'
 import type { Routine, SessionPayload } from '../types'
-import { formatFriendlyDate } from '../utils/circadian'
+import { formatFriendlyDate, formatSessionTimeRange } from '../utils/circadian'
 import { getSessionLabel } from '../utils/session'
 import { getSessionDurationMinutes } from '../utils/sessionMetrics'
-import { EffortBadge } from './EffortBadge'
+import { SessionMetricBadges } from './EffortBadge'
 import { HRZoneBar, type HRZonesData } from './HRZoneBar'
 
 interface InferredWorkoutBannerProps {
@@ -51,39 +51,39 @@ function InferredSessionMetricsRow({
 
 function InferredCardHeader({
   sessionDate,
+  startedAt,
+  endedAt,
   effort,
   rpe,
   trimp,
 }: {
   sessionDate: string
+  startedAt?: string | null
+  endedAt?: string | null
   effort: string
   rpe: number | null
   trimp: number | null
 }) {
+  const timeRange = formatSessionTimeRange(startedAt, endedAt)
   return (
-    <div className="flex items-start justify-between gap-2 mb-2">
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-base">⚡</span>
-        <span className="font-bold text-sm text-amber-300">
-          Auto-Detected Workout ({formatFriendlyDate(sessionDate)})
-        </span>
-        <span className="text-[11px] px-2 py-0.5 rounded-md font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-          Needs Review
-        </span>
-      </div>
-      <div className="flex items-center gap-1.5 flex-wrap justify-end">
-        <EffortBadge effort={effort} />
-        {rpe !== null && (
-          <span className="text-[11px] px-2 py-0.5 rounded-md bg-purple-500/15 text-purple-300 border border-purple-500/25 font-semibold">
-            RPE {rpe}
+    <div className="flex flex-col gap-1.5 mb-2">
+      <div className="flex items-start justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
+          <span className="text-base">⚡</span>
+          <span className="font-bold text-sm text-amber-300">
+            Auto-Detected Workout ({formatFriendlyDate(sessionDate)})
           </span>
-        )}
-        {trimp !== null && trimp > 0 && (
-          <span className="text-[11px] px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-300 border border-blue-500/25 font-semibold">
-            TRIMP {Math.round(trimp)}
+          <span className="text-[11px] px-2 py-0.5 rounded-md font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30 whitespace-nowrap">
+            Needs Review
           </span>
-        )}
+        </div>
+        <SessionMetricBadges effort={effort} rpe={rpe} trimp={trimp} />
       </div>
+      {timeRange && (
+        <div className="text-xs font-medium text-amber-200 whitespace-nowrap" data-testid="inferred-session-time-range">
+          {timeRange}
+        </div>
+      )}
     </div>
   )
 }
@@ -115,7 +115,14 @@ function InferredSessionCard({
 
   return (
     <GlassCard className="animate-slide-up border-amber-500/40 bg-amber-500/10 p-4">
-      <InferredCardHeader sessionDate={sessionDate} effort={effort} rpe={rpe} trimp={trimp} />
+      <InferredCardHeader
+        sessionDate={sessionDate}
+        startedAt={infSession.started_at}
+        endedAt={infSession.ended_at}
+        effort={effort}
+        rpe={rpe}
+        trimp={trimp}
+      />
 
       <div className="mb-2">
         <div className="text-base font-bold text-slate-100">{routineName}</div>

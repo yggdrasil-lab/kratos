@@ -42,6 +42,31 @@ export function formatFriendlyDate(dateStr: string): string {
   return `${dayName}, ${months[dt.getMonth()]} ${dt.getDate()}`
 }
 
+function formatLocal12Hour(iso?: string | null): string {
+  if (!iso) return ''
+  const dt = new Date(iso)
+  if (Number.isNaN(dt.getTime())) return ''
+  const rawHours = dt.getHours()
+  const period = rawHours >= 12 ? 'PM' : 'AM'
+  const hour12 = rawHours % 12 === 0 ? 12 : rawHours % 12
+  const minutes = String(dt.getMinutes()).padStart(2, '0')
+  return `${hour12}:${minutes} ${period}`
+}
+
+/**
+ * Formats an ISO start/end pair as a deterministic local 12-hour time window
+ * (e.g. "11:30 AM - 12:25 PM"), falling back to start time when `endedAt` is absent.
+ */
+export function formatSessionTimeRange(
+  startedAt?: string | null,
+  endedAt?: string | null
+): string {
+  const startLabel = formatLocal12Hour(startedAt)
+  if (!startLabel) return ''
+  const endLabel = formatLocal12Hour(endedAt)
+  return endLabel ? `${startLabel} - ${endLabel}` : startLabel
+}
+
 /**
  * Normalizes server-synced fasting feedback from daily biometrics into a FastingCheckIn.
  */

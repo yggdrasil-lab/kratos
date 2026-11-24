@@ -1,9 +1,9 @@
 import { Button, GlassCard } from '@yggdrasil-lab/ui'
 import type { Exercise, Routine, SessionPayload } from '../types'
-import { formatFriendlyDate } from '../utils/circadian'
+import { formatFriendlyDate, formatSessionTimeRange } from '../utils/circadian'
 import { computeSessionVolumeAndSets, getSessionLabel } from '../utils/session'
 import { getExerciseDisplayName, getSessionDurationMinutes } from '../utils/sessionMetrics'
-import { EffortBadge } from './EffortBadge'
+import { SessionMetricBadges } from './EffortBadge'
 import { HRZoneBar, type HRZonesData } from './HRZoneBar'
 
 interface ProgressSessionCardProps {
@@ -28,34 +28,30 @@ function SessionCardHeader({
 }) {
   const routineName = getSessionLabel(session, routines)
   const dateStr = session.started_at.split('T')[0]
+  const timeRange = formatSessionTimeRange(session.started_at, session.ended_at)
   const effort = typeof session.extra?.effort_rating === 'string' ? session.extra.effort_rating : ''
   const rpe = typeof session.extra?.rpe === 'number' ? session.extra.rpe : null
   const trimp = typeof session.extra?.trimp === 'number' ? session.extra.trimp : null
+  const inferredPill = isInferred ? (
+    <span className="text-[11px] px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold flex items-center gap-1 whitespace-nowrap">
+      ⚡ Inferred from Plan
+    </span>
+  ) : null
 
   return (
     <div className="flex justify-between items-start mb-1.5 gap-2">
-      <div>
-        <div className="text-xs text-slate-400">{formatFriendlyDate(dateStr)}</div>
+      <div className="min-w-0">
+        <div className="text-xs text-slate-400 flex items-center gap-2 flex-wrap">
+          <span>{formatFriendlyDate(dateStr)}</span>
+          {timeRange && (
+            <span className="text-slate-300 font-medium whitespace-nowrap" data-testid="session-time-range">
+              {timeRange}
+            </span>
+          )}
+        </div>
         <div className="font-bold text-base text-slate-100">{routineName}</div>
       </div>
-      <div className="flex items-center gap-1.5 flex-wrap justify-end">
-        {isInferred && (
-          <span className="text-[11px] px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold flex items-center gap-1">
-            ⚡ Inferred from Plan
-          </span>
-        )}
-        <EffortBadge effort={effort} />
-        {rpe !== null && (
-          <span className="text-[11px] px-2 py-0.5 rounded-md bg-purple-500/15 text-purple-300 border border-purple-500/25 font-semibold">
-            RPE {rpe}
-          </span>
-        )}
-        {trimp !== null && trimp > 0 && (
-          <span className="text-[11px] px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-300 border border-blue-500/25 font-semibold">
-            TRIMP {Math.round(trimp)}
-          </span>
-        )}
-      </div>
+      <SessionMetricBadges effort={effort} rpe={rpe} trimp={trimp} prefix={inferredPill} />
     </div>
   )
 }
