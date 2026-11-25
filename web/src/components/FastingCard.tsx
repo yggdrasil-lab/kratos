@@ -12,6 +12,7 @@ import {
 } from '@yggdrasil-lab/ui'
 import type { FastingCheckIn, FastingRecommendation } from '../types'
 import { resolveFastingProtocol, type ResolvedFastingProtocol } from '../utils/circadian'
+import { getDefaultCitationTitle, getInlinePillars, getModalPillars } from '../utils/pillars'
 import { FastingCheckInModal } from './FastingCheckInModal'
 
 interface FastingCardProps {
@@ -24,24 +25,8 @@ interface FastingCardProps {
   isGenerating?: boolean
 }
 
-const FASTING_PILLARS = [
-  {
-    label: 'Circadian TRE',
-    description: '8-10h window ending 3-4h prior to sleep to preserve nocturnal HRV and deep sleep.',
-  },
-  {
-    label: 'MPS Distribution',
-    description: '0.4-0.5 g/kg protein spaced across 3-4 meals on lifting days with post-lift anchor.',
-  },
-  {
-    label: 'Court Glycogen',
-    description: 'Pre-match carbs and electrolytes 2-3h before play; post-match amino acids.',
-  },
-  {
-    label: 'Metabolic Reset',
-    description: '18:6 autophagy fasts reserved strictly for low-strain recovery days.',
-  },
-]
+const INLINE_FASTING_PILLARS = getInlinePillars('fasting')
+const FASTING_PILLARS = getModalPillars('fasting')
 
 const RECOVERY_BADGE_MAP: Record<string, { label: string; variant: StatusBadgeVariant }> = {
   fatigued: { label: '🔴 Autoregulated', variant: 'error' },
@@ -284,10 +269,11 @@ function FastingCardBody({
 
       {protocol.researchCitation && (
         <CollapsibleSection variant="inline" icon="📚" title={protocol.researchCitation} className="mt-3">
-          <div>☀️ <strong>Panda Lab:</strong> 8-10h feeding window ending 3-4h prior to sleep preserves nocturnal HRV &amp; deep sleep.</div>
-          <div>🥩 <strong>Schoenfeld / Aragon:</strong> 0.4-0.5g/kg protein every 3-5h on lift days with an anabolic recovery anchor.</div>
-          <div>🏸 <strong>Court Kinetics:</strong> Pre-match complex carbs + electrolytes 2-3h before play prevent glycogen depletion.</div>
-          <div>🧬 <strong>Mattson / Longo:</strong> 18:6 autophagy fasts reserved strictly for low-strain recovery days.</div>
+          {INLINE_FASTING_PILLARS.map((pillar) => (
+            <div key={pillar.label}>
+              {pillar.icon} <strong>{pillar.label}</strong> {pillar.description}
+            </div>
+          ))}
         </CollapsibleSection>
       )}
 
@@ -355,7 +341,7 @@ export function FastingCard({
           onClose={() => setShowAiModal(false)}
           title="Adaptive Fasting Synthesizer"
           subtitle="Sports Physiology & Circadian Research Grounding"
-          citationTitle={protocol.researchCitation || 'Panda Lab (Circadian TRE) & Schoenfeld (MPS Distribution)'}
+          citationTitle={protocol.researchCitation || getDefaultCitationTitle('fasting')}
           pillars={FASTING_PILLARS}
           inputLabel="Day Shifts or Custom Schedule (Optional)"
           inputPlaceholder="e.g. Lunch at 1:30 PM with team; badminton moved to 7:00 PM; feeling slightly sore from deadlifts"

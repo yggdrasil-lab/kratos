@@ -81,7 +81,7 @@ export function parseServerFasting(fb?: DailyBiometrics['fasting']): FastingChec
   return {
     id: fb.id || `server-${fb.date}`,
     date: fb.date,
-    target_window: (payload.target_window as string) || '16:8',
+    target_window: (payload.target_window as string) || '14:10',
     adherence: (fb.rating as 'completed' | 'early' | 'off_plan') || 'completed',
     energy: (payload.energy as 'high' | 'normal' | 'low') || 'normal',
     headache: (payload.headache as 'none' | 'mild' | 'sugar_spike') || 'none',
@@ -101,9 +101,16 @@ export interface ResolvedFastingProtocol {
   researchCitation?: string | null
 }
 
+const DEFAULT_FASTING_ANCHORS = [
+  'Morning: Clean fast with water, black coffee, or tea until 10:30 AM',
+  '10:30 AM: Leftovers or eat-out plate triage, protein first, then carbs and sides to satiety',
+  'Family dinner (done by 8:30 PM): plate triage, protein first, then carbs and sides to satiety',
+  'Optional: whey protein shake in water or milk as a zero-prep top-up',
+]
+
 /**
  * Resolves the active circadian fasting protocol from an AI recommendation or
- * falls back to weekend (14:10 social) vs weekday (16:8 circadian) baseline defaults.
+ * falls back to the canonical 14:10 circadian baseline (10:30 AM - 8:30 PM).
  */
 export function resolveFastingProtocol(
   dayOfWeek: number,
@@ -111,14 +118,10 @@ export function resolveFastingProtocol(
 ): ResolvedFastingProtocol {
   if (recommendation) {
     return {
-      protocolName: recommendation.protocol_name ?? '16:8 Standard Split',
-      targetWindow: recommendation.target_window ?? '16:8',
-      windowHours: recommendation.window_hours ?? '12:30 PM - 8:30 PM',
-      fuelingAnchors: recommendation.fueling_anchors ?? [
-        '12:30 PM: Break fast with 40g protein + complex carbs',
-        '07:00 PM: High protein dinner + greens',
-        'Post-Dinner: 15-20 min walk to blunt glucose spike',
-      ],
+      protocolName: recommendation.protocol_name ?? '14:10 Circadian Protocol',
+      targetWindow: recommendation.target_window ?? '14:10',
+      windowHours: recommendation.window_hours ?? '10:30 AM - 8:30 PM',
+      fuelingAnchors: recommendation.fueling_anchors ?? [...DEFAULT_FASTING_ANCHORS],
       rationale: recommendation.rationale,
       recoveryStatus: recommendation.recovery_status,
       isLlmGenerated: recommendation.is_llm_generated ?? false,
@@ -141,14 +144,10 @@ export function resolveFastingProtocol(
   }
 
   return {
-    protocolName: '16:8 Circadian Protocol',
-    targetWindow: '16:8',
-    windowHours: '12:00 PM - 8:00 PM',
-    fuelingAnchors: [
-      'Morning: High water intake and electrolyte hydration',
-      '12:00 PM: Balanced lunch with clean complex carbs and protein',
-      '07:00 PM: High-protein dinner (close window by 8:00 PM)',
-    ],
+    protocolName: '14:10 Circadian Protocol',
+    targetWindow: '14:10',
+    windowHours: '10:30 AM - 8:30 PM',
+    fuelingAnchors: [...DEFAULT_FASTING_ANCHORS],
     isLlmGenerated: false,
   }
 }

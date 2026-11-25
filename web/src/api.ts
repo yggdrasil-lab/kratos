@@ -2,7 +2,7 @@
 // proxies /api to uvicorn, and in production the reverse proxy routes it too.
 // VITE_API_BASE_URL overrides the prefix for a split deployment.
 
-import { authFetch, isSessionExpiredError, SessionExpiredError } from '@yggdrasil-lab/ui'
+import { authFetch, SessionExpiredError } from '@yggdrasil-lab/ui'
 import type {
   ClientErrorPayload,
   DailyBiometrics,
@@ -24,6 +24,37 @@ export { SessionExpiredError }
 
 const BASE = import.meta.env.VITE_API_BASE_URL || '/api'
 
+export interface KratosApiErrorOptions {
+  status: number
+  statusText: string
+  detail: string
+  path: string
+}
+
+/**
+ * Typed HTTP error thrown when a Kratos API request returns a non-OK response.
+ */
+export class KratosApiError extends Error {
+  readonly status: number
+  readonly statusText: string
+  readonly detail: string
+  readonly path: string
+
+  constructor(options: KratosApiErrorOptions) {
+    super(`${options.status} ${options.statusText}: ${options.detail}`)
+    this.name = 'KratosApiError'
+    this.status = options.status
+    this.statusText = options.statusText
+    this.detail = options.detail
+    this.path = options.path
+    Object.setPrototypeOf(this, new.target.prototype)
+  }
+}
+
+export function isKratosApiError(err: unknown): err is KratosApiError {
+  return err instanceof KratosApiError || (err instanceof Error && err.name === 'KratosApiError')
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await authFetch(`${BASE}${path}`, {
     headers: { 'Content-Type': 'application/json' },
@@ -31,10 +62,26 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   })
   if (!response.ok) {
     const detail = await response.text()
-    throw new Error(`${response.status} ${response.statusText}: ${detail}`)
+    throw new KratosApiError({
+      status: response.status,
+      statusText: response.statusText,
+      detail,
+      path,
+    })
   }
   if (response.status === 204) return undefined as T
   return (await response.json()) as T
+}
+
+async function requestOrNull<T>(path: string, init?: RequestInit): Promise<T | null> {
+  try {
+    return await request<T>(path, init)
+  } catch (err) {
+    if (isKratosApiError(err) && err.status === 404) {
+      return null
+    }
+    throw err
+  }
 }
 
 export const api = {
@@ -100,16 +147,8 @@ export const api = {
     return request<WorkoutTimelineResponse>(`/biometrics/workout-timeline?${query}`, { signal })
   },
 
-  getWeeklyPlan: async (isoWeek: string): Promise<WeeklyPlanRead | null> => {
-    try {
-      return await request<WeeklyPlanRead>(`/plans/week/${isoWeek}`)
-    } catch (err) {
-      if (isSessionExpiredError(err)) {
-        throw err
-      }
-      return null
-    }
-  },
+  getWeeklyPlan: (isoWeek: string): Promise<WeeklyPlanRead | null> =>
+    requestOrNull<WeeklyPlanRead>(`/plans/week/${isoWeek}`),
 
   putWeeklyPlan: (payload: WeeklyPlanPayload) =>
     request<WeeklyPlanRead>(`/plans/week/${payload.iso_week}`, {
@@ -117,96 +156,50 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
-  getBiometricsToday: async (): Promise<DailyBiometrics | null> => {
-    try {
-      return await request<DailyBiometrics>('/biometrics/today')
-    } catch (err) {
-      if (isSessionExpiredError(err)) {
-        throw err
-      }
-      return null
-    }
+  getBiometricsToday: (): Promise<DailyBiometrics | null> =>
+    requestOrNull<DailyBiometrics>('/biometrics/today'),
+
+  getFastingRecommendation: (targetDate?: string): Promise<FastingRecommendation | null> => {
+    const suffix = targetDate ? `?target_date=${encodeURIComponent(targetDate)}` : ''
+    return requestOrNull<FastingRecommendation>(`/biometrics/fasting-recommendation${suffix}`)
   },
 
-  getFastingRecommendation: async (targetDate?: string): Promise<FastingRecommendation | null> => {
-    try {
-      const suffix = targetDate ? `?target_date=${encodeURIComponent(targetDate)}` : ''
-      return await request<FastingRecommendation>(`/biometrics/fasting-recommendation${suffix}`)
-    } catch (err) {
-      if (isSessionExpiredError(err)) {
-        throw err
-      }
-      return null
-    }
-  },
-
-  synthesizeFastingRecommendation: async (
+  synthesizeFastingRecommendation: (
     customContext?: string,
-    targetDate?: string,
-  ): Promise<FastingRecommendation | null> => {
-    try {
-      return await request<FastingRecommendation>('/biometrics/fasting-recommendation/synthesize', {
-        method: 'POST',
-        body: JSON.stringify({
-          target_date: targetDate,
-          custom_context: customContext,
-        }),
-      })
-    } catch (err) {
-      if (isSessionExpiredError(err)) {
-        throw err
-      }
-      return null
-    }
+    targetDate?: string
+  ): Promise<FastingRecommendation> =>
+    request<FastingRecommendation>('/biometrics/fasting-recommendation/synthesize', {
+      method: 'POST',
+      body: JSON.stringify({
+        target_date: targetDate,
+        custom_context: customContext,
+      }),
+    }),
+
+  getWorkoutRecommendation: (targetDate?: string): Promise<WorkoutRecommendation | null> => {
+    const suffix = targetDate ? `?target_date=${encodeURIComponent(targetDate)}` : ''
+    return requestOrNull<WorkoutRecommendation>(`/biometrics/workout-recommendation${suffix}`)
   },
 
-  getWorkoutRecommendation: async (targetDate?: string): Promise<WorkoutRecommendation | null> => {
-    try {
-      const suffix = targetDate ? `?target_date=${encodeURIComponent(targetDate)}` : ''
-      return await request<WorkoutRecommendation>(`/biometrics/workout-recommendation${suffix}`)
-    } catch (err) {
-      if (isSessionExpiredError(err)) {
-        throw err
-      }
-      return null
-    }
-  },
-
-  synthesizeWorkoutRecommendation: async (
+  synthesizeWorkoutRecommendation: (
     customContext?: string,
-    targetDate?: string,
-  ): Promise<WorkoutRecommendation | null> => {
-    try {
-      return await request<WorkoutRecommendation>('/biometrics/workout-recommendation/synthesize', {
-        method: 'POST',
-        body: JSON.stringify({
-          target_date: targetDate,
-          custom_context: customContext,
-        }),
-      })
-    } catch (err) {
-      if (isSessionExpiredError(err)) {
-        throw err
-      }
-      return null
-    }
-  },
+    targetDate?: string
+  ): Promise<WorkoutRecommendation> =>
+    request<WorkoutRecommendation>('/biometrics/workout-recommendation/synthesize', {
+      method: 'POST',
+      body: JSON.stringify({
+        target_date: targetDate,
+        custom_context: customContext,
+      }),
+    }),
 
-  saveFastingCheckIn: async (payload: FastingCheckIn): Promise<void> => {
-    try {
-      await request<void>('/biometrics/fasting', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      })
-    } catch (err) {
-      if (isSessionExpiredError(err)) {
-        throw err
-      }
-      // Offline fallback: saved to IndexedDB
-    }
-  },
+  saveFastingCheckIn: (payload: FastingCheckIn): Promise<void> =>
+    request<void>('/biometrics/fasting', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
 
-  saveWorkoutFeedback: async (payload: {
+  saveWorkoutFeedback: (payload: {
     date: string
     routine_name?: string
     duration_minutes?: number
@@ -216,19 +209,11 @@ export const api = {
     tags?: string[]
     notes?: string
     logged_at?: string
-  }): Promise<void> => {
-    try {
-      await request<void>('/biometrics/workout-feedback', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      })
-    } catch (err) {
-      if (isSessionExpiredError(err)) {
-        throw err
-      }
-      // Offline fallback
-    }
-  },
+  }): Promise<void> =>
+    request<void>('/biometrics/workout-feedback', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
 
   reportClientError: async (payload: ClientErrorPayload): Promise<void> => {
     try {

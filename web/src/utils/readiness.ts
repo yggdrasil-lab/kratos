@@ -1,52 +1,68 @@
-import type { DailyBiometrics, Routine, WorkoutRecommendation } from '../types'
+import type { AccentVariant } from '@yggdrasil-lab/ui'
+import type { DailyBiometrics, ReadinessTier, Routine, WorkoutRecommendation } from '../types'
 
-export type ReadinessTier = 'optimal' | 'moderate' | 'fatigued'
+export type { ReadinessTier }
 
-export interface ReadinessSummary {
-  tier: ReadinessTier
+export interface ReadinessStyleSpec {
   emoji: string
-  label: string
   textClass: string
   borderClass: string
+  headerVariant: AccentVariant
+}
+
+export interface ReadinessSummary extends ReadinessStyleSpec {
+  tier: ReadinessTier | 'unavailable'
+  label: string
   message: string
 }
 
-/**
- * Derives daily recovery tier and styling metadata from wearable sleep and HRV metrics.
- */
-export function computeReadinessTier(biometrics: DailyBiometrics | null): ReadinessSummary {
-  const sleepHours = biometrics?.sleep_duration_hours ?? null
-  const hrvMs = biometrics?.hrv_ms ? Number(biometrics.hrv_ms) : null
-
-  if (sleepHours !== null && sleepHours < 5.5) {
-    return {
-      tier: 'fatigued',
-      emoji: '🔴',
-      label: 'Low Recovery',
-      textClass: 'text-rose-400',
-      borderClass: 'border-rose-500/30',
-      message: 'Short sleep detected (<5.5h). Recommend volume scaling or posture mobility.',
-    }
-  }
-
-  if ((sleepHours !== null && sleepHours < 6.8) || (hrvMs !== null && hrvMs < 42)) {
-    return {
-      tier: 'moderate',
-      emoji: '🟡',
-      label: 'Moderate Fatigue',
-      textClass: 'text-amber-400',
-      borderClass: 'border-amber-500/30',
-      message: 'Moderate recovery. Keep form tight and cap intensity around RPE 7-8.',
-    }
-  }
-
-  return {
-    tier: 'optimal',
+export const READINESS_STYLE_MAP: Record<ReadinessTier, ReadinessStyleSpec> = {
+  optimal: {
     emoji: '🟢',
-    label: 'High Readiness',
     textClass: 'text-emerald-400',
     borderClass: 'border-emerald-500/30',
-    message: 'Optimal state. Prime day to push progressive overload and PRs.',
+    headerVariant: 'emerald',
+  },
+  moderate: {
+    emoji: '🟡',
+    textClass: 'text-amber-400',
+    borderClass: 'border-amber-500/30',
+    headerVariant: 'amber',
+  },
+  fatigued: {
+    emoji: '🔴',
+    textClass: 'text-rose-400',
+    borderClass: 'border-rose-500/30',
+    headerVariant: 'rose',
+  },
+}
+
+const UNAVAILABLE_READINESS_SUMMARY: ReadinessSummary = {
+  tier: 'unavailable',
+  emoji: '⚪',
+  label: 'Readiness Unavailable',
+  textClass: 'text-slate-300',
+  borderClass: 'border-slate-600/40',
+  headerVariant: 'slate',
+  message: 'Wearable readiness is currently unavailable. Listen to your body and train by feel.',
+}
+
+/**
+ * Maps backend-computed daily readiness into UI presentation tokens, returning an explicit
+ * neutral unavailable summary when Eir telemetry or backend readiness is absent.
+ */
+export function resolveReadinessSummary(biometrics: DailyBiometrics | null): ReadinessSummary {
+  const backend = biometrics?.readiness
+  if (!backend) return UNAVAILABLE_READINESS_SUMMARY
+
+  const style = READINESS_STYLE_MAP[backend.tier]
+  if (!style) return UNAVAILABLE_READINESS_SUMMARY
+
+  return {
+    tier: backend.tier,
+    label: backend.label,
+    message: backend.message,
+    ...style,
   }
 }
 

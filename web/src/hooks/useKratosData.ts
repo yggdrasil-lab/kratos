@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { clearBrowserCaches, isSessionExpiredError, useAppResumeRefresh } from '@yggdrasil-lab/ui'
-import { api } from '../api'
+import { api, isKratosApiError } from '../api'
 import { db, requestPersistence } from '../db'
 import { enqueue, flush, pending } from '../outbox'
 import type {
@@ -22,6 +22,13 @@ export type SyncStatus = { kind: 'idle' | 'busy' | 'error'; message?: string }
 
 const SESSION_EXPIRED_MESSAGE = 'Authentik session expired - tap to re-authenticate'
 
+function formatSyncError(err: unknown, fallback: string): string {
+  if (isSessionExpiredError(err)) return SESSION_EXPIRED_MESSAGE
+  if (isKratosApiError(err)) return `${fallback} (${err.status})`
+  if (err instanceof Error && err.message) return err.message
+  return fallback
+}
+
 function sortByStartedDesc(a: SessionPayload, b: SessionPayload): number {
   const timeA = new Date(a.started_at || 0).getTime()
   const timeB = new Date(b.started_at || 0).getTime()
@@ -42,7 +49,8 @@ async function sendWorkoutFeedbackBestEffort(
   finalSession: SessionPayload,
   feedback: { effort: EffortRating; tags: string[]; notes: string },
   routines: Routine[],
-  exercises: Exercise[]
+  exercises: Exercise[],
+  onError: (err: unknown) => void
 ): Promise<void> {
   if (!finalSession.ended_at) return
   try {
@@ -70,8 +78,8 @@ async function sendWorkoutFeedbackBestEffort(
       notes: feedback.notes || undefined,
       logged_at: finalSession.ended_at,
     })
-  } catch {
-    // Best-effort bridge forward
+  } catch (err) {
+    onError(err)
   }
 }
 
@@ -121,9 +129,14 @@ function useCatalogueState(
         })
         .catch(() => undefined)
     } catch (err) {
-      if (isSessionExpiredError(err)) {
-        setSessionExpired(true)
-        setStatus({ kind: 'error', message: SESSION_EXPIRED_MESSAGE })
+      const expired = isSessionExpiredError(err)
+      if (expired) setSessionExpired(true)
+      const cachedCount = await db.routines.count().catch(() => 0)
+      if (expired || cachedCount === 0) {
+        setStatus({
+          kind: 'error',
+          message: formatSyncError(err, 'Failed to fetch routines'),
+        })
       }
       void reportClientError(err, { source: 'routines_fetch' })
     }
@@ -135,6 +148,7 @@ function useCatalogueState(
 function useRecommendationSynthesizers(
   circadianDate: string,
   setSessionExpired: (val: boolean) => void,
+  setStatus: (status: SyncStatus) => void,
   setIsGeneratingFasting: (val: boolean) => void,
   setIsGeneratingWorkout: (val: boolean) => void,
   setFastingRecommendation: (val: FastingRecommendation | null) => void,
@@ -145,16 +159,20 @@ function useRecommendationSynthesizers(
       setIsGeneratingFasting(true)
       try {
         const updated = await api.synthesizeFastingRecommendation(customContext, circadianDate)
-        if (updated) setFastingRecommendation(updated)
+        setFastingRecommendation(updated)
       } catch (err) {
         if (isSessionExpiredError(err)) setSessionExpired(true)
+        setStatus({
+          kind: 'error',
+          message: formatSyncError(err, 'Failed to synthesize fasting recommendation'),
+        })
         void reportClientError(err, { source: 'fasting_synthesis' })
         throw err
       } finally {
         setIsGeneratingFasting(false)
       }
     },
-    [circadianDate, setSessionExpired, setIsGeneratingFasting, setFastingRecommendation]
+    [circadianDate, setSessionExpired, setStatus, setIsGeneratingFasting, setFastingRecommendation]
   )
 
   const synthesizeWorkoutRecommendation = useCallback(
@@ -162,16 +180,20 @@ function useRecommendationSynthesizers(
       setIsGeneratingWorkout(true)
       try {
         const updated = await api.synthesizeWorkoutRecommendation(customContext, circadianDate)
-        if (updated) setWorkoutRecommendation(updated)
+        setWorkoutRecommendation(updated)
       } catch (err) {
         if (isSessionExpiredError(err)) setSessionExpired(true)
+        setStatus({
+          kind: 'error',
+          message: formatSyncError(err, 'Failed to synthesize workout recommendation'),
+        })
         void reportClientError(err, { source: 'workout_synthesis' })
         throw err
       } finally {
         setIsGeneratingWorkout(false)
       }
     },
-    [circadianDate, setSessionExpired, setIsGeneratingWorkout, setWorkoutRecommendation]
+    [circadianDate, setSessionExpired, setStatus, setIsGeneratingWorkout, setWorkoutRecommendation]
   )
 
   return { synthesizeFastingRecommendation, synthesizeWorkoutRecommendation }
@@ -199,41 +221,65 @@ function useBiometricsState(
     setIsGeneratingFasting(true)
     setIsGeneratingWorkout(true)
     try {
-      const [data, rec, workoutRec] = await Promise.all([
+      const [bioRes, fastingRes, workoutRes] = await Promise.allSettled([
         api.getBiometricsToday(),
         api.getFastingRecommendation().finally(() => setIsGeneratingFasting(false)),
         api.getWorkoutRecommendation().finally(() => setIsGeneratingWorkout(false)),
       ])
-      if (rec) setFastingRecommendation(rec)
-      if (workoutRec) setWorkoutRecommendation(workoutRec)
-      if (!data) return
-      setBiometrics(data)
-      setSessionExpired(false)
-      const serverCheckIn = parseServerFasting(data.fasting)
-      if (serverCheckIn) {
-        await db.fastingLogs.put(serverCheckIn).catch(() => undefined)
-        setFastingLogs((prev) => [serverCheckIn, ...prev.filter((c) => c.date !== serverCheckIn.date)])
+      if (fastingRes.status === 'fulfilled' && fastingRes.value) {
+        setFastingRecommendation(fastingRes.value)
       }
-    } catch (err) {
-      const expired = isSessionExpiredError(err)
-      if (expired) setSessionExpired(true)
-      setStatus({ kind: 'error', message: expired ? SESSION_EXPIRED_MESSAGE : 'Failed to load biometrics' })
-      void reportClientError(err, { source: 'biometrics_fetch' })
+      if (workoutRes.status === 'fulfilled' && workoutRes.value) {
+        setWorkoutRecommendation(workoutRes.value)
+      }
+      if (bioRes.status === 'fulfilled' && bioRes.value) {
+        const data = bioRes.value
+        setBiometrics(data)
+        const serverCheckIn = parseServerFasting(data.fasting)
+        if (serverCheckIn) {
+          await db.fastingLogs.put(serverCheckIn).catch(() => undefined)
+          setFastingLogs((prev) => [serverCheckIn, ...prev.filter((c) => c.date !== serverCheckIn.date)])
+        }
+      }
+      const firstFailure = [bioRes, fastingRes, workoutRes].find(
+        (res): res is PromiseRejectedResult => res.status === 'rejected'
+      )
+      if (firstFailure) {
+        const err = firstFailure.reason
+        if (isSessionExpiredError(err)) setSessionExpired(true)
+        setStatus({ kind: 'error', message: formatSyncError(err, 'Failed to load biometrics') })
+        void reportClientError(err, { source: 'biometrics_fetch' })
+      } else {
+        setSessionExpired(false)
+      }
     } finally {
       setIsGeneratingFasting(false)
       setIsGeneratingWorkout(false)
     }
   }, [setSessionExpired, setStatus])
 
-  const saveFastingCheckIn = useCallback(async (checkIn: FastingCheckIn) => {
-    await db.fastingLogs.put(checkIn).catch(() => undefined)
-    setFastingLogs((prev) => [checkIn, ...prev.filter((c) => c.id !== checkIn.id)])
-    await api.saveFastingCheckIn(checkIn).catch(() => undefined)
-  }, [])
+  const saveFastingCheckIn = useCallback(
+    async (checkIn: FastingCheckIn) => {
+      await db.fastingLogs.put(checkIn).catch(() => undefined)
+      setFastingLogs((prev) => [checkIn, ...prev.filter((c) => c.id !== checkIn.id)])
+      try {
+        await api.saveFastingCheckIn(checkIn)
+      } catch (err) {
+        if (isSessionExpiredError(err)) setSessionExpired(true)
+        setStatus({
+          kind: 'error',
+          message: formatSyncError(err, 'Failed to sync fasting check-in'),
+        })
+        void reportClientError(err, { source: 'fasting_checkin_save' })
+      }
+    },
+    [setSessionExpired, setStatus]
+  )
 
   const synths = useRecommendationSynthesizers(
     circadianDate,
     setSessionExpired,
+    setStatus,
     setIsGeneratingFasting,
     setIsGeneratingWorkout,
     setFastingRecommendation,
@@ -261,7 +307,9 @@ function useSessionMutations(
   exercises: Exercise[],
   sync: () => Promise<void>,
   loadSessions: () => Promise<void>,
-  refreshQueueCount: () => Promise<void>
+  refreshQueueCount: () => Promise<void>,
+  setSessionExpired: (val: boolean) => void,
+  setStatus: (status: SyncStatus) => void
 ) {
   const persistSession = useCallback(
     async (
@@ -269,11 +317,20 @@ function useSessionMutations(
       feedback?: { effort: EffortRating; tags: string[]; notes: string }
     ) => {
       await enqueue(finalSession)
-      if (feedback) await sendWorkoutFeedbackBestEffort(finalSession, feedback, routines, exercises)
       await sync()
       await loadSessions()
+      if (feedback) {
+        await sendWorkoutFeedbackBestEffort(finalSession, feedback, routines, exercises, (err) => {
+          if (isSessionExpiredError(err)) setSessionExpired(true)
+          setStatus({
+            kind: 'error',
+            message: formatSyncError(err, 'Failed to sync workout feedback'),
+          })
+          void reportClientError(err, { source: 'workout_feedback_save' })
+        })
+      }
     },
-    [routines, exercises, sync, loadSessions]
+    [routines, exercises, sync, loadSessions, setSessionExpired, setStatus]
   )
 
   const deleteSession = useCallback(
@@ -281,13 +338,22 @@ function useSessionMutations(
       const target = sessions.find((s) => s.id === sessionId)
       try {
         await api.deleteSession(sessionId, Boolean(target?.extra?.inferred))
-      } catch {
-        await db.outbox.delete(sessionId)
+      } catch (err) {
+        if (!(isKratosApiError(err) && err.status === 404)) {
+          if (isSessionExpiredError(err)) setSessionExpired(true)
+          setStatus({
+            kind: 'error',
+            message: formatSyncError(err, 'Failed to delete session'),
+          })
+          void reportClientError(err, { source: 'session_delete', sessionId })
+          return
+        }
       }
+      await db.outbox.delete(sessionId).catch(() => undefined)
       setSessions((prev) => prev.filter((s) => s.id !== sessionId))
       await refreshQueueCount()
     },
-    [sessions, setSessions, refreshQueueCount]
+    [sessions, setSessions, refreshQueueCount, setSessionExpired, setStatus]
   )
 
   const confirmSession = useCallback(
@@ -371,10 +437,11 @@ function useSessionsState(
       setQueued(queuedItems.length)
       setSessions(mergeSessionsById(serverSessions, queuedItems))
     } catch (err) {
-      if (isSessionExpiredError(err)) {
-        setSessionExpired(true)
-        setStatus({ kind: 'error', message: SESSION_EXPIRED_MESSAGE })
-      }
+      if (isSessionExpiredError(err)) setSessionExpired(true)
+      setStatus({
+        kind: 'error',
+        message: formatSyncError(err, 'Failed to load sessions'),
+      })
       const queuedSessions = await pending()
       setQueued(queuedSessions.length)
       if (queuedSessions.length > 0) setSessions(queuedSessions.map((q) => q.payload).sort(sortByStartedDesc))
@@ -389,7 +456,9 @@ function useSessionsState(
     exercises,
     sync,
     loadSessions,
-    refreshQueueCount
+    refreshQueueCount,
+    setSessionExpired,
+    setStatus
   )
 
   return { queued, sessions, sync, loadSessions, ...mutations }

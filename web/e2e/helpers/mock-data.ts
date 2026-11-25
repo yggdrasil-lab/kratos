@@ -398,6 +398,11 @@ async function registerBiometricProxyRoutes(page: Page, state: MockApiState): Pr
         sleep_deep_hours: 1.25,
         step_count: 966,
         active_energy_kcal: 40,
+        readiness: {
+          tier: 'optimal',
+          label: 'High Readiness',
+          message: 'Optimal state. Prime day to push progressive overload and PRs.',
+        },
         readiness_notes: ['Apple Health rollup for 2026-11-01'],
       }),
     })
