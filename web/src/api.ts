@@ -2,7 +2,7 @@
 // proxies /api to uvicorn, and in production the reverse proxy routes it too.
 // VITE_API_BASE_URL overrides the prefix for a split deployment.
 
-import { authFetch, SessionExpiredError } from '@yggdrasil-lab/ui'
+import { authFetch, isSessionExpiredError, SessionExpiredError } from '@yggdrasil-lab/ui'
 import type {
   ClientErrorPayload,
   DailyBiometrics,
@@ -104,7 +104,7 @@ export const api = {
     try {
       return await request<WeeklyPlanRead>(`/plans/week/${isoWeek}`)
     } catch (err) {
-      if (err instanceof SessionExpiredError) {
+      if (isSessionExpiredError(err)) {
         throw err
       }
       return null
@@ -121,7 +121,7 @@ export const api = {
     try {
       return await request<DailyBiometrics>('/biometrics/today')
     } catch (err) {
-      if (err instanceof SessionExpiredError) {
+      if (isSessionExpiredError(err)) {
         throw err
       }
       return null
@@ -133,7 +133,7 @@ export const api = {
       const suffix = targetDate ? `?target_date=${encodeURIComponent(targetDate)}` : ''
       return await request<FastingRecommendation>(`/biometrics/fasting-recommendation${suffix}`)
     } catch (err) {
-      if (err instanceof SessionExpiredError) {
+      if (isSessionExpiredError(err)) {
         throw err
       }
       return null
@@ -153,7 +153,7 @@ export const api = {
         }),
       })
     } catch (err) {
-      if (err instanceof SessionExpiredError) {
+      if (isSessionExpiredError(err)) {
         throw err
       }
       return null
@@ -165,7 +165,7 @@ export const api = {
       const suffix = targetDate ? `?target_date=${encodeURIComponent(targetDate)}` : ''
       return await request<WorkoutRecommendation>(`/biometrics/workout-recommendation${suffix}`)
     } catch (err) {
-      if (err instanceof SessionExpiredError) {
+      if (isSessionExpiredError(err)) {
         throw err
       }
       return null
@@ -185,7 +185,7 @@ export const api = {
         }),
       })
     } catch (err) {
-      if (err instanceof SessionExpiredError) {
+      if (isSessionExpiredError(err)) {
         throw err
       }
       return null
@@ -199,7 +199,7 @@ export const api = {
         body: JSON.stringify(payload),
       })
     } catch (err) {
-      if (err instanceof SessionExpiredError) {
+      if (isSessionExpiredError(err)) {
         throw err
       }
       // Offline fallback: saved to IndexedDB
@@ -223,7 +223,7 @@ export const api = {
         body: JSON.stringify(payload),
       })
     } catch (err) {
-      if (err instanceof SessionExpiredError) {
+      if (isSessionExpiredError(err)) {
         throw err
       }
       // Offline fallback

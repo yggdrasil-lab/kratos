@@ -4,7 +4,11 @@ import {
   AlertBanner,
   Button,
   CollapsibleSection,
+  EmptyState,
   GlassCard,
+  LoadingState,
+  SectionHeader,
+  StatusBadge,
   SummaryMetricGrid,
 } from '@yggdrasil-lab/ui'
 import type { Exercise, Routine, SessionPayload, WorkoutRecommendation } from '../types'
@@ -88,13 +92,14 @@ function LoggedClassChips({
         const durationText = duration !== null ? ` (${duration}m)` : ''
         const kcalText = kcal !== null && kcal > 0 ? ` • ${kcal} kcal` : ''
         return (
-          <span
+          <StatusBadge
             key={cls.id}
-            className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
-          >
-            ✓ {label}
-            {durationText} completed today{kcalText}
-          </span>
+            label={`✓ ${label}${durationText} completed today${kcalText}`}
+            variant="success"
+            size="sm"
+            showDot={false}
+            className="font-semibold"
+          />
         )
       })}
     </div>
@@ -216,6 +221,82 @@ function RoutineExercisePreview({
   )
 }
 
+function TodayTrainingStatusRow({
+  isLiftPendingAfterClass,
+  isGeneratingWorkout,
+  isLlmGenerated,
+}: {
+  isLiftPendingAfterClass: boolean
+  isGeneratingWorkout?: boolean
+  isLlmGenerated?: boolean
+}) {
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      <span className="text-xs text-sky-400 font-semibold uppercase">Today&apos;s Training</span>
+      {isLiftPendingAfterClass && (
+        <StatusBadge
+          label="Pending"
+          variant="warning"
+          size="xs"
+          showDot={false}
+          className="rounded-md font-semibold"
+        />
+      )}
+      {isGeneratingWorkout && (
+        <StatusBadge
+          label="⚡ Synthesizing AI Training..."
+          variant="busy"
+          size="xs"
+          showDot={false}
+          isPulsing
+          className="rounded-md font-semibold"
+        />
+      )}
+      {isLlmGenerated && (
+        <StatusBadge
+          label="⚡ AI Autoregulated"
+          variant="info"
+          size="xs"
+          showDot={false}
+          className="rounded-md font-semibold"
+        />
+      )}
+    </div>
+  )
+}
+
+function TodayTrainingHeaderActions({
+  hasAiHandler,
+  showRoutinePicker,
+  onOpenAiModal,
+  onTogglePicker,
+}: {
+  hasAiHandler: boolean
+  showRoutinePicker: boolean
+  onOpenAiModal: () => void
+  onTogglePicker: () => void
+}) {
+  return (
+    <div className="flex items-center gap-1.5 shrink-0">
+      {hasAiHandler && (
+        <Button
+          variant="outline"
+          size="xs"
+          icon={<span>⚡</span>}
+          onClick={onOpenAiModal}
+          title="Autoregulate training with AI sports physiology"
+          className="border-blue-500/40 text-blue-300"
+        >
+          Adapt
+        </Button>
+      )}
+      <Button variant="secondary" size="xs" onClick={onTogglePicker}>
+        {showRoutinePicker ? 'Close' : 'Swap Split'}
+      </Button>
+    </div>
+  )
+}
+
 function TodayTrainingHeader({
   dayHeadline,
   daySubtitle,
@@ -238,47 +319,27 @@ function TodayTrainingHeader({
   hasAiHandler: boolean
 }) {
   return (
-    <div className="flex justify-between items-start mb-3 gap-2">
-      <div>
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-xs text-sky-400 font-semibold uppercase">Today&apos;s Training</span>
-          {isLiftPendingAfterClass && (
-            <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-              Pending
-            </span>
-          )}
-          {isGeneratingWorkout && (
-            <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold bg-amber-500/20 text-amber-300 animate-pulse">
-              ⚡ Synthesizing AI Training...
-            </span>
-          )}
-          {workoutRecommendation?.is_llm_generated && (
-            <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold bg-blue-500/25 text-blue-300">
-              ⚡ AI Autoregulated
-            </span>
-          )}
-        </div>
-        <h3 className="text-lg font-bold mt-1 mb-1 text-slate-100">{dayHeadline}</h3>
-        <p className="text-xs text-slate-400 m-0">{daySubtitle}</p>
-      </div>
-
-      <div className="flex items-center gap-1.5 shrink-0">
-        {hasAiHandler && (
-          <Button
-            variant="outline"
-            size="xs"
-            icon={<span>⚡</span>}
-            onClick={onOpenAiModal}
-            title="Autoregulate training with AI sports physiology"
-            className="border-blue-500/40 text-blue-300"
-          >
-            Adapt
-          </Button>
-        )}
-        <Button variant="secondary" size="xs" onClick={onTogglePicker}>
-          {showRoutinePicker ? 'Close' : 'Swap Split'}
-        </Button>
-      </div>
+    <div className="mb-3 space-y-1.5">
+      <TodayTrainingStatusRow
+        isLiftPendingAfterClass={isLiftPendingAfterClass}
+        isGeneratingWorkout={isGeneratingWorkout}
+        isLlmGenerated={workoutRecommendation?.is_llm_generated}
+      />
+      <SectionHeader
+        title={dayHeadline}
+        subtitle={daySubtitle}
+        titleAs="h3"
+        size="md"
+        variant="sky"
+        actions={
+          <TodayTrainingHeaderActions
+            hasAiHandler={hasAiHandler}
+            showRoutinePicker={showRoutinePicker}
+            onOpenAiModal={onOpenAiModal}
+            onTogglePicker={onTogglePicker}
+          />
+        }
+      />
     </div>
   )
 }
@@ -302,9 +363,13 @@ function TodayTrainingActionSection({
     return (
       <div className="space-y-3" data-testid="completed-workout-card">
         <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-center">
-          <div className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-2">
-            <span>Completed ✓</span>
-          </div>
+          <StatusBadge
+            label="Completed ✓"
+            variant="success"
+            size="sm"
+            showDot={false}
+            className="uppercase tracking-wider mb-2 font-semibold"
+          />
           <div className="text-sm font-semibold text-slate-200 mb-2">{completedLabel}</div>
           <SummaryMetricGrid
             columns={3}
@@ -332,11 +397,12 @@ function TodayTrainingActionSection({
   }
 
   return (
-    <div className="text-center space-y-3">
-      <p className="text-xs text-slate-300 m-0">
-        No routine scheduled for today. Configure routines in the Plan tab or tap Adapt to synthesize with AI.
-      </p>
-    </div>
+    <EmptyState
+      variant="dashed"
+      title="No routine scheduled for today."
+      description="Configure routines in the Plan tab or tap Adapt to synthesize with AI."
+      className="p-4"
+    />
   )
 }
 
@@ -350,10 +416,11 @@ function TodayWorkoutRecommendationAlerts({
   return (
     <>
       {isGeneratingWorkout && !workoutRecommendation && (
-        <div className="bg-sky-500/10 border border-sky-500/20 rounded-xl p-3 mb-4 text-xs text-sky-300 flex items-center gap-2 animate-pulse">
-          <span className="text-sm">⏳</span>
-          <span>Synthesizing today&apos;s autoregulated training prescription and Discord thread...</span>
-        </div>
+        <LoadingState
+          label="Synthesizing today's autoregulated training prescription and Discord thread..."
+          variant="blue"
+          className="bg-sky-500/10 border border-sky-500/20 rounded-xl py-4 mb-4"
+        />
       )}
       {workoutRecommendation && (
         <AlertBanner

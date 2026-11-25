@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Modal, OptionCardGroup, ChipSelector, Button } from '@yggdrasil-lab/ui'
+import { Button, ChipSelector, FormField, Modal, OptionCardGroup, TextInput } from '@yggdrasil-lab/ui'
 import type { OptionCardItem } from '@yggdrasil-lab/ui'
 import type { EffortRating, Exercise, SessionPayload } from '../types'
 import { computeSessionVolumeAndSets } from '../utils/session'
@@ -80,6 +80,16 @@ export function EffortDebriefModal({ session, exercises, onSave, onSkip }: Effor
       title="Workout Complete!"
       headerIcon="🎉"
       subtitle={`${durationMinutes} min • ${Math.round(totalVolumeKg).toLocaleString()} kg volume • ${completedSetsCount} sets finished`}
+      footer={
+        <div className="flex gap-2.5 justify-end">
+          <Button variant="secondary" size="md" onClick={onSkip}>
+            Skip
+          </Button>
+          <Button variant="blue" size="md" onClick={handleComplete}>
+            Save and Finish
+          </Button>
+        </div>
+      }
     >
       <div className="space-y-4">
         <OptionCardGroup
@@ -89,10 +99,7 @@ export function EffortDebriefModal({ session, exercises, onSave, onSkip }: Effor
           onChange={setSelectedRating}
         />
 
-        <div className="space-y-1.5">
-          <label className="block font-semibold text-xs text-slate-300">
-            Quick reflections (optional):
-          </label>
+        <FormField label="Quick reflections (optional):">
           <ChipSelector
             options={QUICK_TAGS}
             multiSelect
@@ -100,26 +107,18 @@ export function EffortDebriefModal({ session, exercises, onSave, onSkip }: Effor
             onChangeValues={setSelectedTags}
             variant="purple"
           />
-        </div>
+        </FormField>
 
-        <div>
-          <input
+        <FormField label="Notes (optional)" htmlFor="effort-debrief-notes">
+          <TextInput
+            id="effort-debrief-notes"
             type="text"
+            variant="blue"
             placeholder="Add note (e.g. form felt smooth, or tight hamstring)..."
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-base sm:text-xs text-slate-100 placeholder-slate-500"
           />
-        </div>
-
-        <div className="flex gap-2.5 justify-end pt-1">
-          <Button variant="secondary" size="md" onClick={onSkip}>
-            Skip
-          </Button>
-          <Button variant="blue" size="md" onClick={handleComplete}>
-            Save and Finish
-          </Button>
-        </div>
+        </FormField>
       </div>
     </Modal>
   )

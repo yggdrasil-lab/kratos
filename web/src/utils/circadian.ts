@@ -1,4 +1,7 @@
+import { formatAucklandDate, formatAucklandTime } from '@yggdrasil-lab/ui'
 import type { DailyBiometrics, FastingCheckIn, FastingRecommendation } from '../types'
+
+const EXPLICIT_TZ_RE = /(Z|[+-]\d{2}:?\d{2})$/i
 
 /**
  * Circadian day utilities for Kratos.
@@ -10,16 +13,13 @@ import type { DailyBiometrics, FastingCheckIn, FastingRecommendation } from '../
 
 export function getCircadianDate(d: Date = new Date()): string {
   const adjusted = new Date(d.getTime() - 4 * 60 * 60 * 1000)
-  const y = adjusted.getFullYear()
-  const m = String(adjusted.getMonth() + 1).padStart(2, '0')
-  const day = String(adjusted.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
+  return formatAucklandDate(adjusted)
 }
 
 export function getCircadianDayOfWeek(d: Date = new Date()): number {
   // Monday = 0, Tuesday = 1, ..., Sunday = 6
-  const adjusted = new Date(d.getTime() - 4 * 60 * 60 * 1000)
-  return (adjusted.getDay() + 6) % 7
+  const [y, m, day] = getCircadianDate(d).split('-').map(Number)
+  return (new Date(Date.UTC(y, m - 1, day)).getUTCDay() + 6) % 7
 }
 
 export const DAY_NAMES = [
@@ -46,10 +46,15 @@ function formatLocal12Hour(iso?: string | null): string {
   if (!iso) return ''
   const dt = new Date(iso)
   if (Number.isNaN(dt.getTime())) return ''
-  const rawHours = dt.getHours()
+  let rawHours = dt.getHours()
+  let minutes = String(dt.getMinutes()).padStart(2, '0')
+  if (EXPLICIT_TZ_RE.test(iso.trim())) {
+    const [hh, mm] = formatAucklandTime(dt).split(':')
+    rawHours = Number(hh) % 24
+    minutes = mm
+  }
   const period = rawHours >= 12 ? 'PM' : 'AM'
   const hour12 = rawHours % 12 === 0 ? 12 : rawHours % 12
-  const minutes = String(dt.getMinutes()).padStart(2, '0')
   return `${hour12}:${minutes} ${period}`
 }
 

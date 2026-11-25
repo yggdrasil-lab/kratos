@@ -1,7 +1,17 @@
 import { useState } from 'react'
-import { GlassCard, Button, AlertBanner, CollapsibleSection, AiSynthesizerModal } from '@yggdrasil-lab/ui'
+import {
+  AiSynthesizerModal,
+  AlertBanner,
+  Button,
+  CollapsibleSection,
+  GlassCard,
+  LoadingState,
+  SectionHeader,
+  StatusBadge,
+  type StatusBadgeVariant,
+} from '@yggdrasil-lab/ui'
 import type { FastingCheckIn, FastingRecommendation } from '../types'
-import { resolveFastingProtocol } from '../utils/circadian'
+import { resolveFastingProtocol, type ResolvedFastingProtocol } from '../utils/circadian'
 import { FastingCheckInModal } from './FastingCheckInModal'
 
 interface FastingCardProps {
@@ -25,13 +35,268 @@ const FASTING_PILLARS = [
   },
   {
     label: 'Court Glycogen',
-    description: 'Pre-match carbs and electrolytes 2-3h before badminton; post-match amino acids.',
+    description: 'Pre-match carbs and electrolytes 2-3h before play; post-match amino acids.',
   },
   {
     label: 'Metabolic Reset',
     description: '18:6 autophagy fasts reserved strictly for low-strain recovery days.',
   },
 ]
+
+const RECOVERY_BADGE_MAP: Record<string, { label: string; variant: StatusBadgeVariant }> = {
+  fatigued: { label: '🔴 Autoregulated', variant: 'error' },
+  moderate: { label: '🟡 Moderate', variant: 'warning' },
+  optimal: { label: '🟢 Primed', variant: 'success' },
+}
+
+const ADHERENCE_BADGE_MAP: Record<string, { label: string; variant: StatusBadgeVariant }> = {
+  completed: { label: '✓ Completed', variant: 'success' },
+  early: { label: '⚡ Early', variant: 'warning' },
+  off_plan: { label: '🔴 Off-Plan', variant: 'error' },
+}
+
+function FastingHeaderActions({
+  hasAiHandler,
+  isCheckedInToday,
+  latestCheckIn,
+  onOpenAiModal,
+  onOpenCheckIn,
+}: {
+  hasAiHandler: boolean
+  isCheckedInToday: boolean
+  latestCheckIn?: FastingCheckIn
+  onOpenAiModal: () => void
+  onOpenCheckIn: () => void
+}) {
+  const adherenceBadge =
+    ADHERENCE_BADGE_MAP[latestCheckIn?.adherence ?? 'off_plan'] ?? ADHERENCE_BADGE_MAP.off_plan
+
+  return (
+    <div className="flex items-center gap-1.5 shrink-0">
+      {hasAiHandler && (
+        <Button
+          variant="outline"
+          size="xs"
+          icon={<span>⚡</span>}
+          onClick={onOpenAiModal}
+          title="Adapt protocol with AI sports physiology"
+          className="border-blue-500/40 text-blue-300"
+        >
+          Adapt
+        </Button>
+      )}
+      {isCheckedInToday && latestCheckIn ? (
+        <StatusBadge
+          label={adherenceBadge.label}
+          variant={adherenceBadge.variant}
+          size="sm"
+          showDot={false}
+          className="font-semibold"
+        />
+      ) : (
+        <Button
+          variant="outline"
+          size="xs"
+          onClick={onOpenCheckIn}
+          className="border-blue-500/50 text-sky-400"
+        >
+          Log Fast
+        </Button>
+      )}
+    </div>
+  )
+}
+
+function FastingStatusBadges({
+  protocol,
+  hasRecommendation,
+  isGenerating,
+}: {
+  protocol: ResolvedFastingProtocol
+  hasRecommendation: boolean
+  isGenerating?: boolean
+}) {
+  if (!hasRecommendation && !isGenerating && !protocol.isLlmGenerated) return null
+  const recoveryBadge =
+    RECOVERY_BADGE_MAP[protocol.recoveryStatus ?? 'optimal'] ?? RECOVERY_BADGE_MAP.optimal
+
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      {hasRecommendation && (
+        <StatusBadge
+          label={recoveryBadge.label}
+          variant={recoveryBadge.variant}
+          size="xs"
+          showDot={false}
+          className="rounded-md font-semibold"
+        />
+      )}
+      {isGenerating && (
+        <StatusBadge
+          label="⚡ Synthesizing AI Protocol..."
+          variant="busy"
+          size="xs"
+          showDot={false}
+          isPulsing
+          className="rounded-md font-semibold"
+        />
+      )}
+      {protocol.isLlmGenerated && (
+        <StatusBadge
+          label="⚡ AI Synthesized"
+          variant="info"
+          size="xs"
+          showDot={false}
+          className="rounded-md font-semibold"
+        />
+      )}
+    </div>
+  )
+}
+
+function FastingCardHeader({
+  protocol,
+  hasRecommendation,
+  isGenerating,
+  isCheckedInToday,
+  latestCheckIn,
+  hasAiHandler,
+  onOpenAiModal,
+  onOpenCheckIn,
+}: {
+  protocol: ResolvedFastingProtocol
+  hasRecommendation: boolean
+  isGenerating?: boolean
+  isCheckedInToday: boolean
+  latestCheckIn?: FastingCheckIn
+  hasAiHandler: boolean
+  onOpenAiModal: () => void
+  onOpenCheckIn: () => void
+}) {
+  return (
+    <div className="mb-3 space-y-2">
+      <SectionHeader
+        title="Fasting and Fueling"
+        subtitle={protocol.protocolName}
+        icon={<span className="text-base leading-none">⏱️</span>}
+        variant="sky"
+        size="md"
+        actions={
+          <FastingHeaderActions
+            hasAiHandler={hasAiHandler}
+            isCheckedInToday={isCheckedInToday}
+            latestCheckIn={latestCheckIn}
+            onOpenAiModal={onOpenAiModal}
+            onOpenCheckIn={onOpenCheckIn}
+          />
+        }
+      />
+      <FastingStatusBadges
+        protocol={protocol}
+        hasRecommendation={hasRecommendation}
+        isGenerating={isGenerating}
+      />
+    </div>
+  )
+}
+
+function FastingCheckInSummary({
+  latestCheckIn,
+  onEdit,
+}: {
+  latestCheckIn: FastingCheckIn
+  onEdit: () => void
+}) {
+  const details = [
+    latestCheckIn.energy ? `Energy ${latestCheckIn.energy}` : null,
+    latestCheckIn.headache ? `Headache ${latestCheckIn.headache}` : null,
+    latestCheckIn.notes ? `"${latestCheckIn.notes}"` : null,
+  ]
+    .filter(Boolean)
+    .map((part, i) => `${i === 0 ? ': ' : ' • '}${part}`)
+    .join('')
+
+  return (
+    <div className="mt-3 pt-2.5 border-t border-border/50 text-xs text-slate-400 flex justify-between items-center gap-2">
+      <span className="truncate">Logged{details}</span>
+      <Button variant="ghost" size="xs" onClick={onEdit} className="underline text-slate-300 shrink-0">
+        Edit
+      </Button>
+    </div>
+  )
+}
+
+function FastingCardBody({
+  protocol,
+  isGenerating,
+  hasRecommendation,
+  isCheckedInToday,
+  latestCheckIn,
+  onEditCheckIn,
+}: {
+  protocol: ResolvedFastingProtocol
+  isGenerating?: boolean
+  hasRecommendation: boolean
+  isCheckedInToday: boolean
+  latestCheckIn?: FastingCheckIn
+  onEditCheckIn: () => void
+}) {
+  return (
+    <>
+      {isGenerating && !hasRecommendation && (
+        <LoadingState
+          label="Synthesizing today's circadian fasting protocol and Discord thread..."
+          variant="blue"
+          className="bg-sky-500/10 border border-sky-500/20 rounded-xl py-4 mb-3"
+        />
+      )}
+
+      <div className="bg-background/70 rounded-xl px-3.5 py-2.5 mb-3 flex justify-between items-center border border-border/50">
+        <span className="text-xs text-slate-400">Target Window</span>
+        <span className="text-xs font-semibold text-slate-100">{protocol.windowHours}</span>
+      </div>
+
+      {protocol.rationale && (
+        <AlertBanner
+          variant={
+            protocol.recoveryStatus === 'fatigued'
+              ? 'error'
+              : protocol.recoveryStatus === 'moderate'
+              ? 'warning'
+              : 'info'
+          }
+          icon="🧠"
+          title="Smart Autoregulation"
+          className="mb-3"
+        >
+          {protocol.rationale}
+        </AlertBanner>
+      )}
+
+      <div className="flex flex-col gap-1.5">
+        {protocol.fuelingAnchors.map((anchor, idx) => (
+          <div key={idx} className="text-xs text-slate-300 flex items-start gap-1.5">
+            <span className="text-sky-400 mt-0.5">•</span>
+            <span>{anchor}</span>
+          </div>
+        ))}
+      </div>
+
+      {protocol.researchCitation && (
+        <CollapsibleSection variant="inline" icon="📚" title={protocol.researchCitation} className="mt-3">
+          <div>☀️ <strong>Panda Lab:</strong> 8-10h feeding window ending 3-4h prior to sleep preserves nocturnal HRV &amp; deep sleep.</div>
+          <div>🥩 <strong>Schoenfeld / Aragon:</strong> 0.4-0.5g/kg protein every 3-5h on lift days with an anabolic recovery anchor.</div>
+          <div>🏸 <strong>Court Kinetics:</strong> Pre-match complex carbs + electrolytes 2-3h before play prevent glycogen depletion.</div>
+          <div>🧬 <strong>Mattson / Longo:</strong> 18:6 autophagy fasts reserved strictly for low-strain recovery days.</div>
+        </CollapsibleSection>
+      )}
+
+      {isCheckedInToday && latestCheckIn && (
+        <FastingCheckInSummary latestCheckIn={latestCheckIn} onEdit={onEditCheckIn} />
+      )}
+    </>
+  )
+}
 
 export function FastingCard({
   circadianDate,
@@ -45,184 +310,36 @@ export function FastingCard({
   const [showModal, setShowModal] = useState<boolean>(false)
   const [showAiModal, setShowAiModal] = useState<boolean>(false)
 
-  const {
-    protocolName,
-    targetWindow,
-    windowHours,
-    fuelingAnchors,
-    rationale,
-    recoveryStatus,
-    isLlmGenerated,
-    researchCitation,
-  } = resolveFastingProtocol(dayOfWeek, recommendation)
-
-  const isCheckedInToday = latestCheckIn && latestCheckIn.date === circadianDate
-
-  const recoveryBadgeClass =
-    recoveryStatus === 'fatigued'
-      ? 'bg-rose-500/20 text-rose-400'
-      : recoveryStatus === 'moderate'
-      ? 'bg-amber-500/20 text-amber-400'
-      : 'bg-emerald-500/20 text-emerald-400'
-
-  const adherenceBadgeClass =
-    latestCheckIn?.adherence === 'completed'
-      ? 'bg-emerald-500/20 text-emerald-400'
-      : latestCheckIn?.adherence === 'early'
-      ? 'bg-amber-500/20 text-amber-400'
-      : 'bg-rose-500/20 text-rose-400'
+  const protocol = resolveFastingProtocol(dayOfWeek, recommendation)
+  const isCheckedInToday = Boolean(latestCheckIn && latestCheckIn.date === circadianDate)
 
   return (
     <>
       <GlassCard className="animate-slide-up mb-4">
-        {/* Header */}
-        <div className="flex justify-between items-center mb-3 gap-2">
-          <div className="flex items-center gap-2">
-            <span className="text-xl">⏱️</span>
-            <div>
-              <div className="font-bold text-sm text-slate-100">
-                Fasting and Fueling
-              </div>
-              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                <span className="text-xs text-sky-400 font-semibold">
-                  {protocolName}
-                </span>
-                {recommendation && (
-                  <span className={`text-[11px] px-1.5 py-0.5 rounded-md font-semibold ${recoveryBadgeClass}`}>
-                    {recoveryStatus === 'fatigued' ? '🔴 Autoregulated' : recoveryStatus === 'moderate' ? '🟡 Moderate' : '🟢 Primed'}
-                  </span>
-                )}
-                {isGenerating && (
-                  <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold bg-amber-500/25 text-amber-300 animate-pulse">
-                    ⚡ Synthesizing AI Protocol...
-                  </span>
-                )}
-                {isLlmGenerated && (
-                  <span className="text-[11px] px-1.5 py-0.5 rounded-md font-semibold bg-blue-500/25 text-blue-300">
-                    ⚡ AI Synthesized
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1.5 shrink-0">
-            {onSynthesizeRecommendation && (
-              <Button
-                variant="outline"
-                size="xs"
-                icon={<span>⚡</span>}
-                onClick={() => setShowAiModal(true)}
-                title="Adapt protocol with AI sports physiology"
-                className="border-blue-500/40 text-blue-300"
-              >
-                Adapt
-              </Button>
-            )}
-
-            {isCheckedInToday ? (
-              <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${adherenceBadgeClass}`}>
-                {latestCheckIn.adherence === 'completed' ? '✓ Completed' : latestCheckIn.adherence === 'early' ? '⚡ Early' : '🔴 Off-Plan'}
-              </span>
-            ) : (
-              <Button
-                variant="outline"
-                size="xs"
-                onClick={() => setShowModal(true)}
-                className="border-blue-500/50 text-sky-400"
-              >
-                Log Fast
-              </Button>
-            )}
-          </div>
-        </div>
-
-        {isGenerating && !recommendation && (
-          <div className="bg-sky-500/10 border border-sky-500/20 rounded-xl p-3 mb-3 text-xs text-sky-200 flex items-center gap-2 animate-pulse">
-            <span className="text-sm">⏳</span>
-            <span>Synthesizing today's circadian fasting protocol and Discord thread...</span>
-          </div>
-        )}
-
-        {/* Target Window Bar */}
-        <div className="bg-background/70 rounded-xl px-3.5 py-2.5 mb-3 flex justify-between items-center border border-border/50">
-          <span className="text-xs text-slate-400">Target Window</span>
-          <span className="text-xs font-semibold text-slate-100">{windowHours}</span>
-        </div>
-
-        {/* Smart Autoregulation Rationale */}
-        {rationale && (
-          <AlertBanner
-            variant={
-              recoveryStatus === 'fatigued'
-                ? 'error'
-                : recoveryStatus === 'moderate'
-                ? 'warning'
-                : 'info'
-            }
-            icon="🧠"
-            title="Smart Autoregulation"
-            className="mb-3"
-          >
-            {rationale}
-          </AlertBanner>
-        )}
-
-        {/* Fueling Anchors List */}
-        <div className="flex flex-col gap-1.5">
-          {fuelingAnchors.map((anchor, idx) => (
-            <div key={idx} className="text-xs text-slate-300 flex items-start gap-1.5">
-              <span className="text-sky-400 mt-0.5">•</span>
-              <span>{anchor}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* Research Grounding Accordion */}
-        {researchCitation && (
-          <CollapsibleSection
-            variant="inline"
-            icon="📚"
-            title={researchCitation}
-            className="mt-3"
-          >
-            <div>☀️ <strong>Panda Lab:</strong> 8-10h feeding window ending 3-4h prior to sleep preserves nocturnal HRV & deep sleep.</div>
-            <div>🥩 <strong>Schoenfeld / Aragon:</strong> 0.4-0.5g/kg protein every 3-5h on lift days with an anabolic recovery anchor.</div>
-            <div>🏸 <strong>Court Kinetics:</strong> Pre-match complex carbs + electrolytes 2-3h before play prevent glycogen depletion.</div>
-            <div>🧬 <strong>Mattson / Longo:</strong> 18:6 autophagy fasts reserved strictly for low-strain recovery days.</div>
-          </CollapsibleSection>
-        )}
-
-        {/* Existing Check-In Summary if already logged */}
-        {isCheckedInToday && (
-          <div className="mt-3 pt-2.5 border-t border-border/50 text-xs text-slate-400 flex justify-between items-center gap-2">
-            <span className="truncate">
-              Logged
-              {[
-                latestCheckIn.energy ? `Energy ${latestCheckIn.energy}` : null,
-                latestCheckIn.headache ? `Headache ${latestCheckIn.headache}` : null,
-                latestCheckIn.notes ? `"${latestCheckIn.notes}"` : null,
-              ]
-                .filter(Boolean)
-                .map((part, i) => `${i === 0 ? ': ' : ' • '}${part}`)
-                .join('')}
-            </span>
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={() => setShowModal(true)}
-              className="underline text-slate-300 shrink-0"
-            >
-              Edit
-            </Button>
-          </div>
-        )}
+        <FastingCardHeader
+          protocol={protocol}
+          hasRecommendation={Boolean(recommendation)}
+          isGenerating={isGenerating}
+          isCheckedInToday={isCheckedInToday}
+          latestCheckIn={latestCheckIn}
+          hasAiHandler={Boolean(onSynthesizeRecommendation)}
+          onOpenAiModal={() => setShowAiModal(true)}
+          onOpenCheckIn={() => setShowModal(true)}
+        />
+        <FastingCardBody
+          protocol={protocol}
+          isGenerating={isGenerating}
+          hasRecommendation={Boolean(recommendation)}
+          isCheckedInToday={isCheckedInToday}
+          latestCheckIn={latestCheckIn}
+          onEditCheckIn={() => setShowModal(true)}
+        />
       </GlassCard>
 
       {showModal && (
         <FastingCheckInModal
           date={circadianDate}
-          targetWindow={targetWindow}
+          targetWindow={protocol.targetWindow}
           initialCheckIn={latestCheckIn}
           onSave={(checkIn) => {
             onSaveCheckIn(checkIn)
@@ -238,7 +355,7 @@ export function FastingCard({
           onClose={() => setShowAiModal(false)}
           title="Adaptive Fasting Synthesizer"
           subtitle="Sports Physiology & Circadian Research Grounding"
-          citationTitle={researchCitation || 'Panda Lab (Circadian TRE) & Schoenfeld (MPS Distribution)'}
+          citationTitle={protocol.researchCitation || 'Panda Lab (Circadian TRE) & Schoenfeld (MPS Distribution)'}
           pillars={FASTING_PILLARS}
           inputLabel="Day Shifts or Custom Schedule (Optional)"
           inputPlaceholder="e.g. Lunch at 1:30 PM with team; badminton moved to 7:00 PM; feeling slightly sore from deadlifts"

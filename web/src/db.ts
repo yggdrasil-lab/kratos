@@ -13,7 +13,7 @@ export interface QueuedSession {
 }
 
 // The single in-progress workout, persisted so a reload/backgrounding can
-// restore it. Only the "current" draft is kept — finishing the session removes it.
+// restore it. Only the "current" draft is kept - finishing the session removes it.
 export interface DraftSession {
   id: string
   session: SessionPayload
@@ -49,7 +49,7 @@ class KratosDb extends Dexie {
 export const db = new KratosDb()
 
 // iOS grants persistence by heuristic, and installation counts in the app's
-// favour — but ask anyway rather than assume the heuristic lands.
+// favour - but ask anyway rather than assume the heuristic lands.
 export async function requestPersistence(): Promise<boolean> {
   if (!navigator.storage?.persist) return false
   if (await navigator.storage.persisted()) return true

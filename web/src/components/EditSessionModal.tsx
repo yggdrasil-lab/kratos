@@ -3,8 +3,11 @@ import {
   AlertBanner,
   Button,
   ChipSelector,
+  FormField,
   Modal,
   OptionCardGroup,
+  TextArea,
+  TextInput,
   type OptionCardItem,
 } from '@yggdrasil-lab/ui'
 import { api } from '../api'
@@ -174,37 +177,36 @@ function EditTimeAndTypeInputs({
   return (
     <>
       <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label className="block text-xs font-semibold text-slate-300 mb-1">Start Time</label>
-          <input
+        <FormField label="Start Time" htmlFor="edit-session-start-time">
+          <TextInput
+            id="edit-session-start-time"
             type="time"
             aria-label="Start Time"
+            variant="blue"
             value={startTime}
             onChange={(e) => onStartTimeChange(e.target.value)}
-            className="kratos-time-input"
           />
-        </div>
-        <div>
-          <label className="block text-xs font-semibold text-slate-300 mb-1">End Time</label>
-          <input
+        </FormField>
+        <FormField label="End Time" htmlFor="edit-session-end-time">
+          <TextInput
+            id="edit-session-end-time"
             type="time"
             aria-label="End Time"
+            variant="blue"
             value={endTime}
             onChange={(e) => onEndTimeChange(e.target.value)}
-            className="kratos-time-input"
           />
-        </div>
+        </FormField>
       </div>
 
-      <div>
-        <label className="block text-xs font-semibold text-slate-300 mb-1">Activity Type</label>
+      <FormField label="Activity Type">
         <ChipSelector
           options={ACTIVITY_TYPE_OPTIONS}
           selected={activityType}
           onChange={(val) => onActivityTypeChange(val as ActivityType)}
           variant="blue"
         />
-      </div>
+      </FormField>
     </>
   )
 }
@@ -285,16 +287,14 @@ function EditLabelAndNotesFields({
 }) {
   return (
     <>
-      <div>
-        <label className="block text-xs font-semibold text-slate-300 mb-1">
-          Workout / Routine Name
-        </label>
-        <input
+      <FormField label="Workout / Routine Name" htmlFor="edit-session-routine-name">
+        <TextInput
+          id="edit-session-routine-name"
           type="text"
+          variant="blue"
           value={routineName}
           onChange={(e) => onRoutineNameChange(e.target.value)}
           placeholder="Enter routine or activity name..."
-          className="w-full px-3 py-2 rounded-xl bg-background border border-border text-base sm:text-sm text-slate-100"
         />
         <ChipSelector
           options={presetOptions}
@@ -303,7 +303,7 @@ function EditLabelAndNotesFields({
           variant="blue"
           className="mt-2"
         />
-      </div>
+      </FormField>
 
       <OptionCardGroup
         label="Effort Rating (RPE)"
@@ -312,18 +312,16 @@ function EditLabelAndNotesFields({
         onChange={onEffortChange}
       />
 
-      <div>
-        <label className="block text-xs font-semibold text-slate-300 mb-1">
-          Notes &amp; Observations
-        </label>
-        <textarea
+      <FormField label="Notes & Observations" htmlFor="edit-session-notes">
+        <TextArea
+          id="edit-session-notes"
           rows={2}
+          variant="blue"
           value={notes}
           onChange={(e) => onNotesChange(e.target.value)}
           placeholder="How did this session feel? Any joint feedback or PRs?"
-          className="w-full px-3 py-2 rounded-xl bg-background border border-border text-base sm:text-xs text-slate-100"
         />
-      </div>
+      </FormField>
     </>
   )
 }
@@ -465,7 +463,21 @@ export function EditSessionModal({
   const selectedPreset = form.presetOptions.find((p) => p.toLowerCase() === form.routineName.toLowerCase())
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Edit Workout Details">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Edit Workout Details"
+      footer={
+        <div className="flex items-center justify-end gap-2">
+          <Button variant="secondary" size="sm" onClick={onClose} disabled={actions.isSaving}>
+            Cancel
+          </Button>
+          <Button variant="blue" size="sm" onClick={() => void actions.handleSave()} disabled={actions.isSaving}>
+            {actions.isSaving ? 'Saving...' : 'Save Changes'}
+          </Button>
+        </div>
+      }
+    >
       <div className="space-y-4">
         {Boolean(sessionDate) && (
           <div className="text-xs text-slate-400">
@@ -497,14 +509,6 @@ export function EditSessionModal({
           onEffortChange={(val) => form.setEffortRating(form.effortRating === val ? null : val)}
           onNotesChange={form.setNotes}
         />
-        <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
-          <Button variant="secondary" size="sm" onClick={onClose} disabled={actions.isSaving}>
-            Cancel
-          </Button>
-          <Button variant="blue" size="sm" onClick={() => void actions.handleSave()} disabled={actions.isSaving}>
-            {actions.isSaving ? 'Saving...' : 'Save Changes'}
-          </Button>
-        </div>
       </div>
     </Modal>
   )

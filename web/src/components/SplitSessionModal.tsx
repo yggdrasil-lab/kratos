@@ -43,7 +43,7 @@ function SplitModalFooter({
   onSubmit: (logSetsAfter: boolean) => void
 }) {
   return (
-    <div className="flex items-center justify-end gap-2 flex-wrap pt-3 border-t border-border">
+    <div className="flex items-center justify-end gap-2 flex-wrap">
       <Button variant="secondary" size="sm" onClick={onClose} disabled={isSubmitting}>
         Cancel
       </Button>
@@ -111,6 +111,57 @@ function SplitSegmentList({
   )
 }
 
+function SplitModalBody({
+  session,
+  parentEndIso,
+  segments,
+  routines,
+  workoutRecommendation,
+  preview,
+  validationError,
+  submitError,
+  setSegments,
+}: {
+  session: SessionPayload
+  parentEndIso: string
+  segments: SplitSegmentDraft[]
+  routines: Routine[]
+  workoutRecommendation: WorkoutRecommendation | null
+  preview: ReturnType<typeof useSplitSessionPreview>
+  validationError: string | null
+  submitError: string | null
+  setSegments: React.Dispatch<React.SetStateAction<SplitSegmentDraft[]>>
+}) {
+  return (
+    <div className="space-y-4">
+      <SplitTimelineChart
+        bins={preview.timeline?.bins ?? []}
+        suggestedSplits={preview.timeline?.suggested_splits ?? []}
+        isLoading={preview.timelineLoading}
+        errorMessage={preview.timelineError}
+        onApplySuggestedSplit={(split) => setSegments((prev) => applySuggestedSplitToSegments(prev, split))}
+      />
+      {Boolean(validationError) && <AlertBanner variant="warning">{validationError}</AlertBanner>}
+      {Boolean(submitError) && <AlertBanner variant="error">{submitError}</AlertBanner>}
+      <SplitSegmentList
+        segments={segments}
+        parentStartIso={session.started_at}
+        parentEndIso={parentEndIso}
+        routines={routines}
+        workoutRecommendation={workoutRecommendation}
+        preview={preview}
+        onUpdateSegment={(id, next) => setSegments((prev) => prev.map((it) => (it.id === id ? next : it)))}
+        onRemoveSegment={(id) => setSegments((prev) => prev.filter((it) => it.id !== id))}
+      />
+      {segments.length < 4 && (
+        <Button variant="secondary" size="sm" fullWidth onClick={() => setSegments((prev) => appendSegmentBySplittingLast(prev))}>
+          + Add Segment ({segments.length}/4)
+        </Button>
+      )}
+    </div>
+  )
+}
+
 /**
  * Modal for splitting a merged workout into 2-4 gap-aware segments backed by
  * Eir's 5-minute timeline hints and live per-window telemetry previews.
@@ -156,32 +207,11 @@ export function SplitSessionModal({
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Split Workout Session">
-      <div className="space-y-4">
-        <SplitTimelineChart
-          bins={preview.timeline?.bins ?? []}
-          suggestedSplits={preview.timeline?.suggested_splits ?? []}
-          isLoading={preview.timelineLoading}
-          errorMessage={preview.timelineError}
-          onApplySuggestedSplit={(split) => setSegments((prev) => applySuggestedSplitToSegments(prev, split))}
-        />
-        {Boolean(validationError) && <AlertBanner variant="warning">{validationError}</AlertBanner>}
-        {Boolean(submitError) && <AlertBanner variant="error">{submitError}</AlertBanner>}
-        <SplitSegmentList
-          segments={segments}
-          parentStartIso={session.started_at}
-          parentEndIso={parentEndIso}
-          routines={routines}
-          workoutRecommendation={workoutRecommendation}
-          preview={preview}
-          onUpdateSegment={(id, next) => setSegments((prev) => prev.map((it) => (it.id === id ? next : it)))}
-          onRemoveSegment={(id) => setSegments((prev) => prev.filter((it) => it.id !== id))}
-        />
-        {segments.length < 4 && (
-          <Button variant="secondary" size="sm" fullWidth onClick={() => setSegments((prev) => appendSegmentBySplittingLast(prev))}>
-            + Add Segment ({segments.length}/4)
-          </Button>
-        )}
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Split Workout Session"
+      footer={
         <SplitModalFooter
           hasRoutineSegment={hasRoutineSegment}
           isSubmitting={isSubmitting}
@@ -189,7 +219,19 @@ export function SplitSessionModal({
           onClose={onClose}
           onSubmit={(logSetsAfter) => void submitSplit(logSetsAfter)}
         />
-      </div>
+      }
+    >
+      <SplitModalBody
+        session={session}
+        parentEndIso={parentEndIso}
+        segments={segments}
+        routines={routines}
+        workoutRecommendation={workoutRecommendation}
+        preview={preview}
+        validationError={validationError}
+        submitError={submitError}
+        setSegments={setSegments}
+      />
     </Modal>
   )
 }

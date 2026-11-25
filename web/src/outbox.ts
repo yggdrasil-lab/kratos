@@ -1,7 +1,7 @@
 // The outbox. iOS has no Background Sync, so a flush happens while the app is
 // open - on launch, on resume, and right after a set is logged.
 
-import { SessionExpiredError } from '@yggdrasil-lab/ui'
+import { isSessionExpiredError } from '@yggdrasil-lab/ui'
 import { api } from './api'
 import { db, type QueuedSession } from './db'
 import type { SessionPayload } from './types'
@@ -45,7 +45,7 @@ export async function flush(): Promise<number> {
       await db.outbox.delete(entry.id)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      if (error instanceof SessionExpiredError) {
+      if (isSessionExpiredError(error)) {
         await db.outbox.update(entry.id, {
           lastError: message,
         })

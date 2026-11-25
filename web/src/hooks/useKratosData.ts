@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { clearBrowserCaches, SessionExpiredError } from '@yggdrasil-lab/ui'
+import { clearBrowserCaches, isSessionExpiredError, useAppResumeRefresh } from '@yggdrasil-lab/ui'
 import { api } from '../api'
 import { db, requestPersistence } from '../db'
 import { enqueue, flush, pending } from '../outbox'
@@ -95,13 +95,13 @@ function useCatalogueState(
         })
         .catch(() => undefined)
     } catch (err) {
-      if (err instanceof SessionExpiredError) setSessionExpired(true)
+      if (isSessionExpiredError(err)) setSessionExpired(true)
       const cachedCount = await db.exercises.count().catch(() => 0)
       if (cachedCount === 0) {
         setStatus({
           kind: 'error',
           message:
-            err instanceof SessionExpiredError ? SESSION_EXPIRED_MESSAGE : 'Failed to fetch catalogue',
+            isSessionExpiredError(err) ? SESSION_EXPIRED_MESSAGE : 'Failed to fetch catalogue',
         })
       }
       void reportClientError(err, { source: 'catalogue_fetch' })
@@ -121,7 +121,7 @@ function useCatalogueState(
         })
         .catch(() => undefined)
     } catch (err) {
-      if (err instanceof SessionExpiredError) {
+      if (isSessionExpiredError(err)) {
         setSessionExpired(true)
         setStatus({ kind: 'error', message: SESSION_EXPIRED_MESSAGE })
       }
@@ -147,7 +147,7 @@ function useRecommendationSynthesizers(
         const updated = await api.synthesizeFastingRecommendation(customContext, circadianDate)
         if (updated) setFastingRecommendation(updated)
       } catch (err) {
-        if (err instanceof SessionExpiredError) setSessionExpired(true)
+        if (isSessionExpiredError(err)) setSessionExpired(true)
         void reportClientError(err, { source: 'fasting_synthesis' })
         throw err
       } finally {
@@ -164,7 +164,7 @@ function useRecommendationSynthesizers(
         const updated = await api.synthesizeWorkoutRecommendation(customContext, circadianDate)
         if (updated) setWorkoutRecommendation(updated)
       } catch (err) {
-        if (err instanceof SessionExpiredError) setSessionExpired(true)
+        if (isSessionExpiredError(err)) setSessionExpired(true)
         void reportClientError(err, { source: 'workout_synthesis' })
         throw err
       } finally {
@@ -215,7 +215,7 @@ function useBiometricsState(
         setFastingLogs((prev) => [serverCheckIn, ...prev.filter((c) => c.date !== serverCheckIn.date)])
       }
     } catch (err) {
-      const expired = err instanceof SessionExpiredError
+      const expired = isSessionExpiredError(err)
       if (expired) setSessionExpired(true)
       setStatus({ kind: 'error', message: expired ? SESSION_EXPIRED_MESSAGE : 'Failed to load biometrics' })
       void reportClientError(err, { source: 'biometrics_fetch' })
@@ -356,7 +356,7 @@ function useSessionsState(
           : { kind: 'error', message: `${left} still queued - will sync when online.` }
       )
     } catch (err) {
-      if (err instanceof SessionExpiredError) {
+      if (isSessionExpiredError(err)) {
         setSessionExpired(true)
         setStatus({ kind: 'error', message: SESSION_EXPIRED_MESSAGE })
         return
@@ -371,7 +371,7 @@ function useSessionsState(
       setQueued(queuedItems.length)
       setSessions(mergeSessionsById(serverSessions, queuedItems))
     } catch (err) {
-      if (err instanceof SessionExpiredError) {
+      if (isSessionExpiredError(err)) {
         setSessionExpired(true)
         setStatus({ kind: 'error', message: SESSION_EXPIRED_MESSAGE })
       }
@@ -399,19 +399,15 @@ function useRefreshLifecycle(refreshAll: () => Promise<void>, refreshCircadianCl
   useEffect(() => {
     void requestPersistence()
     void refreshAll()
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') void refreshAll()
-    }
-    const onOnline = () => void refreshAll()
-    document.addEventListener('visibilitychange', onVisible)
-    window.addEventListener('online', onOnline)
     const clockTimer = window.setInterval(refreshCircadianClock, 60_000)
     return () => {
-      document.removeEventListener('visibilitychange', onVisible)
-      window.removeEventListener('online', onOnline)
       window.clearInterval(clockTimer)
     }
   }, [refreshAll, refreshCircadianClock])
+
+  useAppResumeRefresh(() => {
+    void refreshAll()
+  })
 }
 
 /**

@@ -1,4 +1,15 @@
-import { Button, ChipSelector, SegmentedControl, type SegmentedControlOption } from '@yggdrasil-lab/ui'
+import {
+  AlertBanner,
+  Button,
+  ChipSelector,
+  FormField,
+  GlassCard,
+  LoadingState,
+  SegmentedControl,
+  StatusBadge,
+  TextInput,
+  type SegmentedControlOption,
+} from '@yggdrasil-lab/ui'
 import type { ActivityType, Routine, WorkoutMetrics, WorkoutRecommendation } from '../types'
 import {
   formatIsoToLocalHHMM,
@@ -94,13 +105,13 @@ function ClassModeFields({
 }) {
   return (
     <div className="space-y-2">
-      <input
+      <TextInput
         type="text"
+        variant="blue"
         aria-label={`Segment ${index + 1} Class Name`}
         value={segment.routineName}
         onChange={(e) => onUpdate({ ...segment, routineName: e.target.value })}
         placeholder="Class name (e.g. Group Core)"
-        className="w-full px-3 py-2 rounded-xl bg-background border border-border text-base sm:text-xs text-slate-100"
       />
       <ChipSelector
         options={CLASS_PRESETS}
@@ -136,13 +147,13 @@ function CardioModeFields({
         }}
         variant="blue"
       />
-      <input
+      <TextInput
         type="text"
+        variant="blue"
         aria-label={`Segment ${index + 1} Activity Name`}
         value={segment.routineName}
         onChange={(e) => onUpdate({ ...segment, routineName: e.target.value })}
         placeholder="Activity name..."
-        className="w-full px-3 py-2 rounded-xl bg-background border border-border text-base sm:text-xs text-slate-100"
       />
     </div>
   )
@@ -159,27 +170,31 @@ function RoutineModeFields({
   recommendedName: string
   onUpdate: (next: SplitSegmentDraft) => void
 }) {
+  const routineOptions = routines.map((routine) => {
+    const isToday = Boolean(recommendedName) && routine.name.toLowerCase() === recommendedName
+    return {
+      value: routine.id,
+      label: isToday ? `★ ${routine.name}` : routine.name,
+    }
+  })
+
   return (
-    <div className="flex flex-wrap gap-2">
-      {routines.map((routine) => {
-        const isSelected = segment.routineId === routine.id
-        const isToday = Boolean(recommendedName) && routine.name.toLowerCase() === recommendedName
-        return (
-          <button
-            key={routine.id}
-            type="button"
-            onClick={() => onUpdate({ ...segment, routineId: routine.id, routineName: routine.name })}
-            className={`kratos-touch-target px-3 py-2 rounded-lg text-xs font-medium border transition-all ${
-              isSelected
-                ? 'bg-blue-500/25 text-blue-200 border-blue-500 font-semibold'
-                : 'bg-background text-slate-300 border-border hover:text-white'
-            }`}
-          >
-            {isToday ? `★ ${routine.name}` : routine.name}
-          </button>
-        )
-      })}
-    </div>
+    <ChipSelector
+      options={routineOptions}
+      selected={segment.routineId ?? undefined}
+      onChange={(routineId) => {
+        const selectedRoutine = routines.find((r) => r.id === routineId)
+        if (selectedRoutine) {
+          onUpdate({
+            ...segment,
+            routineId: selectedRoutine.id,
+            routineName: selectedRoutine.name,
+          })
+        }
+      }}
+      variant="blue"
+      className="[&_button]:min-h-[45px]"
+    />
   )
 }
 
@@ -200,32 +215,32 @@ function SegmentTimeInputs({
   const endHHMM = formatIsoToLocalHHMM(segment.endedAt)
   return (
     <div className="grid grid-cols-2 gap-2">
-      <div>
-        <label className="block text-[11px] font-semibold text-slate-400 mb-1">Start</label>
-        <input
+      <FormField label="Start" htmlFor={`seg-${index + 1}-start`}>
+        <TextInput
+          id={`seg-${index + 1}-start`}
           type="time"
+          variant="blue"
           aria-label={`Segment ${index + 1} Start`}
           value={startHHMM}
           onChange={(e) => {
             const iso = resolveBoundaryIsoWithinWindow(parentStartIso, parentEndIso, e.target.value)
             if (iso) onUpdate({ ...segment, startedAt: iso })
           }}
-          className="kratos-time-input"
         />
-      </div>
-      <div>
-        <label className="block text-[11px] font-semibold text-slate-400 mb-1">End</label>
-        <input
+      </FormField>
+      <FormField label="End" htmlFor={`seg-${index + 1}-end`}>
+        <TextInput
+          id={`seg-${index + 1}-end`}
           type="time"
+          variant="blue"
           aria-label={`Segment ${index + 1} End`}
           value={endHHMM}
           onChange={(e) => {
             const iso = resolveBoundaryIsoWithinWindow(parentStartIso, parentEndIso, e.target.value)
             if (iso) onUpdate({ ...segment, endedAt: iso })
           }}
-          className="kratos-time-input"
         />
-      </div>
+      </FormField>
     </div>
   )
 }
@@ -239,13 +254,21 @@ function SegmentMetricsPreview({
   metricsLoading: boolean
   metricsError: string | undefined
 }) {
+  if (metricsLoading) {
+    return (
+      <LoadingState
+        label="Calculating Eir telemetry..."
+        variant="blue"
+        className="rounded-xl bg-card/60 border border-border/60 py-2"
+      />
+    )
+  }
+  if (metricsError) {
+    return <AlertBanner variant="warning">{metricsError}</AlertBanner>
+  }
   return (
     <div className="rounded-xl bg-card/60 border border-border/60 px-3 py-2 text-[11px] text-slate-300 flex items-center gap-3 flex-wrap">
-      {metricsLoading ? (
-        <span className="text-slate-400 animate-pulse">Calculating Eir telemetry...</span>
-      ) : metricsError ? (
-        <span className="text-amber-300">{metricsError}</span>
-      ) : metrics ? (
+      {metrics ? (
         <>
           {typeof metrics.active_energy_kcal === 'number' && (
             <span>🔥 {metrics.active_energy_kcal} kcal</span>
@@ -265,6 +288,69 @@ function SegmentMetricsPreview({
         <span className="text-slate-400">Adjust time range to preview Eir biometrics</span>
       )}
     </div>
+  )
+}
+
+function SegmentCardHeader({
+  index,
+  startedAt,
+  endedAt,
+  canRemove,
+  onRemove,
+}: {
+  index: number
+  startedAt: string
+  endedAt: string
+  canRemove: boolean
+  onRemove: () => void
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-bold text-slate-100">Segment {index + 1}</span>
+        <StatusBadge
+          label={computeDurationBadge(startedAt, endedAt)}
+          variant="info"
+          size="xs"
+          showDot={false}
+          className="rounded-md font-semibold"
+        />
+      </div>
+      {canRemove && (
+        <Button variant="ghost" size="xs" onClick={onRemove}>
+          Remove
+        </Button>
+      )}
+    </div>
+  )
+}
+
+function SegmentModeFields({
+  index,
+  segment,
+  routines,
+  recommendedName,
+  onUpdate,
+}: {
+  index: number
+  segment: SplitSegmentDraft
+  routines: Routine[]
+  recommendedName: string
+  onUpdate: (next: SplitSegmentDraft) => void
+}) {
+  if (segment.mode === 'class') {
+    return <ClassModeFields index={index} segment={segment} onUpdate={onUpdate} />
+  }
+  if (segment.mode === 'cardio') {
+    return <CardioModeFields index={index} segment={segment} onUpdate={onUpdate} />
+  }
+  return (
+    <RoutineModeFields
+      segment={segment}
+      routines={routines}
+      recommendedName={recommendedName}
+      onUpdate={onUpdate}
+    />
   )
 }
 
@@ -288,24 +374,19 @@ export function SplitSegmentCard({
   const recommendedName = workoutRecommendation?.routine_name?.toLowerCase() || ''
 
   return (
-    <div
-      className="rounded-2xl bg-background/60 border border-border p-3 space-y-3"
+    <GlassCard
+      tone="solid"
+      padding="sm"
+      className="bg-background/60 space-y-3"
       data-testid={`split-segment-${index + 1}`}
     >
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-bold text-slate-100">Segment {index + 1}</span>
-          <span className="text-[11px] px-2 py-1 rounded-md bg-sky-500/15 text-sky-300 font-semibold">
-            {computeDurationBadge(segment.startedAt, segment.endedAt)}
-          </span>
-        </div>
-        {canRemove && (
-          <Button variant="ghost" size="xs" onClick={onRemove}>
-            Remove
-          </Button>
-        )}
-      </div>
-
+      <SegmentCardHeader
+        index={index}
+        startedAt={segment.startedAt}
+        endedAt={segment.endedAt}
+        canRemove={canRemove}
+        onRemove={onRemove}
+      />
       <SegmentTimeInputs
         index={index}
         segment={segment}
@@ -313,7 +394,6 @@ export function SplitSegmentCard({
         parentEndIso={parentEndIso}
         onUpdate={onUpdate}
       />
-
       <SegmentedControl
         options={MODE_OPTIONS}
         value={segment.mode}
@@ -325,25 +405,18 @@ export function SplitSegmentCard({
         fullWidth
         idPrefix={`seg-${index + 1}-mode`}
       />
-
-      {segment.mode === 'class' ? (
-        <ClassModeFields index={index} segment={segment} onUpdate={onUpdate} />
-      ) : segment.mode === 'cardio' ? (
-        <CardioModeFields index={index} segment={segment} onUpdate={onUpdate} />
-      ) : (
-        <RoutineModeFields
-          segment={segment}
-          routines={routines}
-          recommendedName={recommendedName}
-          onUpdate={onUpdate}
-        />
-      )}
-
+      <SegmentModeFields
+        index={index}
+        segment={segment}
+        routines={routines}
+        recommendedName={recommendedName}
+        onUpdate={onUpdate}
+      />
       <SegmentMetricsPreview
         metrics={metrics}
         metricsLoading={metricsLoading}
         metricsError={metricsError}
       />
-    </div>
+    </GlassCard>
   )
 }

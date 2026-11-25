@@ -9,7 +9,7 @@ test.describe('App Shell and Navigation', () => {
 
   test('renders header and sync status badge', async ({ page }) => {
     await expect(page.locator('header h1')).toHaveText('Kratos')
-    await expect(page.locator('.status-badge')).toBeVisible()
+    await expect(page.locator('header .status-badge')).toBeVisible()
     await expect(page.getByTestId('refresh-button')).toBeVisible()
   })
 
@@ -99,7 +99,7 @@ test.describe('App Shell and Navigation', () => {
     const queuedId2 = '99999999-9999-4999-8999-999999999902'
     const requestOrder: string[] = []
 
-    await expect(page.locator('.status-badge')).toContainText('All synced')
+    await expect(page.locator('header .status-badge')).toContainText('All synced')
 
     page.on('request', (req) => {
       const url = new URL(req.url())
@@ -149,7 +149,7 @@ test.describe('App Shell and Navigation', () => {
     expect(mountPutIdx).toBeGreaterThanOrEqual(0)
     expect(mountGetIdx).toBeGreaterThan(mountPutIdx)
 
-    await expect(page.locator('.status-badge')).toContainText('All synced')
+    await expect(page.locator('header .status-badge')).toContainText('All synced')
 
     const remainingAfterMount = await page.evaluate(async () => {
       return await new Promise<number>((resolve, reject) => {
@@ -226,6 +226,6 @@ test.describe('App Shell and Navigation', () => {
     const refreshGetIdx = requestOrder.indexOf('GET:/api/sessions')
     expect(refreshPutIdx).toBeGreaterThanOrEqual(0)
     expect(refreshGetIdx).toBeGreaterThan(refreshPutIdx)
-    await expect(page.locator('.status-badge')).toContainText('All synced')
+    await expect(page.locator('header .status-badge')).toContainText('All synced')
   })
 })

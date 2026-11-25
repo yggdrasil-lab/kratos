@@ -1,3 +1,4 @@
+import { formatAucklandTime } from '@yggdrasil-lab/ui'
 import type {
   ActivityType,
   EffortRating,
@@ -7,6 +8,8 @@ import type {
   SuggestedSplitPoint,
   WorkoutRecommendation,
 } from '../types'
+
+const EXPLICIT_TZ_RE = /(Z|[+-]\d{2}:?\d{2})$/i
 
 export type SegmentMode = 'class' | 'cardio' | 'routine'
 
@@ -35,12 +38,17 @@ export function getDefaultLabelForActivity(activityType: ActivityType): string {
 }
 
 /**
- * Formats an ISO timestamp as local HH:MM for `<input type="time">` and badges.
+ * Formats an ISO timestamp as Pacific/Auckland (or wall-clock for naive timestamps)
+ * HH:MM for `<input type="time">` and badges.
  */
 export function formatIsoToLocalHHMM(iso: string | null | undefined): string {
   if (!iso) return ''
   const dt = new Date(iso)
   if (Number.isNaN(dt.getTime())) return ''
+  if (EXPLICIT_TZ_RE.test(iso.trim())) {
+    const [hh, mm] = formatAucklandTime(dt).split(':')
+    return `${String(Number(hh) % 24).padStart(2, '0')}:${mm}`
+  }
   return `${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`
 }
 

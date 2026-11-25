@@ -6,6 +6,9 @@ import {
   GlassCard,
   GoalProgressCard,
   SearchInput,
+  SectionHeader,
+  StatusBadge,
+  type StatusBadgeVariant,
 } from '@yggdrasil-lab/ui'
 import type { DailyBiometrics, Exercise, FastingCheckIn, Routine, SessionPayload } from '../types'
 import { formatFriendlyDate } from '../utils/circadian'
@@ -25,18 +28,22 @@ interface ProgressViewProps {
   onLogSets?: (session: SessionPayload) => void
 }
 
-const ADHERENCE_BADGE_MAP: Record<FastingCheckIn['adherence'], { label: string; classes: string }> = {
-  completed: { label: '✓ Completed', classes: 'bg-emerald-500/15 text-emerald-400' },
-  early: { label: '⚡ Broke Early', classes: 'bg-amber-500/15 text-amber-400' },
-  off_plan: { label: '🔴 Off-Plan', classes: 'bg-rose-500/15 text-rose-400' },
+const ADHERENCE_BADGE_MAP: Record<FastingCheckIn['adherence'], { label: string; variant: StatusBadgeVariant }> = {
+  completed: { label: '✓ Completed', variant: 'success' },
+  early: { label: '⚡ Broke Early', variant: 'warning' },
+  off_plan: { label: '🔴 Off-Plan', variant: 'error' },
 }
 
 function FastingHistorySection({ fastingLogs }: { fastingLogs: FastingCheckIn[] }) {
   return (
     <div className="mb-4">
-      <h3 className="text-base font-bold mb-3 flex items-center gap-2 text-slate-100">
-        <span>⏱️</span> Fasting History ({fastingLogs.length})
-      </h3>
+      <SectionHeader
+        title={`Fasting History (${fastingLogs.length})`}
+        icon={<span className="text-base leading-none">⏱️</span>}
+        variant="sky"
+        size="md"
+        className="mb-3"
+      />
       {fastingLogs.length === 0 ? (
         <EmptyState
           variant="glass"
@@ -59,9 +66,13 @@ function FastingHistorySection({ fastingLogs }: { fastingLogs: FastingCheckIn[] 
                       .join(' • ')}
                   </div>
                 </div>
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded-md shrink-0 ${badge.classes}`}>
-                  {badge.label}
-                </span>
+                <StatusBadge
+                  label={badge.label}
+                  variant={badge.variant}
+                  size="sm"
+                  showDot={false}
+                  className="rounded-md font-semibold shrink-0"
+                />
               </GlassCard>
             )
           })}
@@ -143,6 +154,61 @@ function computeWeightProgress(biometrics: DailyBiometrics | null) {
   return { currentWeight, lostSoFar, progressPercent, nextMilestone }
 }
 
+function RecentWorkoutsSection({
+  recentSessions,
+  exercises,
+  routines,
+  onDeleteSession,
+  onConfirmSession,
+  onEditSession,
+  onSplitSession,
+  onLogSets,
+}: {
+  recentSessions: SessionPayload[]
+  exercises: Exercise[]
+  routines: Routine[]
+  onDeleteSession: (id: string) => Promise<void> | void
+  onConfirmSession: (id: string) => Promise<void> | void
+  onEditSession: (session: SessionPayload) => void
+  onSplitSession?: (session: SessionPayload) => void
+  onLogSets?: (session: SessionPayload) => void
+}) {
+  return (
+    <div className="mb-4">
+      <SectionHeader
+        title={`Last 7 Days Workouts (${recentSessions.length})`}
+        icon={<span className="text-base leading-none">🏋️</span>}
+        variant="blue"
+        size="md"
+        className="mb-3"
+      />
+      {recentSessions.length === 0 ? (
+        <EmptyState
+          variant="glass"
+          title="No workouts logged in the last 7 days"
+          description='Tap "Today" to start your next session!'
+        />
+      ) : (
+        <div className="flex flex-col gap-3">
+          {recentSessions.map((s) => (
+            <ProgressSessionCard
+              key={s.id}
+              session={s}
+              exercises={exercises}
+              routines={routines}
+              onDeleteSession={onDeleteSession}
+              onConfirmSession={onConfirmSession}
+              onEditSession={onEditSession}
+              onSplitSession={onSplitSession}
+              onLogSets={onLogSets}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /**
  * Progress and Momentum tab displaying weight milestone trajectory, 7-day activity
  * telemetry stream, fasting adherence logs, and searchable older session archive.
@@ -166,10 +232,14 @@ export function ProgressView({
 
   return (
     <div className="animate-fade-in pb-4">
-      <div className="mb-4">
-        <h2 className="text-2xl font-bold m-0 text-slate-100">Progress and Momentum</h2>
-        <p className="text-xs text-slate-400 mt-1">Milestone tracking, last 7 days activity, and correlations.</p>
-      </div>
+      <SectionHeader
+        title="Progress and Momentum"
+        subtitle="Milestone tracking, last 7 days activity, and correlations."
+        titleAs="h2"
+        size="md"
+        variant="blue"
+        className="mb-4"
+      />
 
       <GoalProgressCard
         eyebrow="Goal: Reach 80 kg"
@@ -186,34 +256,16 @@ export function ProgressView({
         className="mb-4"
       />
 
-      <div className="mb-4">
-        <h3 className="text-base font-bold mb-3 flex items-center gap-2 text-slate-100">
-          <span>🏋️</span> Last 7 Days Workouts ({recentSessions.length})
-        </h3>
-        {recentSessions.length === 0 ? (
-          <EmptyState
-            variant="glass"
-            title="No workouts logged in the last 7 days"
-            description='Tap "Today" to start your next session!'
-          />
-        ) : (
-          <div className="flex flex-col gap-3">
-            {recentSessions.map((s) => (
-              <ProgressSessionCard
-                key={s.id}
-                session={s}
-                exercises={exercises}
-                routines={routines}
-                onDeleteSession={onDeleteSession}
-                onConfirmSession={onConfirmSession}
-                onEditSession={onEditSession}
-                onSplitSession={onSplitSession}
-                onLogSets={onLogSets}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+      <RecentWorkoutsSection
+        recentSessions={recentSessions}
+        exercises={exercises}
+        routines={routines}
+        onDeleteSession={onDeleteSession}
+        onConfirmSession={onConfirmSession}
+        onEditSession={onEditSession}
+        onSplitSession={onSplitSession}
+        onLogSets={onLogSets}
+      />
 
       <FastingHistorySection fastingLogs={fastingLogs} />
 

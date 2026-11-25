@@ -1,79 +1,80 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-:root {
-  --bg-color: #0f172a;
-  --surface-border: rgba(255, 255, 255, 0.1);
-  --primary-color: #3b82f6;
-  --text-primary: #f8fafc;
-  --text-muted: #64748b;
-  --glass-border: rgba(255, 255, 255, 0.05);
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+@layer base {
+  :root {
+    color-scheme: dark;
+    --bg-color: #0f172a;
+    --surface-border: rgba(255, 255, 255, 0.1);
+    --primary-color: #3b82f6;
+    --text-primary: #f8fafc;
+    --text-muted: #64748b;
+    --glass-border: rgba(255, 255, 255, 0.05);
+  }
 
-html {
-  overflow-x: hidden;
-  overscroll-behavior-y: none;
-}
+  html {
+    overflow-x: hidden;
+    overscroll-behavior-y: none;
+  }
 
-body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  background-color: var(--bg-color);
-  color: var(--text-primary);
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-  min-height: 100vh;
-  min-height: 100dvh;
-  overscroll-behavior-y: none;
-  background-image:
-    radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.15), transparent 25%),
-    radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.15), transparent 25%);
-  background-attachment: fixed;
-}
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-primary);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overscroll-behavior-y: none;
+    background-image:
+      radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.15), transparent 25%),
+      radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.15), transparent 25%);
+    background-attachment: fixed;
+  }
 
-#root {
-  max-width: 100%;
-  margin: 0;
-  padding: 0;
-}
+  #root {
+    max-width: 100%;
+    margin: 0;
+    padding: 0;
+  }
 
-/* Inputs */
-input {
-  font-family: 'Inter', sans-serif;
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid var(--surface-border);
-  color: var(--text-primary);
-  padding: 0.75rem 1rem;
-  border-radius: 8px;
-  font-size: 1rem;
-  transition: all 0.2s;
-  width: 100%;
-}
+  /* Base input defaults scoped inside @layer base so Tailwind utility classes win */
+  input {
+    font-family: 'Inter', sans-serif;
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid var(--surface-border);
+    color: var(--text-primary);
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    font-size: 1rem;
+    transition: all 0.2s;
+    width: 100%;
+  }
 
-/* Suppress native spin buttons on number inputs for clean mobile touch */
-input[type="number"]::-webkit-inner-spin-button,
-input[type="number"]::-webkit-outer-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
+  /* Suppress native spin buttons on number inputs for clean mobile touch */
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
 
-input[type="number"] {
-  -moz-appearance: textfield;
-  appearance: textfield;
-}
+  input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
 
-input:focus {
-  outline: none;
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
-}
+  input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+  }
 
-input::placeholder {
-  color: var(--text-muted);
+  input::placeholder {
+    color: var(--text-muted);
+  }
 }
 
 /* Active workout and exercise picker domain primitives */
@@ -83,22 +84,6 @@ input::placeholder {
   flex-direction: column;
   gap: 0.5rem;
   margin-top: 1rem;
-}
-
-.exercise-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1rem;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--glass-border);
-  border-radius: 12px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.exercise-item:hover {
-  background: rgba(255, 255, 255, 0.08);
 }
 
 .workout-item {
