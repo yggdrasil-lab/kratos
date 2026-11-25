@@ -244,6 +244,20 @@ async function applyBiometricsResults(
   handlers.setSessionExpired(false)
 }
 
+async function persistFastingCheckInRemote(
+  checkIn: FastingCheckIn,
+  setSessionExpired: (val: boolean) => void,
+  setStatus: (status: SyncStatus) => void
+): Promise<void> {
+  try {
+    await api.saveFastingCheckIn(checkIn)
+  } catch (err) {
+    if (isSessionExpiredError(err)) setSessionExpired(true)
+    setStatus({ kind: 'error', message: formatSyncError(err, 'Failed to sync fasting check-in') })
+    void reportClientError(err, { source: 'fasting_checkin_save' })
+  }
+}
+
 function useBiometricsState(
   circadianDate: string,
   setSessionExpired: (val: boolean) => void,
@@ -289,16 +303,7 @@ function useBiometricsState(
     async (checkIn: FastingCheckIn) => {
       await db.fastingLogs.put(checkIn).catch(() => undefined)
       setFastingLogs((prev) => [checkIn, ...prev.filter((c) => c.id !== checkIn.id)])
-      try {
-        await api.saveFastingCheckIn(checkIn)
-      } catch (err) {
-        if (isSessionExpiredError(err)) setSessionExpired(true)
-        setStatus({
-          kind: 'error',
-          message: formatSyncError(err, 'Failed to sync fasting check-in'),
-        })
-        void reportClientError(err, { source: 'fasting_checkin_save' })
-      }
+      await persistFastingCheckInRemote(checkIn, setSessionExpired, setStatus)
     },
     [setSessionExpired, setStatus]
   )
