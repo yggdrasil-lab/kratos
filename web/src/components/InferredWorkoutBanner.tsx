@@ -143,7 +143,7 @@ function InferredSessionCard({
       </p>
 
       <div className="flex items-center gap-2 flex-wrap">
-        <Button variant="blue" size="xs" onClick={() => onConfirmSession(infSession.id)}>
+        <Button variant="brand" size="xs" onClick={() => onConfirmSession(infSession.id)}>
           ✓ Confirm / Keep
         </Button>
         {onSplitSession && (

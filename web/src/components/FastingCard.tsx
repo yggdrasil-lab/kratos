@@ -80,7 +80,7 @@ function FastingHeaderActions({
           icon={<span>⚡</span>}
           onClick={onOpenAiModal}
           title="Adapt protocol with AI sports physiology"
-          className="border-blue-500/40 text-blue-300"
+          className="border-accent/40 text-accent"
         >
           Adapt
         </Button>
@@ -98,7 +98,7 @@ function FastingHeaderActions({
           variant="outline"
           size="xs"
           onClick={onOpenCheckIn}
-          className="border-blue-500/50 text-sky-400"
+          className="border-accent/50 text-accent"
         >
           Log Fast
         </Button>
@@ -246,8 +246,8 @@ function FastingCardBody({
       {isGenerating && !hasRecommendation && (
         <LoadingState
           label="Synthesizing today's circadian fasting protocol and Discord thread..."
-          variant="blue"
-          className="bg-sky-500/10 border border-sky-500/20 rounded-xl py-4 mb-3"
+          variant="brand"
+          className="bg-accent/10 border border-accent/20 rounded-xl py-4 mb-3"
         />
       )}
 

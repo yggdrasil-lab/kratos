@@ -310,7 +310,7 @@ function ActiveWorkoutCard({
         <Button variant="secondary" size="lg" fullWidth onClick={onOpenExercisePicker}>
           + Add Exercise
         </Button>
-        <Button variant="blue" size="lg" fullWidth onClick={onFinishWorkout}>
+        <Button variant="brand" size="lg" fullWidth onClick={onFinishWorkout}>
           {isRetroactive ? 'Save Sets' : 'Finish Workout'}
         </Button>
       </div>
@@ -345,7 +345,7 @@ function WorkoutKeypadModal({
       submitLabel="Apply Set Value"
       allowDecimals={keypadTarget?.field === 'weight_kg'}
       maxDecimalPlaces={1}
-      variant="blue"
+      variant="brand"
     />
   )
 }
@@ -399,7 +399,7 @@ export function ActiveWorkoutView({
             onResume={restTimer.resumeTimer}
             onAdjust={restTimer.adjustTimer}
             onDismiss={restTimer.dismissTimer}
-            variant="blue"
+            variant="brand"
             className="mb-4"
           />
         )}

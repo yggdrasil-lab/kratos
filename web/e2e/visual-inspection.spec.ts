@@ -91,7 +91,18 @@ for (const { name: platform, options } of PLATFORMS) {
     })
 
     test(`captures full screen progression on ${platform}`, async ({ page }) => {
-      // 1. Today View
+      // 1. Today View & Theme System Invariants
+      const themeTokens = await page.evaluate(() => {
+        const rootStyle = getComputedStyle(document.documentElement)
+        return {
+          theme: document.documentElement.dataset.theme,
+          accent: rootStyle.getPropertyValue('--ui-accent').trim(),
+          radiusCard: rootStyle.getPropertyValue('--ui-radius-card').trim(),
+        }
+      })
+      expect(themeTokens.theme).toBe('kratos')
+      expect(themeTokens.accent).toBe('244 63 94')
+      expect(themeTokens.radiusCard).toBe('4px')
       await expect(page.locator('header h1')).toHaveText('Kratos')
       await expect(page.getByText("Today's Training")).toBeVisible()
       const inferredTime = page.getByTestId('inferred-session-time-range').first()

@@ -82,13 +82,13 @@ function SuggestedSplitsList({
             data-testid="suggested-split-card"
           >
             <div>
-              <div className="text-xs font-semibold text-sky-300">
+              <div className="text-xs font-semibold text-accent">
                 Suggested Split: {windowText}
               </div>
               <div className="text-[11px] text-slate-300">{split.reason}</div>
             </div>
             <Button
-              variant="blue"
+              variant="brand"
               size="sm"
               className="kratos-touch-target shrink-0"
               onClick={() => onApplySuggestedSplit(split)}
@@ -138,7 +138,7 @@ export function SplitTimelineChart({
       </div>
 
       {isLoading ? (
-        <LoadingState label="Loading Eir heart rate and step bins..." variant="blue" className="py-4" />
+        <LoadingState label="Loading Eir heart rate and step bins..." variant="brand" className="py-4" />
       ) : errorMessage ? (
         <AlertBanner variant="warning">
           Timeline preview unavailable: {errorMessage}

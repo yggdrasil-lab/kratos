@@ -138,7 +138,7 @@ function SessionCardActions({
     return (
       <div className="flex items-center gap-1.5 flex-wrap mb-2">
         {Boolean(s.routine_id) && onLogSets && (
-          <Button variant={s.items.length === 0 ? 'blue' : 'secondary'} size="xs" onClick={() => onLogSets(s)}>
+          <Button variant={s.items.length === 0 ? 'brand' : 'secondary'} size="xs" onClick={() => onLogSets(s)}>
             {s.items.length === 0 ? 'Log Sets' : 'Edit Sets'}
           </Button>
         )}
@@ -160,7 +160,7 @@ function SessionCardActions({
           Auto-detected from plan and biometrics. Keep or dismiss?
         </span>
         <div className="flex items-center gap-2 flex-wrap shrink-0">
-          <Button variant="blue" size="xs" onClick={() => onConfirmSession(s.id)}>
+          <Button variant="brand" size="xs" onClick={() => onConfirmSession(s.id)}>
             ✓ Confirm
           </Button>
           {onSplitSession && (

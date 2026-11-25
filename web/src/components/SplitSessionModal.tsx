@@ -58,7 +58,7 @@ function SplitModalFooter({
         </Button>
       )}
       <Button
-        variant="blue"
+        variant="brand"
         size="sm"
         onClick={() => onSubmit(false)}
         disabled={isSubmitting || hasValidationError}

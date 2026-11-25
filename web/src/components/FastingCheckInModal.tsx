@@ -74,7 +74,7 @@ export function FastingCheckInModal({
           <Button variant="secondary" size="md" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="blue" size="md" onClick={handleSave}>
+          <Button variant="brand" size="md" onClick={handleSave}>
             Save Check-In
           </Button>
         </div>
@@ -92,7 +92,7 @@ export function FastingCheckInModal({
           <TextInput
             id="fasting-checkin-notes"
             type="text"
-            variant="blue"
+            variant="brand"
             placeholder="Notes (e.g. felt hungry at 3pm, drank electrolytes)..."
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
