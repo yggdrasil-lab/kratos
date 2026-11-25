@@ -201,6 +201,12 @@ def test_http_discord_adapter_sets_user_agent_and_reuses_active_thread() -> None
     assert unconfigured.create_forum_thread("Daily Fasting", "hi") is None
     assert unconfigured.post_thread_reply("thread-42", "hi") is False
 
+    missing_id_adapter = HttpDiscordAdapter(
+        DiscordConfig(bot_token="bot-tok", health_channel_id="chan-1"),
+        opener=lambda req, timeout=4.0: _StubResponse({"threads": []} if req.full_url.endswith("/threads/active") else {}),
+    )
+    assert missing_id_adapter.create_forum_thread("Daily Fasting", "hi") is None
+
 
 def test_in_memory_fakes_satisfy_protocols_and_create_app_wires_container() -> None:
     fake_clock = FakeClock()

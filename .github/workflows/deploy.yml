@@ -45,7 +45,7 @@ jobs:
         working-directory: api
         env:
           KRATOS_TEST_DATABASE_URL: postgresql+psycopg://kratos:kratos@localhost:5432/kratos
-        run: pytest
+        run: python -m pytest
 
       - name: Set up Node 20
         uses: actions/setup-node@v4

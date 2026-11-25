@@ -104,7 +104,10 @@ class HttpDiscordAdapter:
         target_name = title[:100].strip()
         for thread in data.get("threads", []):
             if str(thread.get("name", "")).strip() == target_name:
-                thread_id = str(thread.get("id"))
+                raw_id = thread.get("id")
+                if raw_id is None or not str(raw_id).strip():
+                    continue
+                thread_id = str(raw_id)
                 logger.info("Reusing active Discord thread %s (%s)", thread_id, target_name)
                 return thread_id
         return None
@@ -160,7 +163,11 @@ class HttpDiscordAdapter:
             logger.warning("Discord thread creation failed: %s", exc)
             return None
 
-        thread_id = str(data.get("id"))
+        raw_id = data.get("id")
+        if raw_id is None or not str(raw_id).strip():
+            logger.warning("Discord thread creation response missing thread id")
+            return None
+        thread_id = str(raw_id)
         self._post_followup_chunks(thread_id, chunks[1:])
         return thread_id
 

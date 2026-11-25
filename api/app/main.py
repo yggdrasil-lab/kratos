@@ -79,7 +79,7 @@ def _register_routes(fastapi_app: FastAPI) -> None:
 
 def create_app(container: KratosContainer | None = None) -> FastAPI:
     """Create and configure the Kratos FastAPI application from a container."""
-    resolved_container = container or build_container()
+    resolved_container = container if container is not None else build_container()
     fastapi_app = FastAPI(
         title="Kratos API",
         version=__version__,

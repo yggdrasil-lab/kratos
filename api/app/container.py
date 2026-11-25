@@ -53,24 +53,34 @@ def build_container(
     discord: DiscordPort | None = None,
 ) -> KratosContainer:
     """Build a KratosContainer with production defaults or injected test adapters."""
-    resolved_settings = settings_obj or get_settings()
-    resolved_clock = clock or AucklandClockAdapter()
-    resolved_eir = eir or HttpEirAdapter(
-        EirConfig(base_url=resolved_settings.eir_internal_url)
+    resolved_settings = settings_obj if settings_obj is not None else get_settings()
+    resolved_clock = clock if clock is not None else AucklandClockAdapter()
+    resolved_eir = (
+        eir
+        if eir is not None
+        else HttpEirAdapter(EirConfig(base_url=resolved_settings.eir_internal_url))
     )
-    resolved_muninn = muninn or HttpMuninnAdapter(
-        MuninnConfig(
-            base_url=resolved_settings.llm_base_url,
-            api_key=resolved_settings.llm_api_key,
-            llm_model=resolved_settings.llm_model,
-            jev_model=resolved_settings.jev_model,
+    resolved_muninn = (
+        muninn
+        if muninn is not None
+        else HttpMuninnAdapter(
+            MuninnConfig(
+                base_url=resolved_settings.llm_base_url,
+                api_key=resolved_settings.llm_api_key,
+                llm_model=resolved_settings.llm_model,
+                jev_model=resolved_settings.jev_model,
+            )
         )
     )
-    resolved_discord = discord or HttpDiscordAdapter(
-        DiscordConfig(
-            bot_token=resolved_settings.discord_bot_token,
-            health_channel_id=resolved_settings.discord_health_channel_id,
-            user_id=resolved_settings.discord_user_id,
+    resolved_discord = (
+        discord
+        if discord is not None
+        else HttpDiscordAdapter(
+            DiscordConfig(
+                bot_token=resolved_settings.discord_bot_token,
+                health_channel_id=resolved_settings.discord_health_channel_id,
+                user_id=resolved_settings.discord_user_id,
+            )
         )
     )
     return KratosContainer(
