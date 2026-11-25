@@ -49,6 +49,7 @@ class InMemoryEirAdapter:
     daily_by_date: dict[str, dict[str, Any]] = field(default_factory=dict)
     latest: dict[str, Any] | None = None
     metrics_response: WorkoutMetricsRead | None = None
+    metrics_responses: list[WorkoutMetricsRead | Exception] = field(default_factory=list)
     timeline_response: WorkoutTimelineRead | None = None
     raise_on_metrics: Exception | None = None
     raise_on_timeline: Exception | None = None
@@ -83,6 +84,11 @@ class InMemoryEirAdapter:
                 "routine_name": routine_name,
             }
         )
+        if self.metrics_responses:
+            queued = self.metrics_responses.pop(0)
+            if isinstance(queued, Exception):
+                raise queued
+            return queued
         if self.raise_on_metrics is not None:
             raise self.raise_on_metrics
         if self.metrics_response is not None:

@@ -1,17 +1,23 @@
-"""Kratos composition root wiring settings, peer ports, and per-container locks."""
+"""Kratos composition root wiring settings, peer ports, session factory, and domain cores."""
 
 from __future__ import annotations
 
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from fastapi import Request
+from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
+from app.db import SessionLocal
 from app.ports.clock import AucklandClockAdapter, ClockPort
 from app.ports.discord import DiscordConfig, DiscordPort, HttpDiscordAdapter
 from app.ports.eir import EirConfig, EirPort, HttpEirAdapter
 from app.ports.muninn import HttpMuninnAdapter, MuninnConfig, MuninnPort
+from app.training import TrainingCore
+
+SessionFactory = Callable[[], Session]
 
 
 @dataclass(frozen=True)
@@ -23,6 +29,8 @@ class KratosContainer:
     eir: EirPort
     muninn: MuninnPort
     discord: DiscordPort
+    session_factory: SessionFactory
+    training: TrainingCore
     workout_date_locks: dict[str, threading.Lock] = field(default_factory=dict)
     fasting_date_locks: dict[str, threading.Lock] = field(default_factory=dict)
     _lock_mutex: threading.Lock = field(default_factory=threading.Lock)
@@ -51,6 +59,8 @@ def build_container(
     eir: EirPort | None = None,
     muninn: MuninnPort | None = None,
     discord: DiscordPort | None = None,
+    session_factory: SessionFactory | None = None,
+    training: TrainingCore | None = None,
 ) -> KratosContainer:
     """Build a KratosContainer with production defaults or injected test adapters."""
     resolved_settings = settings_obj if settings_obj is not None else get_settings()
@@ -83,12 +93,16 @@ def build_container(
             )
         )
     )
+    resolved_session_factory = session_factory if session_factory is not None else SessionLocal
+    resolved_training = training if training is not None else TrainingCore(eir=resolved_eir)
     return KratosContainer(
         settings=resolved_settings,
         clock=resolved_clock,
         eir=resolved_eir,
         muninn=resolved_muninn,
         discord=resolved_discord,
+        session_factory=resolved_session_factory,
+        training=resolved_training,
     )
 
 

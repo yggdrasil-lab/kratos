@@ -19,7 +19,6 @@ from app.ports.eir import EirUpstreamError
 from app.routers import biometrics, catalogue, client_errors, log, plan, stats
 from app.routers.mcp import install_mcp
 from app.schemas import HealthRead
-from app.services.eir_client import EirUpstreamError as LegacyEirUpstreamError
 
 
 class NoCacheMiddleware:
@@ -87,7 +86,6 @@ def create_app(container: KratosContainer | None = None) -> FastAPI:
     fastapi_app.state.container = resolved_container
     fastapi_app.add_middleware(NoCacheMiddleware)
     fastapi_app.add_exception_handler(EirUpstreamError, _handle_eir_upstream_error)
-    fastapi_app.add_exception_handler(LegacyEirUpstreamError, _handle_eir_upstream_error)
     _register_routes(fastapi_app)
     return fastapi_app
 

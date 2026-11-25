@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 
@@ -12,18 +11,9 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models import Routine, SessionItem
 from app.models import Session as WorkoutSession
+from app.ports.eir import EirPort
 from app.schemas import SessionSplitRequest, SplitSegmentInput, WorkoutMetricsRead
-from app.services.eir_client import fetch_workout_metrics
-
-MetricsFetcher = Callable[..., WorkoutMetricsRead]
-
-
-class SessionNotFoundError(LookupError):
-    """Raised when the target session does not exist or has been deleted."""
-
-
-class InvalidSplitError(ValueError):
-    """Raised when a split request references missing routines or invalid state."""
+from app.training.errors import InvalidSplitError, TrainingNotFoundError
 
 
 def _resolve_segment_routine(
@@ -62,7 +52,7 @@ def build_split_child_extra(
     parent_id: uuid.UUID,
     resolved_routine_name: str | None,
 ) -> dict[str, Any]:
-    """Builds child session extra payload locking Eir telemetry and split lineage."""
+    """Build child session extra payload locking Eir telemetry and split lineage."""
     activity_type = segment.activity_type or metrics.activity_type or "gym"
     default_classification = "class" if activity_type == "class" else metrics.classification
     classification = segment.classification or default_classification or activity_type
@@ -89,12 +79,12 @@ def build_split_child_extra(
 def _fetch_segment_plans(
     db: Session,
     payload: SessionSplitRequest,
-    metrics_fetcher: MetricsFetcher,
+    eir: EirPort,
 ) -> list[tuple[SplitSegmentInput, uuid.UUID | None, str | None, WorkoutMetricsRead]]:
     resolved_routines = [_resolve_segment_routine(db, segment) for segment in payload.segments]
     plans: list[tuple[SplitSegmentInput, uuid.UUID | None, str | None, WorkoutMetricsRead]] = []
     for segment, (routine_id, routine_name) in zip(payload.segments, resolved_routines):
-        metrics = metrics_fetcher(
+        metrics = eir.get_workout_metrics(
             segment.started_at,
             segment.ended_at,
             classification=segment.classification,
@@ -119,14 +109,15 @@ def split_session_atomically(
     db: Session,
     session_id: uuid.UUID,
     payload: SessionSplitRequest,
-    metrics_fetcher: MetricsFetcher = fetch_workout_metrics,
+    *,
+    eir: EirPort,
 ) -> tuple[uuid.UUID, list[WorkoutSession]]:
-    """Fetches per-segment Eir biometrics and atomically replaces parent with split sessions."""
+    """Fetch per-segment Eir biometrics and atomically replace parent with split sessions."""
     parent = db.get(WorkoutSession, session_id)
     if parent is None or parent.deleted_at is not None:
-        raise SessionNotFoundError("Session not found")
+        raise TrainingNotFoundError("Session not found")
 
-    plans = _fetch_segment_plans(db, payload, metrics_fetcher)
+    plans = _fetch_segment_plans(db, payload, eir)
     children: list[WorkoutSession] = []
     for segment, routine_id, routine_name, metrics in plans:
         child = WorkoutSession(
