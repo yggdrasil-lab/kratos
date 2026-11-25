@@ -49,6 +49,10 @@ from app.training import TrainingCore, TrainingError
 
 SOURCE = "agent"
 
+SessionOpener = Callable[[], contextlib.AbstractContextManager[Session]]
+TrainingGetter = Callable[[], TrainingCore]
+EirGetter = Callable[[], EirPort]
+
 
 class McpAuthMiddleware(BaseHTTPMiddleware):
     """Guard ``/mcp`` with a bearer token from ``app.state.container``; fail closed."""
@@ -95,10 +99,12 @@ def _dump_routine_item(item: Any) -> dict[str, Any]:
     return RoutineItemRead.model_validate(item).model_dump(mode="json")
 
 
-def _register_catalogue_tools(
-    server: MCPServer,
-    open_session: Callable[[], contextlib.AbstractContextManager[Session]],
-    get_training: Callable[[], TrainingCore],
+def _non_null_fields(values: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in values.items() if value is not None}
+
+
+def _register_exercise_read_tools(
+    server: MCPServer, open_session: SessionOpener, get_training: TrainingGetter
 ) -> None:
     @server.tool(
         name="exercise_search",
@@ -124,6 +130,10 @@ def _register_catalogue_tools(
                 get_training().get_exercise(db, uuid.UUID(exercise_id))
             )
 
+
+def _register_exercise_create_tool(
+    server: MCPServer, open_session: SessionOpener, get_training: TrainingGetter
+) -> None:
     @server.tool(name="exercise_create", description="Create a new catalogue exercise.")
     def exercise_create(
         name: str,
@@ -154,6 +164,10 @@ def _register_catalogue_tools(
                 )
             )
 
+
+def _register_exercise_update_tools(
+    server: MCPServer, open_session: SessionOpener, get_training: TrainingGetter
+) -> None:
     @server.tool(name="exercise_update", description="Update an existing exercise.")
     def exercise_update(
         exercise_id: str,
@@ -195,17 +209,13 @@ def _register_catalogue_tools(
             )
 
 
-def _register_plan_tools(
-    server: MCPServer,
-    open_session: Callable[[], contextlib.AbstractContextManager[Session]],
-    get_training: Callable[[], TrainingCore],
+def _register_routine_crud_tools(
+    server: MCPServer, open_session: SessionOpener, get_training: TrainingGetter
 ) -> None:
     @server.tool(name="routine_list", description="List all routine plans.")
     def routine_list() -> str:
         with open_session() as db, _tool_errors():
-            routines = [
-                _dump_routine(r) for r in get_training().list_routines(db)
-            ]
+            routines = [_dump_routine(r) for r in get_training().list_routines(db)]
         return json.dumps(routines)
 
     @server.tool(
@@ -232,11 +242,13 @@ def _register_plan_tools(
             entry["items"] = [RoutineItemCreate(**item) for item in items]
         with open_session() as db, _tool_errors():
             return _dump_routine(
-                get_training().create_routine(
-                    db, RoutineCreate(**entry), source=SOURCE
-                )
+                get_training().create_routine(db, RoutineCreate(**entry), source=SOURCE)
             )
 
+
+def _register_routine_mutation_tools(
+    server: MCPServer, open_session: SessionOpener, get_training: TrainingGetter
+) -> None:
     @server.tool(name="routine_update", description="Update a routine plan's name or notes.")
     def routine_update(
         routine_id: str,
@@ -276,13 +288,14 @@ def _register_plan_tools(
         with open_session() as db, _tool_errors():
             return _dump_routine_item(
                 get_training().add_routine_item(
-                    db,
-                    uuid.UUID(routine_id),
-                    RoutineItemCreate(**payload),
-                    source=SOURCE,
+                    db, uuid.UUID(routine_id), RoutineItemCreate(**payload), source=SOURCE
                 )
             )
 
+
+def _register_weekly_plan_tools(
+    server: MCPServer, open_session: SessionOpener, get_training: TrainingGetter
+) -> None:
     @server.tool(
         name="weekly_plan_get",
         description="Get the scheduled weekly workout plan for an ISO week (e.g. '2026-W43').",
@@ -317,10 +330,8 @@ def _register_plan_tools(
             return data
 
 
-def _register_recommendation_tools(
-    server: MCPServer,
-    open_session: Callable[[], contextlib.AbstractContextManager[Session]],
-    get_eir: Callable[[], EirPort],
+def _register_fasting_tools(
+    server: MCPServer, open_session: SessionOpener, get_eir: EirGetter
 ) -> None:
     @server.tool(
         name="fasting_recommendation_get",
@@ -350,6 +361,10 @@ def _register_recommendation_tools(
             )
             return rec.model_dump()
 
+
+def _register_workout_tools(
+    server: MCPServer, open_session: SessionOpener, get_eir: EirGetter
+) -> None:
     @server.tool(
         name="workout_recommendation_get",
         description="Get today's (or target date's) AI-synthesized workout recommendation, including routine name, readiness adaptation, target RIR, volume landmark, exercises, and Discord thread ID.",
@@ -379,10 +394,6 @@ def _register_recommendation_tools(
             return rec.model_dump()
 
 
-def _non_null_fields(values: dict[str, Any]) -> dict[str, Any]:
-    return {key: value for key, value in values.items() if value is not None}
-
-
 def build_mcp_server(container: KratosContainer | None = None) -> MCPServer:
     """Construct the MCP server and register all training and recommendation tools."""
     server = MCPServer(
@@ -409,15 +420,16 @@ def build_mcp_server(container: KratosContainer | None = None) -> MCPServer:
         finally:
             db.close()
 
-    _register_catalogue_tools(
-        server, _open_session, lambda: _require_container().training
-    )
-    _register_plan_tools(
-        server, _open_session, lambda: _require_container().training
-    )
-    _register_recommendation_tools(
-        server, _open_session, lambda: _require_container().eir
-    )
+    get_training = lambda: _require_container().training
+    get_eir = lambda: _require_container().eir
+    _register_exercise_read_tools(server, _open_session, get_training)
+    _register_exercise_create_tool(server, _open_session, get_training)
+    _register_exercise_update_tools(server, _open_session, get_training)
+    _register_routine_crud_tools(server, _open_session, get_training)
+    _register_routine_mutation_tools(server, _open_session, get_training)
+    _register_weekly_plan_tools(server, _open_session, get_training)
+    _register_fasting_tools(server, _open_session, get_eir)
+    _register_workout_tools(server, _open_session, get_eir)
     return server
 
 

@@ -246,6 +246,44 @@ def _find_matching_routine(db: Session, activity_name: str) -> Routine | None:
     )
 
 
+def _resolve_from_routine_rotation(
+    db: Session,
+    target_date: date,
+    iso_week_str: str,
+    plan: WeeklyPlan | None,
+) -> ScheduledDay:
+    routines = list(
+        db.scalars(
+            select(Routine)
+            .where(Routine.deleted_at.is_(None))
+            .options(selectinload(Routine.items).selectinload(RoutineItem.exercise))
+            .order_by(Routine.name)
+        )
+    )
+    if not routines:
+        return ScheduledDay(
+            target_date=target_date,
+            iso_week=iso_week_str,
+            weekly_plan=plan,
+            day_entry=None,
+            activity_type="rest",
+            activity_name=None,
+            routine=None,
+            source="unscheduled",
+        )
+    routine = routines[target_date.weekday() % len(routines)]
+    return ScheduledDay(
+        target_date=target_date,
+        iso_week=iso_week_str,
+        weekly_plan=plan,
+        day_entry=None,
+        activity_type="lift",
+        activity_name=routine.name,
+        routine=routine,
+        source="routine_rotation",
+    )
+
+
 def resolve_scheduled_day(
     db: Session,
     target_date: date,
@@ -258,53 +296,23 @@ def resolve_scheduled_day(
     plan = weekly_plan if weekly_plan is not None else get_weekly_plan(db, iso_week_str)
 
     day_entry = _match_day_entry(plan.days, target_date) if plan and plan.days else None
-    if day_entry is not None:
-        activity_name = day_entry.get("sessionName") or day_entry.get("activity")
-        activity_type = day_entry.get("type", "lift")
-        routine = (
-            _find_matching_routine(db, activity_name)
-            if activity_type == "lift" and activity_name
-            else None
-        )
-        return ScheduledDay(
-            target_date=target_date,
-            iso_week=iso_week_str,
-            weekly_plan=plan,
-            day_entry=day_entry,
-            activity_type=activity_type,
-            activity_name=activity_name,
-            routine=routine,
-            source="weekly_plan",
-        )
+    if day_entry is None:
+        return _resolve_from_routine_rotation(db, target_date, iso_week_str, plan)
 
-    routines = list(
-        db.scalars(
-            select(Routine)
-            .where(Routine.deleted_at.is_(None))
-            .options(selectinload(Routine.items).selectinload(RoutineItem.exercise))
-            .order_by(Routine.name)
-        )
+    activity_name = day_entry.get("sessionName") or day_entry.get("activity")
+    activity_type = day_entry.get("type", "lift")
+    routine = (
+        _find_matching_routine(db, activity_name)
+        if activity_type == "lift" and activity_name
+        else None
     )
-    if routines:
-        routine = routines[target_date.weekday() % len(routines)]
-        return ScheduledDay(
-            target_date=target_date,
-            iso_week=iso_week_str,
-            weekly_plan=plan,
-            day_entry=None,
-            activity_type="lift",
-            activity_name=routine.name,
-            routine=routine,
-            source="routine_rotation",
-        )
-
     return ScheduledDay(
         target_date=target_date,
         iso_week=iso_week_str,
         weekly_plan=plan,
-        day_entry=None,
-        activity_type="rest",
-        activity_name=None,
-        routine=None,
-        source="unscheduled",
+        day_entry=day_entry,
+        activity_type=activity_type,
+        activity_name=activity_name,
+        routine=routine,
+        source="weekly_plan",
     )

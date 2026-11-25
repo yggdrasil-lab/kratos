@@ -52,6 +52,27 @@ class KratosContainer:
             return lock
 
 
+def _default_muninn(settings_obj: Settings) -> MuninnPort:
+    return HttpMuninnAdapter(
+        MuninnConfig(
+            base_url=settings_obj.llm_base_url,
+            api_key=settings_obj.llm_api_key,
+            llm_model=settings_obj.llm_model,
+            jev_model=settings_obj.jev_model,
+        )
+    )
+
+
+def _default_discord(settings_obj: Settings) -> DiscordPort:
+    return HttpDiscordAdapter(
+        DiscordConfig(
+            bot_token=settings_obj.discord_bot_token,
+            health_channel_id=settings_obj.discord_health_channel_id,
+            user_id=settings_obj.discord_user_id,
+        )
+    )
+
+
 def build_container(
     settings_obj: Settings | None = None,
     *,
@@ -64,45 +85,19 @@ def build_container(
 ) -> KratosContainer:
     """Build a KratosContainer with production defaults or injected test adapters."""
     resolved_settings = settings_obj if settings_obj is not None else get_settings()
-    resolved_clock = clock if clock is not None else AucklandClockAdapter()
     resolved_eir = (
         eir
         if eir is not None
         else HttpEirAdapter(EirConfig(base_url=resolved_settings.eir_internal_url))
     )
-    resolved_muninn = (
-        muninn
-        if muninn is not None
-        else HttpMuninnAdapter(
-            MuninnConfig(
-                base_url=resolved_settings.llm_base_url,
-                api_key=resolved_settings.llm_api_key,
-                llm_model=resolved_settings.llm_model,
-                jev_model=resolved_settings.jev_model,
-            )
-        )
-    )
-    resolved_discord = (
-        discord
-        if discord is not None
-        else HttpDiscordAdapter(
-            DiscordConfig(
-                bot_token=resolved_settings.discord_bot_token,
-                health_channel_id=resolved_settings.discord_health_channel_id,
-                user_id=resolved_settings.discord_user_id,
-            )
-        )
-    )
-    resolved_session_factory = session_factory if session_factory is not None else SessionLocal
-    resolved_training = training if training is not None else TrainingCore(eir=resolved_eir)
     return KratosContainer(
         settings=resolved_settings,
-        clock=resolved_clock,
+        clock=clock if clock is not None else AucklandClockAdapter(),
         eir=resolved_eir,
-        muninn=resolved_muninn,
-        discord=resolved_discord,
-        session_factory=resolved_session_factory,
-        training=resolved_training,
+        muninn=muninn if muninn is not None else _default_muninn(resolved_settings),
+        discord=discord if discord is not None else _default_discord(resolved_settings),
+        session_factory=session_factory if session_factory is not None else SessionLocal,
+        training=training if training is not None else TrainingCore(eir=resolved_eir),
     )
 
 
