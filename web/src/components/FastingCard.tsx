@@ -55,6 +55,105 @@ const ADHERENCE_BADGE_MAP: Record<string, { label: string; variant: StatusBadgeV
   off_plan: { label: '🔴 Off-Plan', variant: 'error' },
 }
 
+function FastingHeaderActions({
+  hasAiHandler,
+  isCheckedInToday,
+  latestCheckIn,
+  onOpenAiModal,
+  onOpenCheckIn,
+}: {
+  hasAiHandler: boolean
+  isCheckedInToday: boolean
+  latestCheckIn?: FastingCheckIn
+  onOpenAiModal: () => void
+  onOpenCheckIn: () => void
+}) {
+  const adherenceBadge =
+    ADHERENCE_BADGE_MAP[latestCheckIn?.adherence ?? 'off_plan'] ?? ADHERENCE_BADGE_MAP.off_plan
+
+  return (
+    <div className="flex items-center gap-1.5 shrink-0">
+      {hasAiHandler && (
+        <Button
+          variant="outline"
+          size="xs"
+          icon={<span>⚡</span>}
+          onClick={onOpenAiModal}
+          title="Adapt protocol with AI sports physiology"
+          className="border-blue-500/40 text-blue-300"
+        >
+          Adapt
+        </Button>
+      )}
+      {isCheckedInToday && latestCheckIn ? (
+        <StatusBadge
+          label={adherenceBadge.label}
+          variant={adherenceBadge.variant}
+          size="sm"
+          showDot={false}
+          className="font-semibold"
+        />
+      ) : (
+        <Button
+          variant="outline"
+          size="xs"
+          onClick={onOpenCheckIn}
+          className="border-blue-500/50 text-sky-400"
+        >
+          Log Fast
+        </Button>
+      )}
+    </div>
+  )
+}
+
+function FastingStatusBadges({
+  protocol,
+  hasRecommendation,
+  isGenerating,
+}: {
+  protocol: ResolvedFastingProtocol
+  hasRecommendation: boolean
+  isGenerating?: boolean
+}) {
+  if (!hasRecommendation && !isGenerating && !protocol.isLlmGenerated) return null
+  const recoveryBadge =
+    RECOVERY_BADGE_MAP[protocol.recoveryStatus ?? 'optimal'] ?? RECOVERY_BADGE_MAP.optimal
+
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      {hasRecommendation && (
+        <StatusBadge
+          label={recoveryBadge.label}
+          variant={recoveryBadge.variant}
+          size="xs"
+          showDot={false}
+          className="rounded-md font-semibold"
+        />
+      )}
+      {isGenerating && (
+        <StatusBadge
+          label="⚡ Synthesizing AI Protocol..."
+          variant="busy"
+          size="xs"
+          showDot={false}
+          isPulsing
+          className="rounded-md font-semibold"
+        />
+      )}
+      {protocol.isLlmGenerated && (
+        <StatusBadge
+          label="⚡ AI Synthesized"
+          variant="info"
+          size="xs"
+          showDot={false}
+          className="rounded-md font-semibold"
+        />
+      )}
+    </div>
+  )
+}
+
 function FastingCardHeader({
   protocol,
   hasRecommendation,
@@ -74,11 +173,6 @@ function FastingCardHeader({
   onOpenAiModal: () => void
   onOpenCheckIn: () => void
 }) {
-  const recoveryBadge =
-    RECOVERY_BADGE_MAP[protocol.recoveryStatus ?? 'optimal'] ?? RECOVERY_BADGE_MAP.optimal
-  const adherenceBadge =
-    ADHERENCE_BADGE_MAP[latestCheckIn?.adherence ?? 'off_plan'] ?? ADHERENCE_BADGE_MAP.off_plan
-
   return (
     <div className="mb-3 space-y-2">
       <SectionHeader
@@ -88,73 +182,20 @@ function FastingCardHeader({
         variant="sky"
         size="md"
         actions={
-          <div className="flex items-center gap-1.5 shrink-0">
-            {hasAiHandler && (
-              <Button
-                variant="outline"
-                size="xs"
-                icon={<span>⚡</span>}
-                onClick={onOpenAiModal}
-                title="Adapt protocol with AI sports physiology"
-                className="border-blue-500/40 text-blue-300"
-              >
-                Adapt
-              </Button>
-            )}
-            {isCheckedInToday && latestCheckIn ? (
-              <StatusBadge
-                label={adherenceBadge.label}
-                variant={adherenceBadge.variant}
-                size="sm"
-                showDot={false}
-                className="font-semibold"
-              />
-            ) : (
-              <Button
-                variant="outline"
-                size="xs"
-                onClick={onOpenCheckIn}
-                className="border-blue-500/50 text-sky-400"
-              >
-                Log Fast
-              </Button>
-            )}
-          </div>
+          <FastingHeaderActions
+            hasAiHandler={hasAiHandler}
+            isCheckedInToday={isCheckedInToday}
+            latestCheckIn={latestCheckIn}
+            onOpenAiModal={onOpenAiModal}
+            onOpenCheckIn={onOpenCheckIn}
+          />
         }
       />
-
-      {(hasRecommendation || isGenerating || protocol.isLlmGenerated) && (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {hasRecommendation && (
-            <StatusBadge
-              label={recoveryBadge.label}
-              variant={recoveryBadge.variant}
-              size="xs"
-              showDot={false}
-              className="rounded-md font-semibold"
-            />
-          )}
-          {isGenerating && (
-            <StatusBadge
-              label="⚡ Synthesizing AI Protocol..."
-              variant="busy"
-              size="xs"
-              showDot={false}
-              isPulsing
-              className="rounded-md font-semibold"
-            />
-          )}
-          {protocol.isLlmGenerated && (
-            <StatusBadge
-              label="⚡ AI Synthesized"
-              variant="info"
-              size="xs"
-              showDot={false}
-              className="rounded-md font-semibold"
-            />
-          )}
-        </div>
-      )}
+      <FastingStatusBadges
+        protocol={protocol}
+        hasRecommendation={hasRecommendation}
+        isGenerating={isGenerating}
+      />
     </div>
   )
 }

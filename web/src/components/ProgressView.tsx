@@ -154,6 +154,61 @@ function computeWeightProgress(biometrics: DailyBiometrics | null) {
   return { currentWeight, lostSoFar, progressPercent, nextMilestone }
 }
 
+function RecentWorkoutsSection({
+  recentSessions,
+  exercises,
+  routines,
+  onDeleteSession,
+  onConfirmSession,
+  onEditSession,
+  onSplitSession,
+  onLogSets,
+}: {
+  recentSessions: SessionPayload[]
+  exercises: Exercise[]
+  routines: Routine[]
+  onDeleteSession: (id: string) => Promise<void> | void
+  onConfirmSession: (id: string) => Promise<void> | void
+  onEditSession: (session: SessionPayload) => void
+  onSplitSession?: (session: SessionPayload) => void
+  onLogSets?: (session: SessionPayload) => void
+}) {
+  return (
+    <div className="mb-4">
+      <SectionHeader
+        title={`Last 7 Days Workouts (${recentSessions.length})`}
+        icon={<span className="text-base leading-none">🏋️</span>}
+        variant="blue"
+        size="md"
+        className="mb-3"
+      />
+      {recentSessions.length === 0 ? (
+        <EmptyState
+          variant="glass"
+          title="No workouts logged in the last 7 days"
+          description='Tap "Today" to start your next session!'
+        />
+      ) : (
+        <div className="flex flex-col gap-3">
+          {recentSessions.map((s) => (
+            <ProgressSessionCard
+              key={s.id}
+              session={s}
+              exercises={exercises}
+              routines={routines}
+              onDeleteSession={onDeleteSession}
+              onConfirmSession={onConfirmSession}
+              onEditSession={onEditSession}
+              onSplitSession={onSplitSession}
+              onLogSets={onLogSets}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /**
  * Progress and Momentum tab displaying weight milestone trajectory, 7-day activity
  * telemetry stream, fasting adherence logs, and searchable older session archive.
@@ -201,38 +256,16 @@ export function ProgressView({
         className="mb-4"
       />
 
-      <div className="mb-4">
-        <SectionHeader
-          title={`Last 7 Days Workouts (${recentSessions.length})`}
-          icon={<span className="text-base leading-none">🏋️</span>}
-          variant="blue"
-          size="md"
-          className="mb-3"
-        />
-        {recentSessions.length === 0 ? (
-          <EmptyState
-            variant="glass"
-            title="No workouts logged in the last 7 days"
-            description='Tap "Today" to start your next session!'
-          />
-        ) : (
-          <div className="flex flex-col gap-3">
-            {recentSessions.map((s) => (
-              <ProgressSessionCard
-                key={s.id}
-                session={s}
-                exercises={exercises}
-                routines={routines}
-                onDeleteSession={onDeleteSession}
-                onConfirmSession={onConfirmSession}
-                onEditSession={onEditSession}
-                onSplitSession={onSplitSession}
-                onLogSets={onLogSets}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+      <RecentWorkoutsSection
+        recentSessions={recentSessions}
+        exercises={exercises}
+        routines={routines}
+        onDeleteSession={onDeleteSession}
+        onConfirmSession={onConfirmSession}
+        onEditSession={onEditSession}
+        onSplitSession={onSplitSession}
+        onLogSets={onLogSets}
+      />
 
       <FastingHistorySection fastingLogs={fastingLogs} />
 

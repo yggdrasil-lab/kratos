@@ -221,6 +221,82 @@ function RoutineExercisePreview({
   )
 }
 
+function TodayTrainingStatusRow({
+  isLiftPendingAfterClass,
+  isGeneratingWorkout,
+  isLlmGenerated,
+}: {
+  isLiftPendingAfterClass: boolean
+  isGeneratingWorkout?: boolean
+  isLlmGenerated?: boolean
+}) {
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      <span className="text-xs text-sky-400 font-semibold uppercase">Today&apos;s Training</span>
+      {isLiftPendingAfterClass && (
+        <StatusBadge
+          label="Pending"
+          variant="warning"
+          size="xs"
+          showDot={false}
+          className="rounded-md font-semibold"
+        />
+      )}
+      {isGeneratingWorkout && (
+        <StatusBadge
+          label="⚡ Synthesizing AI Training..."
+          variant="busy"
+          size="xs"
+          showDot={false}
+          isPulsing
+          className="rounded-md font-semibold"
+        />
+      )}
+      {isLlmGenerated && (
+        <StatusBadge
+          label="⚡ AI Autoregulated"
+          variant="info"
+          size="xs"
+          showDot={false}
+          className="rounded-md font-semibold"
+        />
+      )}
+    </div>
+  )
+}
+
+function TodayTrainingHeaderActions({
+  hasAiHandler,
+  showRoutinePicker,
+  onOpenAiModal,
+  onTogglePicker,
+}: {
+  hasAiHandler: boolean
+  showRoutinePicker: boolean
+  onOpenAiModal: () => void
+  onTogglePicker: () => void
+}) {
+  return (
+    <div className="flex items-center gap-1.5 shrink-0">
+      {hasAiHandler && (
+        <Button
+          variant="outline"
+          size="xs"
+          icon={<span>⚡</span>}
+          onClick={onOpenAiModal}
+          title="Autoregulate training with AI sports physiology"
+          className="border-blue-500/40 text-blue-300"
+        >
+          Adapt
+        </Button>
+      )}
+      <Button variant="secondary" size="xs" onClick={onTogglePicker}>
+        {showRoutinePicker ? 'Close' : 'Swap Split'}
+      </Button>
+    </div>
+  )
+}
+
 function TodayTrainingHeader({
   dayHeadline,
   daySubtitle,
@@ -244,38 +320,11 @@ function TodayTrainingHeader({
 }) {
   return (
     <div className="mb-3 space-y-1.5">
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <span className="text-xs text-sky-400 font-semibold uppercase">Today&apos;s Training</span>
-        {isLiftPendingAfterClass && (
-          <StatusBadge
-            label="Pending"
-            variant="warning"
-            size="xs"
-            showDot={false}
-            className="rounded-md font-semibold"
-          />
-        )}
-        {isGeneratingWorkout && (
-          <StatusBadge
-            label="⚡ Synthesizing AI Training..."
-            variant="busy"
-            size="xs"
-            showDot={false}
-            isPulsing
-            className="rounded-md font-semibold"
-          />
-        )}
-        {workoutRecommendation?.is_llm_generated && (
-          <StatusBadge
-            label="⚡ AI Autoregulated"
-            variant="info"
-            size="xs"
-            showDot={false}
-            className="rounded-md font-semibold"
-          />
-        )}
-      </div>
-
+      <TodayTrainingStatusRow
+        isLiftPendingAfterClass={isLiftPendingAfterClass}
+        isGeneratingWorkout={isGeneratingWorkout}
+        isLlmGenerated={workoutRecommendation?.is_llm_generated}
+      />
       <SectionHeader
         title={dayHeadline}
         subtitle={daySubtitle}
@@ -283,23 +332,12 @@ function TodayTrainingHeader({
         size="md"
         variant="sky"
         actions={
-          <div className="flex items-center gap-1.5 shrink-0">
-            {hasAiHandler && (
-              <Button
-                variant="outline"
-                size="xs"
-                icon={<span>⚡</span>}
-                onClick={onOpenAiModal}
-                title="Autoregulate training with AI sports physiology"
-                className="border-blue-500/40 text-blue-300"
-              >
-                Adapt
-              </Button>
-            )}
-            <Button variant="secondary" size="xs" onClick={onTogglePicker}>
-              {showRoutinePicker ? 'Close' : 'Swap Split'}
-            </Button>
-          </div>
+          <TodayTrainingHeaderActions
+            hasAiHandler={hasAiHandler}
+            showRoutinePicker={showRoutinePicker}
+            onOpenAiModal={onOpenAiModal}
+            onTogglePicker={onTogglePicker}
+          />
         }
       />
     </div>

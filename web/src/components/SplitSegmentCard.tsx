@@ -291,6 +291,69 @@ function SegmentMetricsPreview({
   )
 }
 
+function SegmentCardHeader({
+  index,
+  startedAt,
+  endedAt,
+  canRemove,
+  onRemove,
+}: {
+  index: number
+  startedAt: string
+  endedAt: string
+  canRemove: boolean
+  onRemove: () => void
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-bold text-slate-100">Segment {index + 1}</span>
+        <StatusBadge
+          label={computeDurationBadge(startedAt, endedAt)}
+          variant="info"
+          size="xs"
+          showDot={false}
+          className="rounded-md font-semibold"
+        />
+      </div>
+      {canRemove && (
+        <Button variant="ghost" size="xs" onClick={onRemove}>
+          Remove
+        </Button>
+      )}
+    </div>
+  )
+}
+
+function SegmentModeFields({
+  index,
+  segment,
+  routines,
+  recommendedName,
+  onUpdate,
+}: {
+  index: number
+  segment: SplitSegmentDraft
+  routines: Routine[]
+  recommendedName: string
+  onUpdate: (next: SplitSegmentDraft) => void
+}) {
+  if (segment.mode === 'class') {
+    return <ClassModeFields index={index} segment={segment} onUpdate={onUpdate} />
+  }
+  if (segment.mode === 'cardio') {
+    return <CardioModeFields index={index} segment={segment} onUpdate={onUpdate} />
+  }
+  return (
+    <RoutineModeFields
+      segment={segment}
+      routines={routines}
+      recommendedName={recommendedName}
+      onUpdate={onUpdate}
+    />
+  )
+}
+
 /**
  * Renders one gap-aware segment row inside SplitSessionModal.
  */
@@ -317,24 +380,13 @@ export function SplitSegmentCard({
       className="bg-background/60 space-y-3"
       data-testid={`split-segment-${index + 1}`}
     >
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-bold text-slate-100">Segment {index + 1}</span>
-          <StatusBadge
-            label={computeDurationBadge(segment.startedAt, segment.endedAt)}
-            variant="info"
-            size="xs"
-            showDot={false}
-            className="rounded-md font-semibold"
-          />
-        </div>
-        {canRemove && (
-          <Button variant="ghost" size="xs" onClick={onRemove}>
-            Remove
-          </Button>
-        )}
-      </div>
-
+      <SegmentCardHeader
+        index={index}
+        startedAt={segment.startedAt}
+        endedAt={segment.endedAt}
+        canRemove={canRemove}
+        onRemove={onRemove}
+      />
       <SegmentTimeInputs
         index={index}
         segment={segment}
@@ -342,7 +394,6 @@ export function SplitSegmentCard({
         parentEndIso={parentEndIso}
         onUpdate={onUpdate}
       />
-
       <SegmentedControl
         options={MODE_OPTIONS}
         value={segment.mode}
@@ -354,20 +405,13 @@ export function SplitSegmentCard({
         fullWidth
         idPrefix={`seg-${index + 1}-mode`}
       />
-
-      {segment.mode === 'class' ? (
-        <ClassModeFields index={index} segment={segment} onUpdate={onUpdate} />
-      ) : segment.mode === 'cardio' ? (
-        <CardioModeFields index={index} segment={segment} onUpdate={onUpdate} />
-      ) : (
-        <RoutineModeFields
-          segment={segment}
-          routines={routines}
-          recommendedName={recommendedName}
-          onUpdate={onUpdate}
-        />
-      )}
-
+      <SegmentModeFields
+        index={index}
+        segment={segment}
+        routines={routines}
+        recommendedName={recommendedName}
+        onUpdate={onUpdate}
+      />
       <SegmentMetricsPreview
         metrics={metrics}
         metricsLoading={metricsLoading}
