@@ -237,3 +237,20 @@ def test_session_upsert_persists_item_extra_and_handles_missing_routine(client) 
     assert updated.status_code == 200
     assert updated.json()["routine_id"] == routine_id
 
+
+def test_cross_origin_request_omits_cors_headers(client) -> None:
+    """Same-origin API behind Authentik does not emit CORS allow-origin headers."""
+    response = client.get("/health", headers={"Origin": "https://evil.example"})
+    assert response.status_code == 200
+    assert "access-control-allow-origin" not in response.headers
+
+    preflight = client.options(
+        "/health",
+        headers={
+            "Origin": "https://evil.example",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+    assert "access-control-allow-origin" not in preflight.headers
+
+
