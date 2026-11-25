@@ -130,6 +130,7 @@ class InMemoryMuninnAdapter:
 
     json_responses: list[dict[str, Any]] = field(default_factory=list)
     jev_verdicts: list[str] = field(default_factory=list)
+    default_jev_verdict: str = ""
     raise_on_synthesize: Exception | None = None
     raise_on_decide: Exception | None = None
     synthesize_calls: list[dict[str, Any]] = field(default_factory=list)
@@ -177,7 +178,11 @@ class InMemoryMuninnAdapter:
         )
         if self.raise_on_decide is not None:
             raise self.raise_on_decide
-        verdict = self.jev_verdicts.pop(0) if self.jev_verdicts else "MAINTENANCE"
+        verdict = (
+            self.jev_verdicts.pop(0)
+            if self.jev_verdicts
+            else self.default_jev_verdict
+        )
         return JevDecisionResult(
             verdict=verdict,
             model=model or "jev-decision",
@@ -191,6 +196,8 @@ class InMemoryDiscordAdapter:
 
     user_id: str | None = "1001"
     enabled: bool = True
+    raise_on_create: Exception | None = None
+    raise_on_reply: Exception | None = None
     created_threads: list[dict[str, Any]] = field(default_factory=list)
     replies: list[dict[str, Any]] = field(default_factory=list)
     _counter: int = 1
@@ -202,6 +209,8 @@ class InMemoryDiscordAdapter:
         *,
         channel_id: str | None = None,
     ) -> str | None:
+        if self.raise_on_create is not None:
+            raise self.raise_on_create
         if not self.enabled:
             return None
         normalized = title[:100].strip()
@@ -221,6 +230,8 @@ class InMemoryDiscordAdapter:
         return thread_id
 
     def post_thread_reply(self, thread_id: str, content: str) -> bool:
+        if self.raise_on_reply is not None:
+            raise self.raise_on_reply
         if not self.enabled or not thread_id:
             return False
         self.replies.append({"thread_id": thread_id, "content": content})

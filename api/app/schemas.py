@@ -454,4 +454,28 @@ class WorkoutSynthesizeRequest(BaseModel):
     custom_context: str | None = None
 
 
+class FastingCheckInPayload(BaseModel):
+    id: str
+    date: str
+    target_window: str
+    adherence: str
+    energy: str = "normal"
+    headache: str = "none"
+    notes: str | None = None
+    logged_at: str
+
+
+class WorkoutFeedbackPayload(BaseModel):
+    date: str
+    routine_name: str | None = None
+    duration_minutes: int | None = None
+    total_volume_kg: float | None = None
+    completed_sets: int | None = None
+    effort_rating: str
+    tags: list[str] = Field(default_factory=list)
+    notes: str | None = None
+    logged_at: str | None = None
+
+
+
 
