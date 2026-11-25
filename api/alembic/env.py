@@ -10,7 +10,7 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from app import models, views  # noqa: F401  — imported so metadata is populated
+from app import models, views  # noqa: F401  - imported so metadata is populated
 from app.config import settings
 from app.db import Base
 

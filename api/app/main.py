@@ -1,6 +1,6 @@
 """Kratos API entrypoint.
 
-Serves the three domain groups — catalogue, plan, log — plus the derived reads.
+Serves the three domain groups (catalogue, plan, log) plus the derived reads.
 The OpenAPI schema at /openapi.json is the contract the TypeScript client is
 generated from, so response models are declared on every route.
 """
@@ -14,18 +14,13 @@ from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app import __version__
-from app.config import settings
+from app.container import KratosContainer, build_container
 from app.db import get_db
+from app.ports.eir import EirUpstreamError
 from app.routers import biometrics, catalogue, client_errors, log, plan, stats
 from app.routers.mcp import install_mcp
 from app.schemas import HealthRead
-from app.services.eir_client import EirUpstreamError
-
-app = FastAPI(
-    title="Kratos API",
-    version=__version__,
-    summary="Workout catalogue, plans, and logged sessions on Postgres.",
-)
+from app.services.eir_client import EirUpstreamError as LegacyEirUpstreamError
 
 
 class NoCacheMiddleware:
@@ -56,41 +51,53 @@ class NoCacheMiddleware:
         await self.app(scope, receive, send_with_no_cache)
 
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origin_list,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-app.add_middleware(NoCacheMiddleware)
-
-app.include_router(catalogue.router)
-app.include_router(plan.router)
-app.include_router(plan.weekly_plan_router)
-app.include_router(log.router)
-app.include_router(stats.router)
-app.include_router(biometrics.router)
-app.include_router(client_errors.router)
-app.include_router(client_errors.router, prefix="/api")
-
-# The MCP endpoint at /mcp is not an APIRouter: it registers the SDK's own
-# streamable-HTTP routes on this app and adds its bearer-token guard.
-install_mcp(app)
-
-
-@app.exception_handler(EirUpstreamError)
-def handle_eir_upstream_error(_request: Request, exc: EirUpstreamError) -> JSONResponse:
+def _handle_eir_upstream_error(_request: Request, exc: Exception) -> JSONResponse:
     """Fail loudly with HTTP 502 when a required Eir upstream call fails."""
     return JSONResponse(status_code=502, content={"detail": str(exc)})
 
 
-@app.get("/health", response_model=HealthRead, tags=["meta"])
-def health(db: Session = Depends(get_db)) -> HealthRead:
-    """Liveness plus a database probe — a 200 with `unreachable` means the API is
-    up but the schema or the connection is not, which is the failure worth seeing."""
-    try:
-        db.execute(text("select 1"))
-        return HealthRead(status="ok", database="ok")
-    except Exception:
-        return HealthRead(status="ok", database="unreachable")
+def _register_routes(fastapi_app: FastAPI) -> None:
+    fastapi_app.include_router(catalogue.router)
+    fastapi_app.include_router(plan.router)
+    fastapi_app.include_router(plan.weekly_plan_router)
+    fastapi_app.include_router(log.router)
+    fastapi_app.include_router(stats.router)
+    fastapi_app.include_router(biometrics.router)
+    fastapi_app.include_router(client_errors.router)
+    fastapi_app.include_router(client_errors.router, prefix="/api")
+    install_mcp(fastapi_app)
+
+    @fastapi_app.get("/health", response_model=HealthRead, tags=["meta"])
+    def health(db: Session = Depends(get_db)) -> HealthRead:
+        """Liveness plus a database probe: 200 with `unreachable` signals a DB outage."""
+        try:
+            db.execute(text("select 1"))
+            return HealthRead(status="ok", database="ok")
+        except Exception:
+            return HealthRead(status="ok", database="unreachable")
+
+
+def create_app(container: KratosContainer | None = None) -> FastAPI:
+    """Create and configure the Kratos FastAPI application from a container."""
+    resolved_container = container if container is not None else build_container()
+    fastapi_app = FastAPI(
+        title="Kratos API",
+        version=__version__,
+        summary="Workout catalogue, plans, and logged sessions on Postgres.",
+    )
+    fastapi_app.state.container = resolved_container
+    fastapi_app.add_middleware(
+        CORSMiddleware,
+        allow_origins=resolved_container.settings.cors_origin_list,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    fastapi_app.add_middleware(NoCacheMiddleware)
+    fastapi_app.add_exception_handler(EirUpstreamError, _handle_eir_upstream_error)
+    fastapi_app.add_exception_handler(LegacyEirUpstreamError, _handle_eir_upstream_error)
+    _register_routes(fastapi_app)
+    return fastapi_app
+
+
+app = create_app()

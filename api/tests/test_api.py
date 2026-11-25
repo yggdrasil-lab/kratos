@@ -74,7 +74,7 @@ def test_routine_with_ordered_items(client) -> None:
 def test_session_upsert_is_idempotent(client) -> None:
     """The outbox flushes the same session twice; the second write must not duplicate.
 
-    A client-generated ID is what makes this an upsert rather than an insert —
+    A client-generated ID is what makes this an upsert rather than an insert:
     that is rule 5 of the schema, and it is what the offline-first design rests on.
     """
     exercise_id = client.post("/exercises", json={"name": "Overhead Press"}).json()["id"]
@@ -141,7 +141,7 @@ def test_duplicate_exercise_name_is_a_clean_conflict(client) -> None:
     """A second exercise with the same name is rejected, not a 500.
 
     The spec requires `exercise_create` to reject a duplicate by name rather
-    than making a second one, and a duplicate name "must fail loudly" — an
+    than making a second one, and a duplicate name "must fail loudly": an
     unhandled IntegrityError is a 500, which is neither.
     """
     first = client.post("/exercises", json={"name": "Zercher Squat"})

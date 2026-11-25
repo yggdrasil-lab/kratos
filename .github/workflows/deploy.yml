@@ -1,12 +1,66 @@
 name: Deploy Kratos
 
 on:
+  pull_request:
+    branches: ["main"]
   push:
     branches: ["main"]
   workflow_dispatch:
 
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: kratos
+          POSTGRES_PASSWORD: kratos
+          POSTGRES_DB: kratos
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U kratos -d kratos"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify Zero Em/En Dashes
+        run: |
+          python3 -c "import subprocess, sys; files = subprocess.check_output(['git', 'ls-files'], text=True).splitlines(); hits = [f'{f}:{i}' for f in files if f.endswith(('.py', '.ts', '.tsx', '.yml', '.yaml', '.md', '.txt')) and not f.startswith(('web/node_modules/', 'web/dist/')) and f != 'web/package-lock.json' for i, line in enumerate(open(f, encoding='utf-8', errors='ignore'), 1) if '\u2014' in line or '\u2013' in line]; print('\n'.join(hits)) if hits else print('OK: zero em/en dashes'); sys.exit(1 if hits else 0)"
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python Test Dependencies
+        run: pip install -r api/requirements-dev.txt
+
+      - name: Run Backend Tests
+        working-directory: api
+        env:
+          KRATOS_TEST_DATABASE_URL: postgresql+psycopg://kratos:kratos@localhost:5432/kratos
+        run: python -m pytest
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build Frontend
+        working-directory: web
+        run: npm ci && npm run build
+
   deploy:
+    needs: verify
+    if: github.event_name != 'pull_request'
     runs-on: [self-hosted, gaia]
 
     steps:

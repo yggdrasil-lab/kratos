@@ -1,4 +1,4 @@
-"""Pydantic schemas — the request and response shapes, and the OpenAPI contract."""
+"""Pydantic schemas: the request and response shapes, and the OpenAPI contract."""
 
 import uuid
 from datetime import date, datetime, timezone

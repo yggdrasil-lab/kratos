@@ -1,4 +1,4 @@
-"""The derived read models — volume, estimated 1RM, and last performance.
+"""The derived read models: volume, estimated 1RM, and last performance.
 
 These are views in the database, not columns, because the vault's hand-kept
 versions of the same numbers have already drifted.
@@ -54,5 +54,5 @@ def list_volume(
 
 @router.get("/last", response_model=list[ExerciseLastRead])
 def list_last(db: Session = Depends(get_db)) -> list[VExerciseLast]:
-    """Last performance per exercise — replaces the hand-typed frontmatter keys."""
+    """Last performance per exercise: replaces the hand-typed frontmatter keys."""
     return list(db.scalars(select(VExerciseLast).order_by(VExerciseLast.exercise_name)))

@@ -108,7 +108,7 @@ def test_e1rm_matches_the_vault_pr_tables(
 
 
 def test_e1rm_excludes_non_weight_tracking(db: Session, exercises) -> None:
-    """A 40-minute plank has no 1RM — the view filters it out, not the caller."""
+    """A 40-minute plank has no 1RM: the view filters it out, not the caller."""
     started = dt.datetime(2026, 4, 2, 9, 0, tzinfo=dt.timezone.utc)
     _session(db, started, (exercises["plank"], [{"duration_s": 2400}]))
     assert db.execute(text("select count(*) from v_e1rm")).scalar_one() == 0
