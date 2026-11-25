@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { EmptyState, Modal, SearchInput } from '@yggdrasil-lab/ui'
+import { EmptyState, Modal, SearchInput, SelectableCard } from '@yggdrasil-lab/ui'
 import type { Exercise } from '../types'
 
 interface ExercisePickerModalProps {
@@ -68,18 +68,15 @@ export function ExercisePickerModal({
         ) : (
           <ul className="exercise-list">
             {filteredExercises.map((exercise) => (
-              <li
-                key={exercise.id}
-                className="exercise-item"
-                onClick={() => handleSelect(exercise)}
-              >
-                <div>
-                  <div className="font-semibold text-sm text-slate-100">{exercise.name}</div>
-                  <div className="text-xs text-slate-400">
-                    {exercise.primary_muscles.join(', ')}
-                  </div>
-                </div>
-                <span className="text-sky-400 font-bold text-lg">+</span>
+              <li key={exercise.id}>
+                <SelectableCard
+                  className="exercise-item"
+                  title={exercise.name}
+                  subtitle={exercise.primary_muscles.join(', ')}
+                  badge={<span className="text-sky-400 font-bold text-lg">+</span>}
+                  variant="blue"
+                  onClick={() => handleSelect(exercise)}
+                />
               </li>
             ))}
           </ul>

@@ -43,7 +43,7 @@ function SplitModalFooter({
   onSubmit: (logSetsAfter: boolean) => void
 }) {
   return (
-    <div className="flex items-center justify-end gap-2 flex-wrap pt-3 border-t border-border">
+    <div className="flex items-center justify-end gap-2 flex-wrap">
       <Button variant="secondary" size="sm" onClick={onClose} disabled={isSubmitting}>
         Cancel
       </Button>
@@ -156,7 +156,20 @@ export function SplitSessionModal({
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Split Workout Session">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Split Workout Session"
+      footer={
+        <SplitModalFooter
+          hasRoutineSegment={hasRoutineSegment}
+          isSubmitting={isSubmitting}
+          hasValidationError={Boolean(validationError)}
+          onClose={onClose}
+          onSubmit={(logSetsAfter) => void submitSplit(logSetsAfter)}
+        />
+      }
+    >
       <div className="space-y-4">
         <SplitTimelineChart
           bins={preview.timeline?.bins ?? []}
@@ -182,13 +195,6 @@ export function SplitSessionModal({
             + Add Segment ({segments.length}/4)
           </Button>
         )}
-        <SplitModalFooter
-          hasRoutineSegment={hasRoutineSegment}
-          isSubmitting={isSubmitting}
-          hasValidationError={Boolean(validationError)}
-          onClose={onClose}
-          onSubmit={(logSetsAfter) => void submitSplit(logSetsAfter)}
-        />
       </div>
     </Modal>
   )

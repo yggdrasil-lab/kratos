@@ -1,4 +1,4 @@
-import { Button } from '@yggdrasil-lab/ui'
+import { AlertBanner, Button, EmptyState, LoadingState, StatusBadge } from '@yggdrasil-lab/ui'
 import type { SuggestedSplitPoint, WorkoutTimelineBin } from '../types'
 import { formatIsoToLocalHHMM } from '../utils/splitSession'
 
@@ -120,27 +120,36 @@ export function SplitTimelineChart({
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <span className="text-xs font-semibold text-slate-200">5-Min HR &amp; Step Timeline</span>
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[11px] px-2 py-1 rounded-md bg-sky-500/20 text-sky-300 border border-sky-500/30 font-semibold">
-            ⌚ Active Watch ({activeWatchBins})
-          </span>
-          <span className="text-[11px] px-2 py-1 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/25 font-medium">
-            Passive HR
-          </span>
+          <StatusBadge
+            label={`⌚ Active Watch (${activeWatchBins})`}
+            variant="info"
+            size="xs"
+            showDot={false}
+            className="rounded-md font-semibold"
+          />
+          <StatusBadge
+            label="Passive HR"
+            variant="warning"
+            size="xs"
+            showDot={false}
+            className="rounded-md font-medium"
+          />
         </div>
       </div>
 
       {isLoading ? (
-        <div className="text-xs text-slate-400 py-4 text-center animate-pulse">
-          Loading Eir heart rate and step bins...
-        </div>
+        <LoadingState label="Loading Eir heart rate and step bins..." variant="blue" className="py-4" />
       ) : errorMessage ? (
-        <div className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/25 rounded-xl px-3 py-2">
+        <AlertBanner variant="warning">
           Timeline preview unavailable: {errorMessage}
-        </div>
+        </AlertBanner>
       ) : bins.length === 0 ? (
-        <div className="text-xs text-slate-400 py-3 text-center">
-          No 5-minute telemetry bins found for this window. Adjust times manually below.
-        </div>
+        <EmptyState
+          variant="dashed"
+          title="No 5-minute telemetry bins found"
+          description="Adjust times manually below."
+          className="p-4"
+        />
       ) : (
         <TimelineBinsBar bins={bins} />
       )}

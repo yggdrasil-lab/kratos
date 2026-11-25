@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Modal, OptionCardGroup, Button } from '@yggdrasil-lab/ui'
+import { Button, FormField, Modal, OptionCardGroup, TextInput } from '@yggdrasil-lab/ui'
 import type { OptionCardItem } from '@yggdrasil-lab/ui'
 import type { FastingCheckIn } from '../types'
 
@@ -69,6 +69,16 @@ export function FastingCheckInModal({
       onClose={onClose}
       title="Fasting Check-In"
       subtitle={`Target: ${targetWindow} for ${date}`}
+      footer={
+        <div className="flex gap-2.5 justify-end">
+          <Button variant="secondary" size="md" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="blue" size="md" onClick={handleSave}>
+            Save Check-In
+          </Button>
+        </div>
+      }
     >
       <div className="space-y-4">
         <OptionCardGroup
@@ -78,24 +88,16 @@ export function FastingCheckInModal({
           onChange={setAdherence}
         />
 
-        <div>
-          <input
+        <FormField label="Notes (optional)" htmlFor="fasting-checkin-notes">
+          <TextInput
+            id="fasting-checkin-notes"
             type="text"
+            variant="blue"
             placeholder="Notes (e.g. felt hungry at 3pm, drank electrolytes)..."
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-border text-base sm:text-xs text-slate-100 placeholder-slate-500"
           />
-        </div>
-
-        <div className="flex gap-2.5 justify-end pt-1">
-          <Button variant="secondary" size="md" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant="blue" size="md" onClick={handleSave}>
-            Save Check-In
-          </Button>
-        </div>
+        </FormField>
       </div>
     </Modal>
   )

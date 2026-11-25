@@ -54,7 +54,7 @@ test.describe('Offline and Persistence (IndexedDB)', () => {
     await page.getByRole('button', { name: 'Save and Finish' }).click()
 
     // Should indicate pending / offline in header badge
-    await expect(page.locator('.status-badge')).toBeVisible()
+    await expect(page.locator('header .status-badge')).toBeVisible()
     await expect(page.locator('header')).toContainText(/pending|Offline|queued/i)
   })
 

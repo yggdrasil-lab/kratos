@@ -5,6 +5,8 @@ import {
   GlassCard,
   NumericKeypadModal,
   RestTimerBar,
+  SectionHeader,
+  StatusBadge,
   useRestTimer,
 } from '@yggdrasil-lab/ui'
 import type { Exercise, SessionItemPayload, SessionPayload, SetEntry } from '../types'
@@ -113,9 +115,13 @@ function ExerciseItemHeader({
       <div className="flex items-center gap-2 flex-wrap">
         <h3 className="text-lg font-bold text-slate-100 m-0">{exLabel}</h3>
         {isPerHand && (
-          <span className="text-[11px] px-2 py-0.5 rounded-md font-semibold bg-purple-500/15 text-purple-300">
-            per hand
-          </span>
+          <StatusBadge
+            label="per hand"
+            variant="purple"
+            size="xs"
+            showDot={false}
+            className="rounded-md font-semibold"
+          />
         )}
       </div>
       <Button variant="danger" size="xs" onClick={onRemove} title="Remove Exercise">
@@ -215,27 +221,30 @@ function ActiveWorkoutHeader({
   onDiscard: () => void
 }) {
   return (
-    <div className="flex items-center justify-between gap-2 mb-4">
-      <div>
-        <h2 className="text-xl font-bold m-0 text-slate-100">
-          {(session.extra?.routine_name as string) || 'Current Workout'}
-        </h2>
-        {isRetroactive ? (
-          <span
-            className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30 mt-1"
-            data-testid="retroactive-log-badge"
-          >
-            Retroactive Log - {formatTimeRangeLabel(session.started_at, session.ended_at)}
-          </span>
-        ) : (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-400 mt-1">
-            In progress
-          </span>
-        )}
-      </div>
-      <Button variant="secondary" size="sm" onClick={onDiscard}>
-        {isRetroactive ? 'Cancel' : 'Discard'}
-      </Button>
+    <div className="mb-4 space-y-1.5">
+      <SectionHeader
+        title={(session.extra?.routine_name as string) || 'Current Workout'}
+        titleAs="h2"
+        size="md"
+        variant="sky"
+        actions={
+          <Button variant="secondary" size="sm" onClick={onDiscard}>
+            {isRetroactive ? 'Cancel' : 'Discard'}
+          </Button>
+        }
+      />
+      {isRetroactive ? (
+        <span data-testid="retroactive-log-badge" className="inline-flex">
+          <StatusBadge
+            label={`Retroactive Log - ${formatTimeRangeLabel(session.started_at, session.ended_at)}`}
+            variant="warning"
+            size="sm"
+            showDot={false}
+          />
+        </span>
+      ) : (
+        <StatusBadge label="In progress" variant="success" size="sm" isPulsing />
+      )}
     </div>
   )
 }

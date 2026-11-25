@@ -1,4 +1,4 @@
-import { Button, GlassCard } from '@yggdrasil-lab/ui'
+import { Button, GlassCard, StatusBadge } from '@yggdrasil-lab/ui'
 import type { Routine, SessionPayload } from '../types'
 import { formatFriendlyDate, formatSessionTimeRange } from '../utils/circadian'
 import { getSessionLabel } from '../utils/session'
@@ -73,9 +73,13 @@ function InferredCardHeader({
           <span className="font-bold text-sm text-amber-300">
             Auto-Detected Workout ({formatFriendlyDate(sessionDate)})
           </span>
-          <span className="text-[11px] px-2 py-0.5 rounded-md font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30 whitespace-nowrap">
-            Needs Review
-          </span>
+          <StatusBadge
+            label="Needs Review"
+            variant="warning"
+            size="xs"
+            showDot={false}
+            className="rounded-md font-semibold"
+          />
         </div>
         <SessionMetricBadges effort={effort} rpe={rpe} trimp={trimp} />
       </div>

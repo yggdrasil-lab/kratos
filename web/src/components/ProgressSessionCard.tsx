@@ -1,4 +1,4 @@
-import { Button, GlassCard } from '@yggdrasil-lab/ui'
+import { AlertBanner, Button, GlassCard, StatusBadge } from '@yggdrasil-lab/ui'
 import type { Exercise, Routine, SessionPayload } from '../types'
 import { formatFriendlyDate, formatSessionTimeRange } from '../utils/circadian'
 import { computeSessionVolumeAndSets, getSessionLabel } from '../utils/session'
@@ -33,9 +33,13 @@ function SessionCardHeader({
   const rpe = typeof session.extra?.rpe === 'number' ? session.extra.rpe : null
   const trimp = typeof session.extra?.trimp === 'number' ? session.extra.trimp : null
   const inferredPill = isInferred ? (
-    <span className="text-[11px] px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold flex items-center gap-1 whitespace-nowrap">
-      ⚡ Inferred from Plan
-    </span>
+    <StatusBadge
+      label="⚡ Inferred from Plan"
+      variant="warning"
+      size="xs"
+      showDot={false}
+      className="rounded-md font-semibold"
+    />
   ) : null
 
   return (
@@ -150,27 +154,29 @@ function SessionCardActions({
     )
   }
   return (
-    <div className="bg-amber-500/10 border border-amber-500/25 rounded-lg p-2.5 mt-2 mb-2 flex items-center justify-between gap-2 flex-wrap">
-      <div className="text-xs text-amber-200 flex-1 min-w-[180px]">
-        Auto-detected from plan and biometrics. Keep or dismiss?
-      </div>
-      <div className="flex items-center gap-2 flex-wrap shrink-0">
-        <Button variant="blue" size="xs" onClick={() => onConfirmSession(s.id)}>
-          ✓ Confirm
-        </Button>
-        {onSplitSession && (
-          <Button variant="outline" size="xs" onClick={() => onSplitSession(s)}>
-            Split
+    <AlertBanner variant="warning" className="mt-2 mb-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <span className="flex-1 min-w-[180px]">
+          Auto-detected from plan and biometrics. Keep or dismiss?
+        </span>
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
+          <Button variant="blue" size="xs" onClick={() => onConfirmSession(s.id)}>
+            ✓ Confirm
           </Button>
-        )}
-        <Button variant="secondary" size="xs" onClick={() => onEditSession(s)}>
-          Change
-        </Button>
-        <Button variant="danger" size="xs" onClick={() => onDeleteSession(s.id)}>
-          ✕ Dismiss
-        </Button>
+          {onSplitSession && (
+            <Button variant="outline" size="xs" onClick={() => onSplitSession(s)}>
+              Split
+            </Button>
+          )}
+          <Button variant="secondary" size="xs" onClick={() => onEditSession(s)}>
+            Change
+          </Button>
+          <Button variant="danger" size="xs" onClick={() => onDeleteSession(s.id)}>
+            ✕ Dismiss
+          </Button>
+        </div>
       </div>
-    </div>
+    </AlertBanner>
   )
 }
 
@@ -207,9 +213,14 @@ export function ProgressSessionCard({
       {tags.length > 0 && (
         <div className="flex gap-1.5 flex-wrap mb-2">
           {tags.map((t, idx) => (
-            <span key={idx} className="text-[11px] text-purple-300 bg-purple-500/15 px-2 py-0.5 rounded-md">
-              {t}
-            </span>
+            <StatusBadge
+              key={idx}
+              label={t}
+              variant="purple"
+              size="xs"
+              showDot={false}
+              className="rounded-md"
+            />
           ))}
         </div>
       )}
