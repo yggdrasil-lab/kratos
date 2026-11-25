@@ -3,28 +3,15 @@
 from __future__ import annotations
 
 import datetime as dt
-import io
-import json
-import urllib.error
-import urllib.parse
-import urllib.request
 import uuid
-from typing import Any
 
-
-class _FakeHttpResponse:
-    def __init__(self, payload: dict[str, Any], status: int = 200) -> None:
-        self._body = json.dumps(payload).encode("utf-8")
-        self.status = status
-
-    def read(self) -> bytes:
-        return self._body
-
-    def __enter__(self) -> "_FakeHttpResponse":
-        return self
-
-    def __exit__(self, *args: object) -> None:
-        return None
+from app.ports.eir import EirUpstreamError
+from app.schemas import (
+    SuggestedSplitPoint,
+    WorkoutMetricsRead,
+    WorkoutTimelineBin,
+    WorkoutTimelineRead,
+)
 
 
 def _create_parent_session(
@@ -80,60 +67,49 @@ def test_delete_regular_session_without_dismissed_does_not_mark_dismissed(client
     assert deleted[0]["extra"].get("dismissed") is None
 
 
-def test_workout_metrics_and_timeline_proxies_succeed_and_map_class(client, monkeypatch) -> None:
-    captured_urls: list[str] = []
-
-    def fake_urlopen(req: urllib.request.Request, timeout: float = 5.0) -> _FakeHttpResponse:
-        captured_urls.append(req.full_url)
-        if "/biometrics/workout-timeline" in req.full_url:
-            return _FakeHttpResponse(
-                {
-                    "started_at": "2026-11-23T04:30:00Z",
-                    "ended_at": "2026-11-23T05:30:00Z",
-                    "bins": [
-                        {
-                            "started_at": "2026-11-23T04:30:00Z",
-                            "ended_at": "2026-11-23T04:35:00Z",
-                            "avg_hr_bpm": 146,
-                            "peak_hr_bpm": 162,
-                            "hr_sample_count": 22,
-                            "step_count": 320,
-                            "active_energy_kcal": 48,
-                            "is_active_watch_mode": True,
-                        }
-                    ],
-                    "suggested_splits": [
-                        {
-                            "split_at": "2026-11-23T05:00:00Z",
-                            "resume_at": "2026-11-23T05:05:00Z",
-                            "reason": "Active Watch transition",
-                            "confidence": "high",
-                        }
-                    ],
-                }
+def test_workout_metrics_and_timeline_proxies_succeed_via_eir_port(client, fakes) -> None:
+    fakes.eir.metrics_response = WorkoutMetricsRead(
+        started_at=dt.datetime(2026, 11, 23, 4, 30, tzinfo=dt.timezone.utc),
+        ended_at=dt.datetime(2026, 11, 23, 5, 0, tzinfo=dt.timezone.utc),
+        duration_minutes=30,
+        active_energy_kcal=240,
+        avg_hr_bpm=148,
+        peak_hr_bpm=169,
+        step_count=1150,
+        confidence="high",
+        activity_type="class",
+        classification="class",
+        routine_name="Group Core",
+        effort_rating="hard",
+        rpe=8.2,
+        trimp=94.5,
+        hr_zones={"z4_threshold_pct": 45.0, "z5_anaerobic_pct": 25.0},
+        hr_recovery_60s=24,
+    )
+    fakes.eir.timeline_response = WorkoutTimelineRead(
+        started_at=dt.datetime(2026, 11, 23, 4, 30, tzinfo=dt.timezone.utc),
+        ended_at=dt.datetime(2026, 11, 23, 5, 30, tzinfo=dt.timezone.utc),
+        bins=[
+            WorkoutTimelineBin(
+                started_at=dt.datetime(2026, 11, 23, 4, 30, tzinfo=dt.timezone.utc),
+                ended_at=dt.datetime(2026, 11, 23, 4, 35, tzinfo=dt.timezone.utc),
+                avg_hr_bpm=146,
+                peak_hr_bpm=162,
+                hr_sample_count=22,
+                step_count=320,
+                active_energy_kcal=48,
+                is_active_watch_mode=True,
             )
-        return _FakeHttpResponse(
-            {
-                "started_at": "2026-11-23T04:30:00Z",
-                "ended_at": "2026-11-23T05:00:00Z",
-                "duration_minutes": 30,
-                "active_energy_kcal": 240,
-                "avg_hr_bpm": 148,
-                "peak_hr_bpm": 169,
-                "step_count": 1150,
-                "confidence": "high",
-                "activity_type": "gym",
-                "classification": "gym",
-                "routine_name": "Group Core",
-                "effort_rating": "hard",
-                "rpe": 8.2,
-                "trimp": 94.5,
-                "hr_zones": {"z4_threshold_pct": 45.0, "z5_anaerobic_pct": 25.0},
-                "hr_recovery_60s": 24,
-            }
-        )
-
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+        ],
+        suggested_splits=[
+            SuggestedSplitPoint(
+                split_at=dt.datetime(2026, 11, 23, 5, 0, tzinfo=dt.timezone.utc),
+                resume_at=dt.datetime(2026, 11, 23, 5, 5, tzinfo=dt.timezone.utc),
+                reason="Active Watch transition",
+                confidence="high",
+            )
+        ],
+    )
 
     metrics_resp = client.get(
         "/biometrics/workout-metrics",
@@ -149,9 +125,8 @@ def test_workout_metrics_and_timeline_proxies_succeed_and_map_class(client, monk
     assert metrics_body["activity_type"] == "class"
     assert metrics_body["classification"] == "class"
     assert metrics_body["avg_hr_bpm"] == 148
-    parsed = urllib.parse.parse_qs(urllib.parse.urlparse(captured_urls[0]).query)
-    assert parsed["activity_type"] == ["gym"]
-    assert parsed["classification"] == ["gym"]
+    assert fakes.eir.metrics_requests[0]["activity_type"] == "class"
+    assert fakes.eir.metrics_requests[0]["routine_name"] == "Group Core"
 
     timeline_resp = client.get(
         "/biometrics/workout-timeline",
@@ -167,7 +142,7 @@ def test_workout_metrics_and_timeline_proxies_succeed_and_map_class(client, monk
     assert timeline_body["suggested_splits"][0]["split_at"] == "2026-11-23T05:00:00Z"
 
 
-def test_workout_proxies_fail_loudly_with_502_and_reject_invalid_windows(client, monkeypatch) -> None:
+def test_workout_proxies_fail_loudly_with_502_and_reject_invalid_windows(client, fakes) -> None:
     bad_resp = client.get(
         "/biometrics/workout-metrics",
         params={
@@ -177,10 +152,8 @@ def test_workout_proxies_fail_loudly_with_502_and_reject_invalid_windows(client,
     )
     assert bad_resp.status_code == 400
 
-    def fail_urlopen(req: urllib.request.Request, timeout: float = 5.0):
-        raise urllib.error.URLError("Eir offline")
-
-    monkeypatch.setattr(urllib.request, "urlopen", fail_urlopen)
+    fakes.eir.raise_on_metrics = EirUpstreamError("Eir offline")
+    fakes.eir.raise_on_timeline = EirUpstreamError("Eir offline")
 
     assert (
         client.get(
@@ -205,41 +178,51 @@ def test_workout_proxies_fail_loudly_with_502_and_reject_invalid_windows(client,
 
 
 def test_split_session_atomically_creates_locked_children_and_tombstones_parent(
-    client, monkeypatch
+    client, fakes
 ) -> None:
     routine_resp = client.post("/routines", json={"name": "Lower Body A", "items": []})
     assert routine_resp.status_code == 201
     routine_id = routine_resp.json()["id"]
     parent_id = _create_parent_session(client, inferred=True)
 
-    eir_queries: list[dict[str, list[str]]] = []
-
-    def fake_urlopen(req: urllib.request.Request, timeout: float = 5.0) -> _FakeHttpResponse:
-        query = urllib.parse.parse_qs(urllib.parse.urlparse(req.full_url).query)
-        eir_queries.append(query)
-        is_first = len(eir_queries) == 1
-        return _FakeHttpResponse(
-            {
-                "started_at": query["started_at"][0],
-                "ended_at": query["ended_at"][0],
-                "duration_minutes": 30 if is_first else 25,
-                "active_energy_kcal": 260 if is_first else 190,
-                "avg_hr_bpm": 152 if is_first else 134,
-                "peak_hr_bpm": 171 if is_first else 155,
-                "step_count": 1400 if is_first else 620,
-                "confidence": "high",
-                "activity_type": query.get("activity_type", ["gym"])[0],
-                "classification": query.get("classification", ["gym"])[0],
-                "routine_name": query.get("routine_name", ["Workout"])[0],
-                "effort_rating": "hard" if is_first else "optimal",
-                "rpe": 8.4 if is_first else 7.2,
-                "trimp": 102.0 if is_first else 68.0,
-                "hr_zones": {"z3_tempo_pct": 40.0, "z4_threshold_pct": 35.0},
-                "hr_recovery_60s": 22 if is_first else 28,
-            }
-        )
-
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    fakes.eir.metrics_responses = [
+        WorkoutMetricsRead(
+            started_at=dt.datetime(2026, 11, 23, 4, 30, tzinfo=dt.timezone.utc),
+            ended_at=dt.datetime(2026, 11, 23, 5, 0, tzinfo=dt.timezone.utc),
+            duration_minutes=30,
+            active_energy_kcal=260,
+            avg_hr_bpm=152,
+            peak_hr_bpm=171,
+            step_count=1400,
+            confidence="high",
+            activity_type="class",
+            classification="class",
+            routine_name="Group Core",
+            effort_rating="hard",
+            rpe=8.4,
+            trimp=102.0,
+            hr_zones={"z3_tempo_pct": 40.0, "z4_threshold_pct": 35.0},
+            hr_recovery_60s=22,
+        ),
+        WorkoutMetricsRead(
+            started_at=dt.datetime(2026, 11, 23, 5, 5, tzinfo=dt.timezone.utc),
+            ended_at=dt.datetime(2026, 11, 23, 5, 30, tzinfo=dt.timezone.utc),
+            duration_minutes=25,
+            active_energy_kcal=190,
+            avg_hr_bpm=134,
+            peak_hr_bpm=155,
+            step_count=620,
+            confidence="high",
+            activity_type="gym",
+            classification="gym",
+            routine_name="Lower Body A",
+            effort_rating="optimal",
+            rpe=7.2,
+            trimp=68.0,
+            hr_zones={"z3_tempo_pct": 40.0, "z4_threshold_pct": 35.0},
+            hr_recovery_60s=28,
+        ),
+    ]
 
     split_resp = client.post(
         f"/sessions/{parent_id}/split",
@@ -270,8 +253,8 @@ def test_split_session_atomically_creates_locked_children_and_tombstones_parent(
     assert body["parent_id"] == parent_id
     assert len(body["sessions"]) == 2
 
-    assert eir_queries[0]["activity_type"] == ["gym"]
-    assert eir_queries[0]["classification"] == ["gym"]
+    assert fakes.eir.metrics_requests[0]["activity_type"] == "class"
+    assert fakes.eir.metrics_requests[0]["classification"] == "class"
 
     first, second = body["sessions"]
     assert first["id"] != parent_id and second["id"] != parent_id
@@ -304,10 +287,9 @@ def test_split_session_atomically_creates_locked_children_and_tombstones_parent(
     assert parent_row["extra"]["split_into_ids"] == [first["id"], second["id"]]
 
 
-def test_split_session_validation_and_atomic_502_rollback(client, monkeypatch) -> None:
+def test_split_session_validation_and_atomic_502_rollback(client, fakes) -> None:
     parent_id = _create_parent_session(client, inferred=True)
 
-    # Fewer than 2 segments -> 422
     too_few = client.post(
         f"/sessions/{parent_id}/split",
         json={
@@ -322,7 +304,6 @@ def test_split_session_validation_and_atomic_502_rollback(client, monkeypatch) -
     )
     assert too_few.status_code == 422
 
-    # Overlapping segments -> 422
     overlap = client.post(
         f"/sessions/{parent_id}/split",
         json={
@@ -342,7 +323,6 @@ def test_split_session_validation_and_atomic_502_rollback(client, monkeypatch) -
     )
     assert overlap.status_code == 422
 
-    # Nonexistent routine_id -> 422
     missing_routine = client.post(
         f"/sessions/{parent_id}/split",
         json={
@@ -363,23 +343,15 @@ def test_split_session_validation_and_atomic_502_rollback(client, monkeypatch) -
     )
     assert missing_routine.status_code == 422
 
-    # Failure on 2nd Eir fetch -> 502 and parent remains untouched
-    calls = {"count": 0}
-
-    def fail_on_second(req: urllib.request.Request, timeout: float = 5.0) -> _FakeHttpResponse:
-        calls["count"] += 1
-        if calls["count"] == 2:
-            raise urllib.error.HTTPError(req.full_url, 503, "Down", {}, io.BytesIO(b""))
-        return _FakeHttpResponse(
-            {
-                "started_at": "2026-11-23T04:30:00Z",
-                "ended_at": "2026-11-23T05:00:00Z",
-                "duration_minutes": 30,
-                "active_energy_kcal": 210,
-            }
-        )
-
-    monkeypatch.setattr(urllib.request, "urlopen", fail_on_second)
+    fakes.eir.metrics_responses = [
+        WorkoutMetricsRead(
+            started_at=dt.datetime(2026, 11, 23, 4, 30, tzinfo=dt.timezone.utc),
+            ended_at=dt.datetime(2026, 11, 23, 5, 0, tzinfo=dt.timezone.utc),
+            duration_minutes=30,
+            active_energy_kcal=210,
+        ),
+        EirUpstreamError("Eir upstream HTTP 503"),
+    ]
     failed_split = client.post(
         f"/sessions/{parent_id}/split",
         json={
@@ -422,27 +394,30 @@ def test_split_session_validation_and_atomic_502_rollback(client, monkeypatch) -
 
 
 def test_retroactive_set_upsert_preserves_split_timestamps_and_locked_telemetry(
-    client, monkeypatch
+    client, fakes
 ) -> None:
     exercise_id = client.post("/exercises", json={"name": "Barbell Squat"}).json()["id"]
     routine_id = client.post("/routines", json={"name": "Lower Body A", "items": []}).json()["id"]
     parent_id = _create_parent_session(client, inferred=True)
 
-    def fake_urlopen(req: urllib.request.Request, timeout: float = 5.0) -> _FakeHttpResponse:
-        return _FakeHttpResponse(
-            {
-                "started_at": "2026-11-23T05:05:00Z",
-                "ended_at": "2026-11-23T05:30:00Z",
-                "duration_minutes": 25,
-                "active_energy_kcal": 195,
-                "avg_hr_bpm": 136,
-                "peak_hr_bpm": 158,
-                "rpe": 7.5,
-                "trimp": 72.0,
-            }
-        )
-
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    fakes.eir.metrics_responses = [
+        WorkoutMetricsRead(
+            started_at=dt.datetime(2026, 11, 23, 4, 30, tzinfo=dt.timezone.utc),
+            ended_at=dt.datetime(2026, 11, 23, 5, 0, tzinfo=dt.timezone.utc),
+            duration_minutes=30,
+            active_energy_kcal=220,
+        ),
+        WorkoutMetricsRead(
+            started_at=dt.datetime(2026, 11, 23, 5, 5, tzinfo=dt.timezone.utc),
+            ended_at=dt.datetime(2026, 11, 23, 5, 30, tzinfo=dt.timezone.utc),
+            duration_minutes=25,
+            active_energy_kcal=195,
+            avg_hr_bpm=136,
+            peak_hr_bpm=158,
+            rpe=7.5,
+            trimp=72.0,
+        ),
+    ]
 
     split_body = client.post(
         f"/sessions/{parent_id}/split",

@@ -1,17 +1,23 @@
-"""Kratos composition root wiring settings, peer ports, and per-container locks."""
+"""Kratos composition root wiring settings, peer ports, session factory, and domain cores."""
 
 from __future__ import annotations
 
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from fastapi import Request
+from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
+from app.db import SessionLocal
 from app.ports.clock import AucklandClockAdapter, ClockPort
 from app.ports.discord import DiscordConfig, DiscordPort, HttpDiscordAdapter
 from app.ports.eir import EirConfig, EirPort, HttpEirAdapter
 from app.ports.muninn import HttpMuninnAdapter, MuninnConfig, MuninnPort
+from app.training import TrainingCore
+
+SessionFactory = Callable[[], Session]
 
 
 @dataclass(frozen=True)
@@ -23,6 +29,8 @@ class KratosContainer:
     eir: EirPort
     muninn: MuninnPort
     discord: DiscordPort
+    session_factory: SessionFactory
+    training: TrainingCore
     workout_date_locks: dict[str, threading.Lock] = field(default_factory=dict)
     fasting_date_locks: dict[str, threading.Lock] = field(default_factory=dict)
     _lock_mutex: threading.Lock = field(default_factory=threading.Lock)
@@ -44,6 +52,27 @@ class KratosContainer:
             return lock
 
 
+def _default_muninn(settings_obj: Settings) -> MuninnPort:
+    return HttpMuninnAdapter(
+        MuninnConfig(
+            base_url=settings_obj.llm_base_url,
+            api_key=settings_obj.llm_api_key,
+            llm_model=settings_obj.llm_model,
+            jev_model=settings_obj.jev_model,
+        )
+    )
+
+
+def _default_discord(settings_obj: Settings) -> DiscordPort:
+    return HttpDiscordAdapter(
+        DiscordConfig(
+            bot_token=settings_obj.discord_bot_token,
+            health_channel_id=settings_obj.discord_health_channel_id,
+            user_id=settings_obj.discord_user_id,
+        )
+    )
+
+
 def build_container(
     settings_obj: Settings | None = None,
     *,
@@ -51,44 +80,24 @@ def build_container(
     eir: EirPort | None = None,
     muninn: MuninnPort | None = None,
     discord: DiscordPort | None = None,
+    session_factory: SessionFactory | None = None,
+    training: TrainingCore | None = None,
 ) -> KratosContainer:
     """Build a KratosContainer with production defaults or injected test adapters."""
     resolved_settings = settings_obj if settings_obj is not None else get_settings()
-    resolved_clock = clock if clock is not None else AucklandClockAdapter()
     resolved_eir = (
         eir
         if eir is not None
         else HttpEirAdapter(EirConfig(base_url=resolved_settings.eir_internal_url))
     )
-    resolved_muninn = (
-        muninn
-        if muninn is not None
-        else HttpMuninnAdapter(
-            MuninnConfig(
-                base_url=resolved_settings.llm_base_url,
-                api_key=resolved_settings.llm_api_key,
-                llm_model=resolved_settings.llm_model,
-                jev_model=resolved_settings.jev_model,
-            )
-        )
-    )
-    resolved_discord = (
-        discord
-        if discord is not None
-        else HttpDiscordAdapter(
-            DiscordConfig(
-                bot_token=resolved_settings.discord_bot_token,
-                health_channel_id=resolved_settings.discord_health_channel_id,
-                user_id=resolved_settings.discord_user_id,
-            )
-        )
-    )
     return KratosContainer(
         settings=resolved_settings,
-        clock=resolved_clock,
+        clock=clock if clock is not None else AucklandClockAdapter(),
         eir=resolved_eir,
-        muninn=resolved_muninn,
-        discord=resolved_discord,
+        muninn=muninn if muninn is not None else _default_muninn(resolved_settings),
+        discord=discord if discord is not None else _default_discord(resolved_settings),
+        session_factory=session_factory if session_factory is not None else SessionLocal,
+        training=training if training is not None else TrainingCore(eir=resolved_eir),
     )
 
 

@@ -1,21 +1,26 @@
 """Biometrics proxy router for Kratos.
 
 Fetches live morning biometrics (sleep, HRV, resting HR, weigh-in) from the internal
-Eir service over the aether-net Swarm overlay network. Fails gracefully if Eir is offline.
+Eir service over the Swarm overlay network via the injected EirPort.
 """
 
-from datetime import datetime, timezone, timedelta
+from __future__ import annotations
+
 import logging
 import threading
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
+from app.container import get_container
 from app.db import get_db
 from app.models import FastingRecommendation, WeeklyPlan, WorkoutRecommendation
+from app.ports.eir import EirConfig, EirPort, HttpEirAdapter
 from app.schemas import (
     FastingRecommendationRead,
     FastingSynthesizeRequest,
@@ -30,12 +35,6 @@ from app.services.discord import (
     post_thread_adjustment_reply,
     post_workout_recommendation_thread,
 )
-from app.services.eir_client import (
-    fetch_workout_metrics,
-    fetch_workout_timeline,
-    request_eir_json_optional,
-)
-from app.services.fasting_engine import generate_fasting_recommendation
 from app.services.llm_fasting import synthesize_fasting_recommendation_llm
 from app.services.llm_workout import synthesize_workout_recommendation_llm
 from app.services.workout_engine import resolve_exercise_weight_basis
@@ -47,6 +46,10 @@ router = APIRouter(prefix="/biometrics", tags=["biometrics"])
 _RECOMMENDATION_LOCKS_MUTEX = threading.Lock()
 _WORKOUT_DATE_LOCKS: dict[str, threading.Lock] = {}
 _FASTING_DATE_LOCKS: dict[str, threading.Lock] = {}
+
+
+def _default_eir() -> EirPort:
+    return HttpEirAdapter(EirConfig(base_url=get_settings().eir_internal_url))
 
 
 def _get_lock_for_date(store: dict[str, threading.Lock], date_key: str) -> threading.Lock:
@@ -85,7 +88,11 @@ def _format_workout_cached(cached: WorkoutRecommendation) -> WorkoutRecommendati
                 exercise_name=ex.get("exercise_name", "Exercise"),
                 target_sets=int(ex.get("target_sets", 2)),
                 target_reps=str(ex.get("target_reps", "8-10 reps")),
-                suggested_weight_kg=float(ex["suggested_weight_kg"]) if ex.get("suggested_weight_kg") is not None else None,
+                suggested_weight_kg=(
+                    float(ex["suggested_weight_kg"])
+                    if ex.get("suggested_weight_kg") is not None
+                    else None
+                ),
                 weight_basis=resolve_exercise_weight_basis(
                     ex.get("exercise_name", "Exercise"),
                     ex.get("weight_basis"),
@@ -125,28 +132,27 @@ class WorkoutFeedbackPayload(BaseModel):
 
 
 def _get_auckland_today() -> str:
-    # Pacific/Auckland is UTC+12 or UTC+13 (NZDT). Use +13 as conservative local or circadian
     now_utc = datetime.now(timezone.utc)
-    # 4-hour circadian shift: a 1 AM session belongs to previous day
     circadian = now_utc + timedelta(hours=13) - timedelta(hours=4)
     return circadian.strftime("%Y-%m-%d")
 
 
 @router.get("/today")
-def get_today_biometrics() -> dict[str, Any] | None:
+def get_today_biometrics(request: Request) -> dict[str, Any] | None:
     """Proxies today's Eir daily biometrics summary for the Kratos dashboard."""
     today = _get_auckland_today()
-    return request_eir_json_optional(f"/biometrics/daily/{today}")
+    return get_container(request).eir.get_daily_biometrics(today)
 
 
 @router.get("/latest")
-def get_latest_biometrics() -> dict[str, Any] | None:
+def get_latest_biometrics(request: Request) -> dict[str, Any] | None:
     """Proxies the most recent scale measurement from Eir."""
-    return request_eir_json_optional("/biometrics/latest")
+    return get_container(request).eir.get_latest_biometrics()
 
 
 @router.get("/workout-metrics", response_model=WorkoutMetricsRead)
 def get_workout_metrics(
+    request: Request,
     started_at: datetime = Query(description="Window start ISO-8601 timestamp"),
     ended_at: datetime = Query(description="Window end ISO-8601 timestamp"),
     classification: str | None = Query(default=None),
@@ -159,7 +165,7 @@ def get_workout_metrics(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="ended_at must be after started_at",
         )
-    return fetch_workout_metrics(
+    return get_container(request).eir.get_workout_metrics(
         started_at,
         ended_at,
         classification=classification,
@@ -170,6 +176,7 @@ def get_workout_metrics(
 
 @router.get("/workout-timeline", response_model=WorkoutTimelineRead)
 def get_workout_timeline(
+    request: Request,
     started_at: datetime = Query(description="Window start ISO-8601 timestamp"),
     ended_at: datetime = Query(description="Window end ISO-8601 timestamp"),
 ) -> WorkoutTimelineRead:
@@ -179,7 +186,7 @@ def get_workout_timeline(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="ended_at must be after started_at",
         )
-    return fetch_workout_timeline(started_at, ended_at)
+    return get_container(request).eir.get_workout_timeline(started_at, ended_at)
 
 
 def _resolve_target_date_and_plan(
@@ -285,7 +292,10 @@ def _sync_workout_discord_thread(
                 post_thread_adjustment_reply(
                     thread_id=thread_id,
                     title=f"{rec.routine_name} ({rec.volume_landmark})",
-                    summary=f"**Adaptation**: {rec.readiness_adaptation} | **Target**: {rec.target_rir}\n**Rationale**: {rec.rationale}",
+                    summary=(
+                        f"**Adaptation**: {rec.readiness_adaptation} | "
+                        f"**Target**: {rec.target_rir}\n**Rationale**: {rec.rationale}"
+                    ),
                     details=f"**Adjustment Applied**: {custom_context}",
                 )
             except Exception as exc:
@@ -343,12 +353,13 @@ def _persist_workout_cache(
         logger.debug("Failed persisting workout recommendation cache: %s", exc)
 
 
-@router.get("/fasting-recommendation", response_model=FastingRecommendationRead)
 def get_fasting_recommendation(
     target_date: str | None = None,
     db: Session = Depends(get_db),
+    *,
+    eir: EirPort | None = None,
 ) -> FastingRecommendationRead:
-    """Returns a smart autoregulated fasting recommendation based on scheduled plan and Eir biometrics."""
+    """Return an autoregulated fasting recommendation from cache or Eir biometrics."""
     t_date, date_str, weekly_plan = _resolve_target_date_and_plan(target_date, db)
     stmt = select(FastingRecommendation).where(
         FastingRecommendation.date == date_str,
@@ -357,11 +368,12 @@ def get_fasting_recommendation(
     if cached := db.scalar(stmt):
         return _format_fasting_cached(cached)
 
+    resolved_eir = eir if eir is not None else _default_eir()
     with _get_lock_for_date(_FASTING_DATE_LOCKS, date_str):
         db.expire_all()
         if cached := db.scalar(stmt):
             return _format_fasting_cached(cached)
-        biometrics = request_eir_json_optional(f"/biometrics/daily/{date_str}")
+        biometrics = resolved_eir.get_daily_biometrics(date_str)
         rec = synthesize_fasting_recommendation_llm(t_date, weekly_plan, biometrics, db=db)
         thread_id = _sync_fasting_discord_thread(rec, date_str, None, None)
         extra_payload: dict[str, Any] = {"source": "llm"}
@@ -372,14 +384,28 @@ def get_fasting_recommendation(
         return rec
 
 
-@router.post("/fasting-recommendation/synthesize", response_model=FastingRecommendationRead)
+@router.get("/fasting-recommendation", response_model=FastingRecommendationRead)
+def get_fasting_recommendation_endpoint(
+    request: Request,
+    target_date: str | None = None,
+    db: Session = Depends(get_db),
+) -> FastingRecommendationRead:
+    return get_fasting_recommendation(
+        target_date=target_date, db=db, eir=get_container(request).eir
+    )
+
+
 def trigger_fasting_synthesis(
     payload: FastingSynthesizeRequest,
     db: Session = Depends(get_db),
+    *,
+    eir: EirPort | None = None,
+    source: str | None = None,
 ) -> FastingRecommendationRead:
-    """Forces on-demand LLM synthesis of fasting and nutrient timing protocol with optional custom context."""
+    """Force on-demand LLM synthesis of fasting and nutrient timing protocol."""
     t_date, date_str, weekly_plan = _resolve_target_date_and_plan(payload.target_date, db)
-    biometrics = request_eir_json_optional(f"/biometrics/daily/{date_str}")
+    resolved_eir = eir if eir is not None else _default_eir()
+    biometrics = resolved_eir.get_daily_biometrics(date_str)
     rec = synthesize_fasting_recommendation_llm(
         target_date=t_date,
         weekly_plan=weekly_plan,
@@ -395,6 +421,8 @@ def trigger_fasting_synthesis(
     )
     thread_id = _sync_fasting_discord_thread(rec, date_str, existing, payload.custom_context)
     extra_payload = dict(existing.extra or {}) if existing else {"source": "llm"}
+    if source is not None:
+        extra_payload["source"] = source
     if thread_id:
         extra_payload["discord_thread_id"] = str(thread_id)
     if payload.custom_context:
@@ -404,12 +432,24 @@ def trigger_fasting_synthesis(
     return rec
 
 
-@router.get("/workout-recommendation", response_model=WorkoutRecommendationRead)
+@router.post("/fasting-recommendation/synthesize", response_model=FastingRecommendationRead)
+def trigger_fasting_synthesis_endpoint(
+    request: Request,
+    payload: FastingSynthesizeRequest,
+    db: Session = Depends(get_db),
+) -> FastingRecommendationRead:
+    return trigger_fasting_synthesis(
+        payload=payload, db=db, eir=get_container(request).eir
+    )
+
+
 def get_workout_recommendation(
     target_date: str | None = None,
     db: Session = Depends(get_db),
+    *,
+    eir: EirPort | None = None,
 ) -> WorkoutRecommendationRead:
-    """Returns an autoregulated workout recommendation based on scheduled plan and Eir biometrics."""
+    """Return an autoregulated workout recommendation from cache or Eir biometrics."""
     t_date, date_str, weekly_plan = _resolve_target_date_and_plan(target_date, db)
     stmt = select(WorkoutRecommendation).where(
         WorkoutRecommendation.date == date_str,
@@ -418,11 +458,12 @@ def get_workout_recommendation(
     if cached := db.scalar(stmt):
         return _format_workout_cached(cached)
 
+    resolved_eir = eir if eir is not None else _default_eir()
     with _get_lock_for_date(_WORKOUT_DATE_LOCKS, date_str):
         db.expire_all()
         if cached := db.scalar(stmt):
             return _format_workout_cached(cached)
-        biometrics = request_eir_json_optional(f"/biometrics/daily/{date_str}")
+        biometrics = resolved_eir.get_daily_biometrics(date_str)
         rec = synthesize_workout_recommendation_llm(t_date, weekly_plan, biometrics, db=db)
         thread_id = _sync_workout_discord_thread(rec, date_str, None, None)
         extra_payload: dict[str, Any] = {"source": "llm"}
@@ -433,14 +474,28 @@ def get_workout_recommendation(
         return rec
 
 
-@router.post("/workout-recommendation/synthesize", response_model=WorkoutRecommendationRead)
+@router.get("/workout-recommendation", response_model=WorkoutRecommendationRead)
+def get_workout_recommendation_endpoint(
+    request: Request,
+    target_date: str | None = None,
+    db: Session = Depends(get_db),
+) -> WorkoutRecommendationRead:
+    return get_workout_recommendation(
+        target_date=target_date, db=db, eir=get_container(request).eir
+    )
+
+
 def trigger_workout_synthesis(
     payload: WorkoutSynthesizeRequest,
     db: Session = Depends(get_db),
+    *,
+    eir: EirPort | None = None,
+    source: str | None = None,
 ) -> WorkoutRecommendationRead:
-    """Forces on-demand LLM synthesis of workout prescription with optional custom user context."""
+    """Force on-demand LLM synthesis of workout prescription with optional custom context."""
     t_date, date_str, weekly_plan = _resolve_target_date_and_plan(payload.target_date, db)
-    biometrics = request_eir_json_optional(f"/biometrics/daily/{date_str}")
+    resolved_eir = eir if eir is not None else _default_eir()
+    biometrics = resolved_eir.get_daily_biometrics(date_str)
     rec = synthesize_workout_recommendation_llm(
         target_date=t_date,
         weekly_plan=weekly_plan,
@@ -456,6 +511,8 @@ def trigger_workout_synthesis(
     )
     thread_id = _sync_workout_discord_thread(rec, date_str, existing, payload.custom_context)
     extra_payload = dict(existing.extra or {}) if existing else {"source": "llm"}
+    if source is not None:
+        extra_payload["source"] = source
     if thread_id:
         extra_payload["discord_thread_id"] = str(thread_id)
     if payload.custom_context:
@@ -465,15 +522,26 @@ def trigger_workout_synthesis(
     return rec
 
 
+@router.post("/workout-recommendation/synthesize", response_model=WorkoutRecommendationRead)
+def trigger_workout_synthesis_endpoint(
+    request: Request,
+    payload: WorkoutSynthesizeRequest,
+    db: Session = Depends(get_db),
+) -> WorkoutRecommendationRead:
+    return trigger_workout_synthesis(
+        payload=payload, db=db, eir=get_container(request).eir
+    )
+
+
 @router.post("/fasting")
-def save_fasting_checkin(payload: FastingCheckInPayload) -> dict[str, str]:
+def save_fasting_checkin(request: Request, payload: FastingCheckInPayload) -> dict[str, str]:
     """Records fasting feedback and forwards to Eir when available."""
-    request_eir_json_optional("/feedback/fasting", method="POST", payload=payload.model_dump())
+    get_container(request).eir.submit_fasting_feedback(payload.model_dump())
     return {"status": "ok"}
 
 
 @router.post("/workout-feedback")
-def save_workout_feedback(payload: WorkoutFeedbackPayload) -> dict[str, str]:
+def save_workout_feedback(request: Request, payload: WorkoutFeedbackPayload) -> dict[str, str]:
     """Records workout feedback and forwards to Eir when available."""
-    request_eir_json_optional("/feedback/workout", method="POST", payload=payload.model_dump())
+    get_container(request).eir.submit_workout_feedback(payload.model_dump())
     return {"status": "ok"}

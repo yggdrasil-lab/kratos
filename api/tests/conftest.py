@@ -24,6 +24,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.config import Settings
 from tests.fakes import (
     FakeClock,
     InMemoryDiscordAdapter,
@@ -122,14 +123,13 @@ def fakes() -> FakeAdapters:
 
 
 @pytest.fixture()
-def app_factory(engine, monkeypatch, fakes: FakeAdapters) -> Callable[[FakeAdapters | None], FastAPI]:
+def app_factory(engine, fakes: FakeAdapters) -> Callable[..., FastAPI]:
     """Construct an isolated FastAPI app backed by the test Postgres engine and fake adapters."""
     from app import db as db_module
     from app.container import build_container
     from app.main import create_app
 
     factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
-    monkeypatch.setattr(db_module, "SessionLocal", factory)
     created_apps: list[FastAPI] = []
 
     def override_get_db() -> Iterator[Session]:
@@ -139,13 +139,19 @@ def app_factory(engine, monkeypatch, fakes: FakeAdapters) -> Callable[[FakeAdapt
         finally:
             session.close()
 
-    def _build(adapters: FakeAdapters | None = None) -> FastAPI:
+    def _build(
+        adapters: FakeAdapters | None = None,
+        *,
+        settings: Settings | None = None,
+    ) -> FastAPI:
         chosen = adapters or fakes
         container = build_container(
+            settings_obj=settings,
             clock=chosen.clock,
             eir=chosen.eir,
             muninn=chosen.muninn,
             discord=chosen.discord,
+            session_factory=factory,
         )
         fastapi_app = create_app(container)
         fastapi_app.dependency_overrides[db_module.get_db] = override_get_db
@@ -159,7 +165,7 @@ def app_factory(engine, monkeypatch, fakes: FakeAdapters) -> Callable[[FakeAdapt
 
 
 @pytest.fixture()
-def client(app_factory: Callable[[FakeAdapters | None], FastAPI]) -> Iterator[TestClient]:
+def client(app_factory: Callable[..., FastAPI]) -> Iterator[TestClient]:
     """A TestClient whose request sessions come from the test Postgres engine."""
     with TestClient(app_factory(None)) as test_client:
         yield test_client
