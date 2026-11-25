@@ -13,7 +13,7 @@ import uuid
 from collections.abc import Callable, Iterator
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
@@ -23,14 +23,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
+from app.autoregulation import AutoregulationCore
 from app.container import KratosContainer
-from app.ports.eir import EirPort
-from app.routers.biometrics import (
-    get_fasting_recommendation as _get_fasting_recommendation,
-    get_workout_recommendation as _get_workout_recommendation,
-    trigger_fasting_synthesis as _trigger_fasting_synthesis,
-    trigger_workout_synthesis as _trigger_workout_synthesis,
-)
 from app.schemas import (
     ExerciseCreate,
     ExerciseRead,
@@ -51,7 +45,7 @@ SOURCE = "agent"
 
 SessionOpener = Callable[[], contextlib.AbstractContextManager[Session]]
 TrainingGetter = Callable[[], TrainingCore]
-EirGetter = Callable[[], EirPort]
+AutoregulationGetter = Callable[[], AutoregulationCore]
 
 
 class McpAuthMiddleware(BaseHTTPMiddleware):
@@ -77,13 +71,11 @@ class McpAuthMiddleware(BaseHTTPMiddleware):
 
 @contextlib.contextmanager
 def _tool_errors() -> Iterator[None]:
-    """Surface domain or HTTP exceptions as clean MCP tool errors."""
+    """Surface domain exceptions as clean MCP tool errors."""
     try:
         yield
     except TrainingError as exc:
         raise ToolError(str(exc)) from exc
-    except HTTPException as exc:
-        raise ToolError(str(exc.detail)) from exc
 
 
 def _dump_exercise(exercise: Any) -> dict[str, Any]:
@@ -331,7 +323,9 @@ def _register_weekly_plan_tools(
 
 
 def _register_fasting_tools(
-    server: MCPServer, open_session: SessionOpener, get_eir: EirGetter
+    server: MCPServer,
+    open_session: SessionOpener,
+    get_autoregulation: AutoregulationGetter,
 ) -> None:
     @server.tool(
         name="fasting_recommendation_get",
@@ -339,8 +333,8 @@ def _register_fasting_tools(
     )
     def fasting_recommendation_get(target_date: str | None = None) -> dict:
         with open_session() as db, _tool_errors():
-            rec = _get_fasting_recommendation(
-                target_date=target_date, db=db, eir=get_eir()
+            rec = get_autoregulation().get_fasting_recommendation(
+                db, target_date=target_date
             )
             return rec.model_dump()
 
@@ -356,14 +350,16 @@ def _register_fasting_tools(
             payload = FastingSynthesizeRequest(
                 target_date=target_date, custom_context=user_adjustment
             )
-            rec = _trigger_fasting_synthesis(
-                payload=payload, db=db, eir=get_eir(), source=SOURCE
+            rec = get_autoregulation().synthesize_fasting_recommendation(
+                db, payload, source=SOURCE
             )
             return rec.model_dump()
 
 
 def _register_workout_tools(
-    server: MCPServer, open_session: SessionOpener, get_eir: EirGetter
+    server: MCPServer,
+    open_session: SessionOpener,
+    get_autoregulation: AutoregulationGetter,
 ) -> None:
     @server.tool(
         name="workout_recommendation_get",
@@ -371,8 +367,8 @@ def _register_workout_tools(
     )
     def workout_recommendation_get(target_date: str | None = None) -> dict:
         with open_session() as db, _tool_errors():
-            rec = _get_workout_recommendation(
-                target_date=target_date, db=db, eir=get_eir()
+            rec = get_autoregulation().get_workout_recommendation(
+                db, target_date=target_date
             )
             return rec.model_dump()
 
@@ -388,8 +384,8 @@ def _register_workout_tools(
             payload = WorkoutSynthesizeRequest(
                 target_date=target_date, custom_context=user_adjustment
             )
-            rec = _trigger_workout_synthesis(
-                payload=payload, db=db, eir=get_eir(), source=SOURCE
+            rec = get_autoregulation().synthesize_workout_recommendation(
+                db, payload, source=SOURCE
             )
             return rec.model_dump()
 
@@ -421,15 +417,15 @@ def build_mcp_server(container: KratosContainer | None = None) -> MCPServer:
             db.close()
 
     get_training = lambda: _require_container().training
-    get_eir = lambda: _require_container().eir
+    get_autoregulation = lambda: _require_container().autoregulation
     _register_exercise_read_tools(server, _open_session, get_training)
     _register_exercise_create_tool(server, _open_session, get_training)
     _register_exercise_update_tools(server, _open_session, get_training)
     _register_routine_crud_tools(server, _open_session, get_training)
     _register_routine_mutation_tools(server, _open_session, get_training)
     _register_weekly_plan_tools(server, _open_session, get_training)
-    _register_fasting_tools(server, _open_session, get_eir)
-    _register_workout_tools(server, _open_session, get_eir)
+    _register_fasting_tools(server, _open_session, get_autoregulation)
+    _register_workout_tools(server, _open_session, get_autoregulation)
     return server
 
 

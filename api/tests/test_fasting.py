@@ -1,297 +1,328 @@
-"""Unit tests for the smart autoregulated fasting recommendation engine."""
+"""Pytest integration and unit tests for the circadian fasting engine and readiness API."""
+
+from __future__ import annotations
 
 import datetime as dt
-import io
-import json
-import unittest
-from unittest.mock import MagicMock, patch
-import urllib.error
 
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
+import pytest
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import Session
 
-from app.db import Base, get_db
-from app.main import app
-from app.models import FastingRecommendation, Routine, WeeklyPlan
-from app.services.fasting_engine import generate_fasting_recommendation
-from app.services.llm_fasting import synthesize_fasting_recommendation_llm
+from app.autoregulation.coordinator import _persist_fasting_cache
+from app.autoregulation.fasting import (
+    generate_fasting_recommendation,
+    synthesize_fasting_recommendation,
+)
+from app.models import FastingRecommendation, WeeklyPlan
+from app.ports.muninn import MuninnUpstreamError
+from app.schemas import FastingRecommendationRead
+from tests.conftest import FakeAdapters
+from tests.fakes import InMemoryMuninnAdapter
 
 
-class TestFastingRecommendation(unittest.TestCase):
-    def setUp(self):
-        self.engine = create_engine(
-            "sqlite:///:memory:",
-            connect_args={"check_same_thread": False},
-            poolclass=StaticPool,
-        )
-        WeeklyPlan.__table__.create(bind=self.engine)
-        Routine.__table__.create(bind=self.engine)
-        FastingRecommendation.__table__.create(bind=self.engine)
-        self.SessionLocal = sessionmaker(bind=self.engine, autoflush=False, expire_on_commit=False)
-        self.db = self.SessionLocal()
+def test_fasting_engine_fatigue_override(db: Session) -> None:
+    target_d = dt.date(2026, 11, 5)
+    plan = WeeklyPlan(
+        iso_week="2026-W45",
+        days=[{"dayIndex": 3, "sessionName": "Badminton Match Play", "type": "sport"}],
+    )
+    db.add(plan)
+    db.commit()
 
-        def override_get_db():
-            session = self.SessionLocal()
-            try:
-                yield session
-            finally:
-                session.close()
+    biometrics = {
+        "sleep_duration_hours": 5.2,
+        "sleep_deep_hours": 0.4,
+        "hrv_ms": 22.0,
+        "resting_hr_bpm": 80,
+    }
+    rec = generate_fasting_recommendation(target_d, plan, biometrics, db=db)
+    assert rec.target_window == "14:10"
+    assert "Autoregulated Recovery Split" in rec.protocol_name
+    assert rec.recovery_status == "fatigued"
+    assert "High fatigue detected" in rec.rationale
 
-        app.dependency_overrides[get_db] = override_get_db
-        self.client = TestClient(app)
 
-    def tearDown(self):
-        self.db.close()
-        FastingRecommendation.__table__.drop(bind=self.engine)
-        Routine.__table__.drop(bind=self.engine)
-        WeeklyPlan.__table__.drop(bind=self.engine)
-        app.dependency_overrides.clear()
+def test_fasting_engine_badminton_fueling(db: Session) -> None:
+    target_d = dt.date(2026, 11, 3)
+    plan = WeeklyPlan(
+        iso_week="2026-W45",
+        days=[{"dayIndex": 1, "sessionName": "Badminton Focus", "type": "sport"}],
+    )
+    db.add(plan)
+    db.commit()
 
-    def test_fasting_engine_fatigue_override(self):
-        # Thursday with severe fatigue
-        target_d = dt.date(2026, 11, 5)  # Thursday
-        plan = WeeklyPlan(
-            iso_week="2026-W45",
-            days=[{"dayIndex": 3, "sessionName": "Badminton Match Play", "type": "sport"}],
-        )
-        biometrics = {
-            "sleep_duration_hours": 5.2,
-            "sleep_deep_hours": 0.4,
-            "hrv_ms": 22.0,
-            "resting_hr_bpm": 80,
-        }
-        rec = generate_fasting_recommendation(target_d, plan, biometrics)
-        self.assertEqual(rec.target_window, "14:10")
-        self.assertIn("Autoregulated Recovery Split", rec.protocol_name)
-        self.assertEqual(rec.recovery_status, "fatigued")
-        self.assertIn("High fatigue detected", rec.rationale)
+    biometrics = {
+        "sleep_duration_hours": 7.5,
+        "sleep_deep_hours": 1.2,
+        "hrv_ms": 55.0,
+        "resting_hr_bpm": 62,
+    }
+    rec = generate_fasting_recommendation(target_d, plan, biometrics, db=db)
+    assert rec.target_window == "14:10"
+    assert rec.window_hours == "10:30 AM - 8:30 PM"
+    assert "Badminton Court Fueling" in rec.protocol_name
+    assert rec.recovery_status == "optimal"
+    assert any("Pre-court top-up" in a and "whey" in a for a in rec.fueling_anchors)
 
-    def test_fasting_engine_badminton_fueling(self):
-        # Tuesday with optimal recovery and Badminton
-        target_d = dt.date(2026, 11, 3)  # Tuesday
-        plan = WeeklyPlan(
-            iso_week="2026-W45",
-            days=[{"dayIndex": 1, "sessionName": "Badminton Focus", "type": "sport"}],
-        )
-        biometrics = {
-            "sleep_duration_hours": 7.5,
-            "sleep_deep_hours": 1.2,
-            "hrv_ms": 55.0,
-            "resting_hr_bpm": 62,
-        }
-        rec = generate_fasting_recommendation(target_d, plan, biometrics)
-        self.assertEqual(rec.target_window, "14:10")
-        self.assertEqual(rec.window_hours, "10:30 AM - 8:30 PM")
-        self.assertIn("Badminton Court Fueling", rec.protocol_name)
-        self.assertEqual(rec.recovery_status, "optimal")
-        self.assertTrue(any("Pre-court top-up" in a and "whey" in a for a in rec.fueling_anchors))
 
-    def test_fasting_engine_lifting_split(self):
-        # Wednesday with lifting
-        target_d = dt.date(2026, 11, 4)  # Wednesday
-        plan = WeeklyPlan(
-            iso_week="2026-W45",
-            days=[{"dayIndex": 2, "sessionName": "Lower Body A", "type": "lift"}],
-        )
-        biometrics = {
-            "sleep_duration_hours": 7.0,
-            "sleep_deep_hours": 0.9,
-            "hrv_ms": 48.0,
-        }
-        rec = generate_fasting_recommendation(target_d, plan, biometrics)
-        self.assertEqual(rec.target_window, "14:10")
-        self.assertEqual(rec.window_hours, "10:30 AM - 8:30 PM")
-        self.assertIn("Strength and Hypertrophy Split", rec.protocol_name)
-        self.assertTrue(any("Plate triage, protein first" in a for a in rec.fueling_anchors))
+def test_fasting_engine_lifting_split(db: Session) -> None:
+    target_d = dt.date(2026, 11, 4)
+    plan = WeeklyPlan(
+        iso_week="2026-W45",
+        days=[{"dayIndex": 2, "sessionName": "Lower Body A", "type": "lift"}],
+    )
+    db.add(plan)
+    db.commit()
 
-    def test_fasting_engine_rest_metabolic_reset(self):
-        # Friday rest day with optimal recovery
-        target_d = dt.date(2026, 11, 6)  # Friday
-        plan = WeeklyPlan(
-            iso_week="2026-W45",
-            days=[{"dayIndex": 4, "sessionName": "Rest and Reset", "type": "rest"}],
-        )
-        biometrics = {
-            "sleep_duration_hours": 8.0,
-            "sleep_deep_hours": 1.5,
-            "hrv_ms": 60.0,
-        }
-        rec = generate_fasting_recommendation(target_d, plan, biometrics)
-        self.assertEqual(rec.target_window, "18:6")
-        self.assertIn("Deep Metabolic Reset", rec.protocol_name)
-        self.assertIn("3:30 PM - 8:30 PM", rec.window_hours)
+    biometrics = {
+        "sleep_duration_hours": 7.0,
+        "sleep_deep_hours": 0.9,
+        "hrv_ms": 48.0,
+    }
+    rec = generate_fasting_recommendation(target_d, plan, biometrics, db=db)
+    assert rec.target_window == "14:10"
+    assert rec.window_hours == "10:30 AM - 8:30 PM"
+    assert "Strength and Hypertrophy Split" in rec.protocol_name
+    assert any("Plate triage, protein first" in a for a in rec.fueling_anchors)
 
-    def test_fasting_engine_midweek_rest_stays_baseline(self):
-        # Thursday rest day with optimal recovery must NOT trigger the 18h+ reset
-        target_d = dt.date(2026, 11, 5)  # Thursday
-        plan = WeeklyPlan(
-            iso_week="2026-W45",
-            days=[{"dayIndex": 3, "sessionName": "Rest Day", "type": "rest"}],
-        )
-        biometrics = {
-            "sleep_duration_hours": 8.0,
-            "sleep_deep_hours": 1.5,
-            "hrv_ms": 60.0,
-        }
-        rec = generate_fasting_recommendation(target_d, plan, biometrics)
-        self.assertEqual(rec.target_window, "14:10")
-        self.assertEqual(rec.window_hours, "10:30 AM - 8:30 PM")
-        self.assertNotIn("Deep Metabolic Reset", rec.protocol_name)
 
-    def test_fasting_engine_friday_non_optimal_stays_baseline(self):
-        # Friday rest day with moderate recovery (one fatigue flag) must stay 14:10
-        target_d = dt.date(2026, 11, 6)  # Friday
-        plan = WeeklyPlan(
-            iso_week="2026-W45",
-            days=[{"dayIndex": 4, "sessionName": "Rest and Reset", "type": "rest"}],
-        )
-        biometrics = {
-            "sleep_duration_hours": 5.5,
-            "sleep_deep_hours": 1.2,
-            "hrv_ms": 55.0,
-        }
-        rec = generate_fasting_recommendation(target_d, plan, biometrics)
-        self.assertEqual(rec.recovery_status, "moderate")
-        self.assertEqual(rec.target_window, "14:10")
-        self.assertNotIn("Deep Metabolic Reset", rec.protocol_name)
+def test_fasting_engine_rest_metabolic_reset_and_baseline_guards(db: Session) -> None:
+    plan = WeeklyPlan(
+        iso_week="2026-W45",
+        days=[
+            {"dayIndex": 3, "sessionName": "Rest Day", "type": "rest"},
+            {"dayIndex": 4, "sessionName": "Rest and Reset", "type": "rest"},
+        ],
+    )
+    db.add(plan)
+    db.commit()
 
-    def test_fasting_engine_weekend_baseline(self):
-        # Sunday with optimal recovery
-        target_d = dt.date(2026, 11, 8)  # Sunday
-        rec = generate_fasting_recommendation(target_d, None, None)
-        self.assertEqual(rec.target_window, "14:10")
-        self.assertEqual(rec.window_hours, "10:30 AM - 8:30 PM")
-        self.assertIn("Social Baseline", rec.protocol_name)
+    optimal_bio = {"sleep_duration_hours": 8.0, "sleep_deep_hours": 1.5, "hrv_ms": 60.0}
+    friday_optimal = generate_fasting_recommendation(dt.date(2026, 11, 6), plan, optimal_bio, db=db)
+    assert friday_optimal.target_window == "18:6"
+    assert "Deep Metabolic Reset" in friday_optimal.protocol_name
+    assert "3:30 PM - 8:30 PM" in friday_optimal.window_hours
 
-    def test_fasting_engine_zero_cooking_anchors(self):
-        # Every rule branch must use zero-cooking anchors and never prescribe prep
-        scenarios = [
-            (dt.date(2026, 11, 3), [{"dayIndex": 1, "sessionName": "Badminton", "type": "sport"}], {"sleep_duration_hours": 7.5, "hrv_ms": 55.0}),
-            (dt.date(2026, 11, 4), [{"dayIndex": 2, "sessionName": "Lower Body A", "type": "lift"}], {"sleep_duration_hours": 7.0, "hrv_ms": 48.0}),
-            (dt.date(2026, 11, 5), [{"dayIndex": 3, "sessionName": "Rest Day", "type": "rest"}], {"sleep_duration_hours": 8.0, "hrv_ms": 60.0}),
-            (dt.date(2026, 11, 6), [{"dayIndex": 4, "sessionName": "Rest and Reset", "type": "rest"}], {"sleep_duration_hours": 8.0, "hrv_ms": 60.0}),
-            (dt.date(2026, 11, 8), [], None),
-            (dt.date(2026, 11, 5), [{"dayIndex": 3, "sessionName": "Badminton", "type": "sport"}], {"sleep_duration_hours": 5.2, "sleep_deep_hours": 0.4, "hrv_ms": 22.0, "resting_hr_bpm": 80}),
+    thursday_optimal = generate_fasting_recommendation(dt.date(2026, 11, 5), plan, optimal_bio, db=db)
+    assert thursday_optimal.target_window == "14:10"
+    assert thursday_optimal.window_hours == "10:30 AM - 8:30 PM"
+    assert "Deep Metabolic Reset" not in thursday_optimal.protocol_name
+
+    friday_moderate = generate_fasting_recommendation(
+        dt.date(2026, 11, 6),
+        plan,
+        {"sleep_duration_hours": 5.5, "sleep_deep_hours": 1.2, "hrv_ms": 55.0},
+        db=db,
+    )
+    assert friday_moderate.recovery_status == "moderate"
+    assert friday_moderate.target_window == "14:10"
+    assert "Deep Metabolic Reset" not in friday_moderate.protocol_name
+
+
+def test_fasting_engine_weekend_and_zero_cooking_anchors(db: Session) -> None:
+    weekend = generate_fasting_recommendation(dt.date(2026, 11, 8), None, None, db=db)
+    assert weekend.target_window == "14:10"
+    assert weekend.window_hours == "10:30 AM - 8:30 PM"
+    assert "Social Baseline" in weekend.protocol_name
+
+    scenarios = [
+        (dt.date(2026, 11, 3), [{"dayIndex": 1, "sessionName": "Badminton", "type": "sport"}], {"sleep_duration_hours": 7.5, "hrv_ms": 55.0}),
+        (dt.date(2026, 11, 4), [{"dayIndex": 2, "sessionName": "Lower Body A", "type": "lift"}], {"sleep_duration_hours": 7.0, "hrv_ms": 48.0}),
+        (dt.date(2026, 11, 5), [{"dayIndex": 3, "sessionName": "Rest Day", "type": "rest"}], {"sleep_duration_hours": 8.0, "hrv_ms": 60.0}),
+        (dt.date(2026, 11, 6), [{"dayIndex": 4, "sessionName": "Rest and Reset", "type": "rest"}], {"sleep_duration_hours": 8.0, "hrv_ms": 60.0}),
+        (dt.date(2026, 11, 8), [], None),
+        (dt.date(2026, 11, 5), [{"dayIndex": 3, "sessionName": "Badminton", "type": "sport"}], {"sleep_duration_hours": 5.2, "sleep_deep_hours": 0.4, "hrv_ms": 22.0, "resting_hr_bpm": 80}),
+    ]
+    for target_d, days, bio in scenarios:
+        plan = WeeklyPlan(iso_week="2026-W45", days=days)
+        rec = generate_fasting_recommendation(target_d, plan, bio)
+        joined = " ".join(rec.fueling_anchors).lower()
+        assert "clean fast" in joined
+        assert "plate triage" in joined
+        for banned in ("oats", "avocado", "cook", "recipe", "meal prep"):
+            assert banned not in joined
+        assert rec.target_window != "16:8"
+
+
+def test_fasting_llm_synthesis_success_and_fallback(db: Session) -> None:
+    muninn = InMemoryMuninnAdapter(
+        json_responses=[
+            {
+                "protocol_name": "14:10 Pre-Court Fueling",
+                "target_window": "14:10",
+                "window_hours": "10:30 AM - 8:30 PM",
+                "rationale": "High-intensity badminton scheduled. Keep 14:10 window with pre-court whey top-up.",
+                "fueling_anchors": [
+                    "Morning: Clean fast with water, black coffee, or tea until 10:30 AM",
+                    "05:00 PM: Pre-court whey shake",
+                ],
+                "recovery_status": "optimal",
+                "activity_context": "Badminton Match Play (sport)",
+                "research_citation": "Panda Lab (Circadian TRE) & Schoenfeld (MPS Distribution)",
+            }
         ]
-        for target_d, days, bio in scenarios:
-            plan = WeeklyPlan(iso_week="2026-W45", days=days)
-            rec = generate_fasting_recommendation(target_d, plan, bio)
-            joined = " ".join(rec.fueling_anchors).lower()
-            self.assertIn("clean fast", joined, msg=str(target_d))
-            self.assertIn("plate triage", joined, msg=str(target_d))
-            for banned in ("oats", "avocado", "cook", "recipe", "meal prep"):
-                self.assertNotIn(banned, joined, msg=f"{target_d}: {banned}")
-            self.assertNotEqual(rec.target_window, "16:8")
+    )
+    rec = synthesize_fasting_recommendation(
+        target_date=dt.date(2026, 11, 5),
+        weekly_plan=None,
+        biometrics={"hrv_ms": 55.0, "sleep_duration_hours": 7.8},
+        db=db,
+        muninn=muninn,
+    )
+    assert rec.is_llm_generated is True
+    assert rec.target_window == "14:10"
+    assert rec.protocol_name == "14:10 Pre-Court Fueling"
+    assert rec.research_citation == "Panda Lab (Circadian TRE) & Schoenfeld (MPS Distribution)"
 
-    def test_fasting_recommendation_api(self):
-        res = self.client.get("/biometrics/fasting-recommendation?target_date=2026-11-06")
-        self.assertEqual(res.status_code, 200)
-        data = res.json()
-        self.assertEqual(data["date"], "2026-11-06")
-        self.assertIn("target_window", data)
-        self.assertIn("protocol_name", data)
-        self.assertIn("window_hours", data)
-        self.assertIn("rationale", data)
-        self.assertGreaterEqual(len(data["fueling_anchors"]), 2)
+    failing = InMemoryMuninnAdapter(
+        raise_on_synthesize=MuninnUpstreamError("Connection refused"),
+        raise_on_decide=MuninnUpstreamError("Connection refused"),
+    )
+    fallback = synthesize_fasting_recommendation(
+        target_date=dt.date(2026, 11, 6),
+        weekly_plan=None,
+        biometrics={"hrv_ms": 50.0, "sleep_duration_hours": 8.0},
+        db=db,
+        muninn=failing,
+    )
+    assert fallback.is_llm_generated is False
+    assert fallback.target_window == "18:6"
+    assert "Deep Metabolic Reset" in fallback.protocol_name
 
-    @patch("urllib.request.urlopen")
-    def test_llm_synthesis_success(self, mock_urlopen):
-        mock_response = MagicMock()
-        mock_response.status = 200
-        llm_payload = {
-            "choices": [
-                {
-                    "message": {
-                        "content": json.dumps({
-                            "protocol_name": "16:8 Pre-Court Fueling",
-                            "target_window": "16:8",
-                            "window_hours": "12:30 PM - 8:30 PM",
-                            "rationale": "High-intensity badminton scheduled. Window shifted to allow sustained pre-court glycogen.",
-                            "fueling_anchors": [
-                                "12:30 PM: Lunch with 40g protein and complex carbs",
-                                "05:00 PM: Pre-court fuel (banana + electrolyte drink)",
-                                "08:30 PM: Post-court protein shake"
-                            ],
-                            "recovery_status": "optimal",
-                            "activity_context": "Badminton Match Play (sport)",
-                            "research_citation": "Panda Lab (Circadian TRE) & Schoenfeld (MPS Distribution)",
-                        })
-                    }
-                }
-            ]
+
+def test_fasting_recommendation_api_and_caching(client, fakes: FakeAdapters) -> None:
+    api_res = client.get("/biometrics/fasting-recommendation?target_date=2026-11-06")
+    assert api_res.status_code == 200
+    body = api_res.json()
+    assert body["date"] == "2026-11-06"
+    assert body["target_window"] == "18:6"
+    assert len(body["fueling_anchors"]) >= 2
+
+    fakes.muninn.json_responses.append(
+        {
+            "protocol_name": "14:10 Shifted Schedule Protocol",
+            "target_window": "14:10",
+            "window_hours": "11:00 AM - 9:00 PM",
+            "rationale": "Custom user schedule adjustment incorporated with 3h pre-bed cutoff.",
+            "fueling_anchors": ["11:00 AM: Meal 1", "04:00 PM: Meal 2", "08:30 PM: Recovery"],
+            "recovery_status": "optimal",
+            "activity_context": "Custom Split",
+            "research_citation": "Circadian Daylight Alignment",
         }
-        mock_response.read.return_value = json.dumps(llm_payload).encode("utf-8")
-        mock_urlopen.return_value.__enter__.return_value = mock_response
+    )
+    synth_res = client.post(
+        "/biometrics/fasting-recommendation/synthesize",
+        json={"target_date": "2026-11-07", "custom_context": "Shift workout to 11am"},
+    )
+    assert synth_res.status_code == 200
+    assert synth_res.json()["protocol_name"] == "14:10 Shifted Schedule Protocol"
+    assert synth_res.json()["is_llm_generated"] is True
+    call_count_after_synth = len(fakes.muninn.synthesize_calls)
 
-        rec = synthesize_fasting_recommendation_llm(
-            target_date=dt.date(2026, 11, 5),
-            weekly_plan=None,
-            biometrics={"hrv_ms": 55.0, "sleep_duration_hours": 7.8},
+    cached_res = client.get("/biometrics/fasting-recommendation?target_date=2026-11-07")
+    assert cached_res.status_code == 200
+    assert cached_res.json()["protocol_name"] == "14:10 Shifted Schedule Protocol"
+    assert len(fakes.muninn.synthesize_calls) == call_count_after_synth
+
+
+def test_biometrics_today_attaches_unified_readiness_and_preserves_none(
+    client, fakes: FakeAdapters
+) -> None:
+    today_str = fakes.clock.today_str()
+    assert client.get("/biometrics/today").json() is None
+
+    fakes.eir.daily_by_date[today_str] = {
+        "date": today_str,
+        "sleep_duration_hours": 5.3,
+        "sleep_deep_hours": 0.5,
+        "hrv_ms": 32.0,
+        "resting_hr_bpm": 79,
+        "latest_weight_kg": 74.2,
+    }
+    res = client.get("/biometrics/today")
+    assert res.status_code == 200
+    payload = res.json()
+    assert payload["sleep_duration_hours"] == 5.3
+    assert payload["latest_weight_kg"] == 74.2
+    assert payload["readiness"]["tier"] == "fatigued"
+    assert payload["readiness"]["label"] == "Low Recovery"
+    assert "message" in payload["readiness"]
+
+    checkin = client.post(
+        "/biometrics/fasting",
+        json={
+            "id": "checkin-1",
+            "date": today_str,
+            "target_window": "14:10",
+            "adherence": "full",
+            "logged_at": "2026-11-25T20:00:00Z",
+        },
+    )
+    assert checkin.status_code == 200
+    assert len(fakes.eir.fasting_feedback) == 1
+
+    feedback = client.post(
+        "/biometrics/workout-feedback",
+        json={"date": today_str, "effort_rating": "optimal"},
+    )
+    assert feedback.status_code == 200
+    assert len(fakes.eir.workout_feedback) == 1
+
+
+def test_persist_fasting_cache_handles_unique_conflict_and_fails_loud(db: Session) -> None:
+    existing = FastingRecommendation(
+        date="2026-11-10",
+        protocol_name="Old",
+        target_window="14:10",
+        window_hours="10:30 AM - 8:30 PM",
+        rationale="Old",
+        fueling_anchors=[],
+        recovery_status="optimal",
+        activity_context="Rest",
+        is_llm_generated=False,
+        extra={},
+    )
+    db.add(existing)
+    db.commit()
+
+    rec = FastingRecommendationRead(
+        date="2026-11-10",
+        protocol_name="Updated 14:10",
+        target_window="14:10",
+        window_hours="10:30 AM - 8:30 PM",
+        rationale="Concurrent race update",
+        fueling_anchors=["Clean fast"],
+        recovery_status="moderate",
+        activity_context="Rest",
+        is_llm_generated=True,
+    )
+    _persist_fasting_cache(
+        db, "2026-11-10", rec, existing=None, extra_payload={"source": "llm"}
+    )
+    row = db.query(FastingRecommendation).filter_by(date="2026-11-10").one()
+    assert row.protocol_name == "Updated 14:10"
+    assert row.recovery_status == "moderate"
+
+    class _FailingSession:
+        def __init__(self) -> None:
+            self.rolled_back = False
+
+        def add(self, _obj) -> None:
+            return None
+
+        def commit(self) -> None:
+            raise OperationalError("INSERT", {}, Exception("db down"))
+
+        def rollback(self) -> None:
+            self.rolled_back = True
+
+    failing = _FailingSession()
+    with pytest.raises(OperationalError):
+        _persist_fasting_cache(
+            failing,  # type: ignore[arg-type]
+            "2026-11-11",
+            rec,
+            existing=None,
+            extra_payload={"source": "llm"},
         )
-        self.assertTrue(rec.is_llm_generated)
-        self.assertEqual(rec.target_window, "16:8")
-        self.assertEqual(rec.protocol_name, "16:8 Pre-Court Fueling")
-        self.assertEqual(rec.research_citation, "Panda Lab (Circadian TRE) & Schoenfeld (MPS Distribution)")
-
-    @patch("urllib.request.urlopen")
-    def test_llm_synthesis_fallback(self, mock_urlopen):
-        mock_urlopen.side_effect = urllib.error.URLError("Connection refused")
-
-        rec = synthesize_fasting_recommendation_llm(
-            target_date=dt.date(2026, 11, 6),  # Friday
-            weekly_plan=None,
-            biometrics={"hrv_ms": 50.0, "sleep_duration_hours": 8.0},
-        )
-        self.assertFalse(rec.is_llm_generated)
-        self.assertEqual(rec.target_window, "18:6")
-        self.assertIn("Deep Metabolic Reset", rec.protocol_name)
-
-    @patch("urllib.request.urlopen")
-    def test_fasting_caching_and_synthesize_endpoint(self, mock_urlopen):
-        mock_response = MagicMock()
-        mock_response.status = 200
-        llm_payload = {
-            "choices": [
-                {
-                    "message": {
-                        "content": json.dumps({
-                            "protocol_name": "14:10 Shifted Schedule Protocol",
-                            "target_window": "14:10",
-                            "window_hours": "11:00 AM - 9:00 PM",
-                            "rationale": "Custom user schedule adjustment incorporated with 3h pre-bed cutoff.",
-                            "fueling_anchors": ["11:00 AM: Meal 1", "04:00 PM: Meal 2", "08:30 PM: Recovery"],
-                            "recovery_status": "optimal",
-                            "activity_context": "Custom Split",
-                            "research_citation": "Circadian Daylight Alignment",
-                        })
-                    }
-                }
-            ]
-        }
-        mock_response.read.return_value = json.dumps(llm_payload).encode("utf-8")
-        mock_urlopen.return_value.__enter__.return_value = mock_response
-
-        # Call synthesize POST
-        res = self.client.post(
-            "/biometrics/fasting-recommendation/synthesize",
-            json={"target_date": "2026-11-06", "custom_context": "Shift workout to 11am"},
-        )
-        self.assertEqual(res.status_code, 200)
-        data = res.json()
-        self.assertEqual(data["protocol_name"], "14:10 Shifted Schedule Protocol")
-        self.assertTrue(data["is_llm_generated"])
-
-        # Subsequent GET should return cached row without re-calling synthesis
-        mock_urlopen.reset_mock()
-        res_get = self.client.get("/biometrics/fasting-recommendation?target_date=2026-11-06")
-        self.assertEqual(res_get.status_code, 200)
-        cached_data = res_get.json()
-        self.assertEqual(cached_data["protocol_name"], "14:10 Shifted Schedule Protocol")
-        # Urlopen was not called for synthesis because DB cache hit
-        self.assertEqual(mock_urlopen.call_count, 0)
-
-
-if __name__ == "__main__":
-    unittest.main()
+    assert failing.rolled_back is True

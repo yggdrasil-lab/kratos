@@ -1,110 +1,140 @@
-"""Unit tests for TypeSafe Jev System One client and integrations."""
+"""Pytest tests for Jev decision helpers and unified ReadinessAssessment."""
+
+from __future__ import annotations
 
 import datetime as dt
 import json
-import unittest
-from unittest.mock import MagicMock, patch
-import urllib.error
 
-from app.services.jev_client import (
-    call_jev,
-    classify_constraints_jev,
-    classify_fasting_window_jev,
-    classify_recovery_state_jev,
+from sqlalchemy.orm import Session
+
+from app.autoregulation.jev import (
+    classify_fasting_window,
+    classify_recovery_state,
     classify_workout_decision_gates,
 )
-from app.services.workout_engine import generate_workout_recommendation
+from app.autoregulation.readiness import assess_readiness
+from app.autoregulation.workout import generate_workout_recommendation
+from app.models import Exercise, Routine, RoutineItem
+from app.ports.muninn import MuninnUpstreamError
+from tests.fakes import InMemoryMuninnAdapter
 
 
-class TestJevClient(unittest.TestCase):
-    @patch("urllib.request.urlopen")
-    def test_call_jev_success(self, mock_urlopen):
-        mock_resp = MagicMock()
-        mock_resp.status = 200
-        mock_resp.read.return_value = json.dumps({
-            "choices": [{"message": {"content": "MAV_OVERLOAD"}}]
-        }).encode("utf-8")
-        mock_urlopen.return_value.__enter__.return_value = mock_resp
+def test_assess_readiness_unified_deterministic_thresholds() -> None:
+    assert assess_readiness(None).tier == "optimal"
+    assert assess_readiness({"sleep_duration_hours": 7.6, "hrv_ms": 55.0}).tier == "optimal"
 
-        verdict, latency = call_jev("Classify recovery", "Sleep: 8.5h")
-        self.assertEqual(verdict, "MAV_OVERLOAD")
-        self.assertGreaterEqual(latency, 0.0)
+    # Single fatigue flag (deep < 0.6 or rhr >= 78) or sleep < 6.8 or hrv < 45 -> moderate
+    assert assess_readiness({"sleep_duration_hours": 6.4, "hrv_ms": 55.0}).tier == "moderate"
+    assert assess_readiness({"sleep_duration_hours": 7.4, "hrv_ms": 40.0}).tier == "moderate"
+    assert assess_readiness({"sleep_duration_hours": 7.5, "sleep_deep_hours": 0.5, "hrv_ms": 55.0}).tier == "moderate"
+    assert assess_readiness({"sleep_duration_hours": 7.5, "hrv_ms": 55.0, "resting_hr_bpm": 78}).tier == "moderate"
 
-    @patch("urllib.request.urlopen")
-    def test_call_jev_urllib_error_fallback(self, mock_urlopen):
-        mock_urlopen.side_effect = urllib.error.URLError("Connection refused")
-        verdict, latency = call_jev("Classify recovery", "Sleep: 8.5h")
-        self.assertIsNone(verdict)
+    # Sleep < 5.5, HRV < 35, or >= 2 fatigue flags -> fatigued
+    assert assess_readiness({"sleep_duration_hours": 5.4, "hrv_ms": 55.0}).tier == "fatigued"
+    assert assess_readiness({"sleep_duration_hours": 7.5, "hrv_ms": 34.0}).tier == "fatigued"
+    two_flags = assess_readiness(
+        {"sleep_duration_hours": 7.5, "sleep_deep_hours": 0.4, "hrv_ms": 55.0, "resting_hr_bpm": 80}
+    )
+    assert two_flags.tier == "fatigued"
+    assert len(two_flags.fatigue_flags) == 2
 
-    @patch("app.services.jev_client.call_jev")
-    def test_classify_recovery_state_jev(self, mock_call_jev):
-        mock_call_jev.return_value = ("MEV_DELOAD", 0.02)
-        biometrics = {"sleep_duration_hours": 5.2, "hrv_ms": 28.0}
-        result = classify_recovery_state_jev(biometrics)
-        self.assertEqual(result, "MEV_DELOAD")
 
-    @patch("app.services.jev_client.call_jev")
-    def test_classify_constraints_jev(self, mock_call_jev):
-        # 1st call for joint, 2nd call for time
-        mock_call_jev.side_effect = [
-            ("SHOULDER_SPARING", 0.02),
-            ("TIME_CRUNCH_30M", 0.02),
+def test_assess_readiness_applies_jev_with_deterministic_fallback() -> None:
+    muninn = InMemoryMuninnAdapter(jev_verdicts=["MEV_DELOAD", "MAINTENANCE", "MAV_OVERLOAD"])
+    bio = {"sleep_duration_hours": 7.8, "hrv_ms": 55.0}
+
+    assert assess_readiness(bio, muninn=muninn).tier == "fatigued"
+    assert assess_readiness(bio, muninn=muninn).tier == "moderate"
+    assert assess_readiness({"sleep_duration_hours": 5.0, "hrv_ms": 25.0}, muninn=muninn).tier == "optimal"
+
+    broken = InMemoryMuninnAdapter(raise_on_decide=MuninnUpstreamError("offline"))
+    assert assess_readiness({"sleep_duration_hours": 5.0, "hrv_ms": 25.0}, muninn=broken).tier == "fatigued"
+
+
+def test_classify_recovery_state_string_biometrics_and_error_fallback() -> None:
+    muninn = InMemoryMuninnAdapter(jev_verdicts=["MAV_OVERLOAD"])
+    biometrics = {
+        "sleep_duration_hours": "7.8",
+        "sleep_deep_hours": "1.9",
+        "hrv_ms": "50.26",
+        "resting_hr_bpm": "56",
+    }
+    verdict = classify_recovery_state(muninn, biometrics)
+    assert verdict == "MAV_OVERLOAD"
+    prompt = muninn.decide_calls[0]["user_content"]
+    assert "Sleep: 7.8h (1.9h deep)" in prompt
+    assert "HRV: 50.3ms" in prompt
+    assert "Resting HR: 56bpm" in prompt
+
+    broken = InMemoryMuninnAdapter(raise_on_decide=MuninnUpstreamError("Connection refused"))
+    assert classify_recovery_state(broken, biometrics) is None
+
+
+def test_classify_workout_decision_gates_batched_and_fallback() -> None:
+    muninn = InMemoryMuninnAdapter(
+        jev_verdicts=[
+            json.dumps(
+                {
+                    "recovery_tier": "MAV_OVERLOAD",
+                    "joint_focus": "SHOULDER_SPARING",
+                    "time_budget": "TIME_CRUNCH_30M",
+                }
+            )
         ]
-        result = classify_constraints_jev("Left shoulder is pinching, only have 35 mins")
-        self.assertEqual(result["joint_focus"], "SHOULDER_SPARING")
-        self.assertEqual(result["time_budget"], "TIME_CRUNCH_30M")
+    )
+    gates = classify_workout_decision_gates(
+        muninn,
+        {"sleep_duration_hours": 8.0, "hrv_ms": 52.0},
+        "Shoulder is slightly tender, need a quick 30 min session",
+    )
+    assert len(muninn.decide_calls) == 1
+    assert gates == {
+        "recovery_tier": "MAV_OVERLOAD",
+        "joint_focus": "SHOULDER_SPARING",
+        "time_budget": "TIME_CRUNCH_30M",
+    }
 
-    @patch("app.services.jev_client.call_jev")
-    def test_classify_fasting_window_jev(self, mock_call_jev):
-        mock_call_jev.return_value = ("EVENING_SPORT_16_8", 0.02)
-        result = classify_fasting_window_jev("Badminton Match Play", {"sleep_duration_hours": 7.5})
-        self.assertEqual(result, "EVENING_SPORT_16_8")
+    broken = InMemoryMuninnAdapter(raise_on_decide=MuninnUpstreamError("offline"))
+    fallback = classify_workout_decision_gates(broken, None, None)
+    assert fallback == {
+        "recovery_tier": "MAINTENANCE",
+        "joint_focus": "NOMINAL",
+        "time_budget": "TIME_STANDARD_45M",
+    }
 
-    @patch("app.services.workout_engine.classify_recovery_state_jev")
-    def test_workout_engine_integration_with_jev(self, mock_jev):
-        mock_jev.return_value = "MEV_DELOAD"
-        target_d = dt.date(2026, 11, 2)  # Monday
-        biometrics = {"sleep_duration_hours": 7.0, "hrv_ms": 50.0}
 
-        rec = generate_workout_recommendation(target_d, None, biometrics)
-        self.assertEqual(rec.recovery_status, "fatigued")
-        self.assertEqual(rec.volume_landmark, "MEV")
-        self.assertEqual(rec.target_rir, "RIR 3-4")
-        for ex in rec.exercises:
-            self.assertEqual(ex.target_sets, 2)
+def test_classify_fasting_window_calibrated_labels_only() -> None:
+    muninn = InMemoryMuninnAdapter(
+        jev_verdicts=["EVENING_SPORT_14_10", "DEEP_FAST_18_6", "EVENING_SPORT_16_8"]
+    )
+    assert (
+        classify_fasting_window(muninn, "Badminton Match Play", {"sleep_duration_hours": 7.5})
+        == "EVENING_SPORT_14_10"
+    )
+    assert (
+        classify_fasting_window(muninn, "Friday Rest", {"sleep_duration_hours": 8.0})
+        == "DEEP_FAST_18_6"
+    )
+    # Obsolete 16:8 labels must never be accepted.
+    assert classify_fasting_window(muninn, "Badminton", {"sleep_duration_hours": 7.5}) is None
 
-    @patch("app.services.jev_client.call_jev")
-    def test_classify_recovery_state_jev_string_biometrics(self, mock_call_jev):
-        mock_call_jev.return_value = ("MAV_OVERLOAD", 0.015)
-        # Verify strings from PostgreSQL / Eir do not raise ValueError in string formatting
-        biometrics = {
-            "sleep_duration_hours": "7.8",
-            "sleep_deep_hours": "1.9",
-            "hrv_ms": "50.26",
-            "resting_hr_bpm": "56"
-        }
-        result = classify_recovery_state_jev(biometrics)
-        self.assertEqual(result, "MAV_OVERLOAD")
-        # Ensure call_jev received properly formatted user_prompt with floats
-        user_prompt = mock_call_jev.call_args[0][1]
-        self.assertIn("Sleep: 7.8h", user_prompt)
-        self.assertIn("HRV: 50.3ms", user_prompt)
-        self.assertIn("Resting HR: 56bpm", user_prompt)
 
-    @patch("app.services.jev_client.call_jev")
-    def test_classify_workout_decision_gates_batched(self, mock_call_jev):
-        mock_call_jev.return_value = (
-            json.dumps({
-                "recovery_tier": "MAV_OVERLOAD",
-                "joint_focus": "SHOULDER_SPARING",
-                "time_budget": "TIME_CRUNCH_30M",
-            }),
-            0.025,
-        )
-        biometrics = {"sleep_duration_hours": 8.0, "hrv_ms": 52.0}
-        user_notes = "Shoulder is slightly tender, need a quick 30 min session"
-        gates = classify_workout_decision_gates(biometrics, user_notes)
-        self.assertEqual(mock_call_jev.call_count, 1)
-        self.assertEqual(gates["recovery_tier"], "MAV_OVERLOAD")
-        self.assertEqual(gates["joint_focus"], "SHOULDER_SPARING")
-        self.assertEqual(gates["time_budget"], "TIME_CRUNCH_30M")
+def test_workout_engine_integration_with_jev(db: Session) -> None:
+    bench = Exercise(name="Bench Press", weight_basis="total", tracking="reps_weight")
+    routine = Routine(name="Upper A")
+    routine.items.append(RoutineItem(exercise=bench, position=0, target_sets=3, target_reps=10))
+    db.add_all([bench, routine])
+    db.commit()
+
+    muninn = InMemoryMuninnAdapter(jev_verdicts=["MEV_DELOAD"])
+    rec = generate_workout_recommendation(
+        dt.date(2026, 11, 2),
+        None,
+        {"sleep_duration_hours": 7.0, "hrv_ms": 50.0},
+        db=db,
+        muninn=muninn,
+    )
+    assert rec.recovery_status == "fatigued"
+    assert rec.volume_landmark == "MEV"
+    assert rec.target_rir == "RIR 3-4"
+    assert rec.exercises[0].target_sets == 2
