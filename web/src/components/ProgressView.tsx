@@ -40,7 +40,7 @@ function FastingHistorySection({ fastingLogs }: { fastingLogs: FastingCheckIn[] 
       <SectionHeader
         title={`Fasting History (${fastingLogs.length})`}
         icon={<span className="text-base leading-none">⏱️</span>}
-        variant="sky"
+        variant="brand"
         size="md"
         className="mb-3"
       />
@@ -106,7 +106,7 @@ function OlderArchiveSection({
 
   return (
     <CollapsibleSection variant="card" title={`Older Sessions Archive (${olderSessions.length})`}>
-      <SearchInput value={search} onChange={setSearch} placeholder="Search older sessions..." variant="blue" className="mb-3" />
+      <SearchInput value={search} onChange={setSearch} placeholder="Search older sessions..." variant="brand" className="mb-3" />
       {filteredArchive.length === 0 ? (
         <EmptyState
           variant="dashed"
@@ -178,7 +178,7 @@ function RecentWorkoutsSection({
       <SectionHeader
         title={`Last 7 Days Workouts (${recentSessions.length})`}
         icon={<span className="text-base leading-none">🏋️</span>}
-        variant="blue"
+        variant="brand"
         size="md"
         className="mb-3"
       />
@@ -237,7 +237,7 @@ export function ProgressView({
         subtitle="Milestone tracking, last 7 days activity, and correlations."
         titleAs="h2"
         size="md"
-        variant="blue"
+        variant="brand"
         className="mb-4"
       />
 
@@ -252,7 +252,7 @@ export function ProgressView({
         startLabel="Start: 90.0 kg"
         centerLabel={`${progressPercent}% towards 80 kg`}
         targetLabel="Target: 80.0 kg"
-        variant="blue"
+        variant="brand"
         className="mb-4"
       />
 

@@ -91,7 +91,7 @@ function RoutinePickerPanel({
           variant="outline"
           size="sm"
           fullWidth
-          className="text-sky-300 border-sky-500/40 mb-1"
+          className="text-accent border-accent/40 mb-1"
           style={{ justifyContent: 'flex-start' }}
           onClick={onReset}
         >
@@ -101,7 +101,7 @@ function RoutinePickerPanel({
       {routines.map((r) => (
         <Button
           key={r.id}
-          variant={activeRoutine?.id === r.id ? 'blue' : 'secondary'}
+          variant={activeRoutine?.id === r.id ? 'brand' : 'secondary'}
           size="sm"
           fullWidth
           style={{ justifyContent: 'flex-start' }}
@@ -194,7 +194,7 @@ function TodayTrainingStatusRow({
 }) {
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
-      <span className="text-xs text-sky-400 font-semibold uppercase">Today&apos;s Training</span>
+      <span className="text-xs text-accent font-semibold uppercase">Today&apos;s Training</span>
       {isLiftPendingAfterClass && (
         <StatusBadge
           label="Pending"
@@ -247,7 +247,7 @@ function TodayTrainingHeaderActions({
           icon={<span>⚡</span>}
           onClick={onOpenAiModal}
           title="Autoregulate training with AI sports physiology"
-          className="border-blue-500/40 text-blue-300"
+          className="border-accent/40 text-accent"
         >
           Adapt
         </Button>
@@ -292,7 +292,7 @@ function TodayTrainingHeader({
         subtitle={daySubtitle}
         titleAs="h3"
         size="md"
-        variant="sky"
+        variant="brand"
         actions={
           <TodayTrainingHeaderActions
             hasAiHandler={hasAiHandler}
@@ -352,7 +352,7 @@ function TodayTrainingActionSection({
 
   if (hasActionableStrength) {
     return (
-      <Button variant="blue" size="lg" fullWidth onClick={() => onStartRoutine(activeRoutine || undefined)}>
+      <Button variant="brand" size="lg" fullWidth onClick={() => onStartRoutine(activeRoutine || undefined)}>
         Start Workout ({startLabelName || 'Session'})
       </Button>
     )
@@ -380,8 +380,8 @@ function TodayWorkoutRecommendationAlerts({
       {isGeneratingWorkout && !workoutRecommendation && (
         <LoadingState
           label="Synthesizing today's autoregulated training prescription and Discord thread..."
-          variant="blue"
-          className="bg-sky-500/10 border border-sky-500/20 rounded-xl py-4 mb-4"
+          variant="brand"
+          className="bg-accent/10 border border-accent/20 rounded-xl py-4 mb-4"
         />
       )}
       {workoutRecommendation && (
@@ -453,6 +453,7 @@ function TodayWorkoutAiModal({
     <AiSynthesizerModal
       isOpen={isOpen}
       onClose={onClose}
+      variant="brand"
       title="Adaptive Workout Synthesizer"
       subtitle="Hypertrophy Science & Biomechanics Grounding"
       citationTitle={workoutRecommendation?.research_citation || getDefaultCitationTitle('workout')}

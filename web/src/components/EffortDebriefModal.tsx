@@ -85,7 +85,7 @@ export function EffortDebriefModal({ session, exercises, onSave, onSkip }: Effor
           <Button variant="secondary" size="md" onClick={onSkip}>
             Skip
           </Button>
-          <Button variant="blue" size="md" onClick={handleComplete}>
+          <Button variant="brand" size="md" onClick={handleComplete}>
             Save and Finish
           </Button>
         </div>
@@ -113,7 +113,7 @@ export function EffortDebriefModal({ session, exercises, onSave, onSkip }: Effor
           <TextInput
             id="effort-debrief-notes"
             type="text"
-            variant="blue"
+            variant="brand"
             placeholder="Add note (e.g. form felt smooth, or tight hamstring)..."
             value={notes}
             onChange={(e) => setNotes(e.target.value)}

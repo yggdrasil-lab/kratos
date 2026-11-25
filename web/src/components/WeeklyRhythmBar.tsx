@@ -23,7 +23,7 @@ export function WeeklyRhythmBar({ dayOfWeek, weekDaySessions }: WeeklyRhythmBarP
           const icon = isCompleted ? '✓' : '○'
           const iconColor = isCompleted ? 'text-emerald-400' : 'text-slate-400'
           const boxClass = isToday
-            ? 'bg-blue-500/20 border-blue-500'
+            ? 'bg-accent/15 border-accent'
             : isCompleted
             ? 'bg-emerald-500/20 border-emerald-500'
             : 'bg-background/50 border-border/60'
@@ -35,7 +35,7 @@ export function WeeklyRhythmBar({ dayOfWeek, weekDaySessions }: WeeklyRhythmBarP
             >
               <span
                 className={`text-[11px] ${
-                  isToday ? 'text-sky-400 font-bold' : 'text-slate-400 font-medium'
+                  isToday ? 'text-accent font-bold' : 'text-slate-400 font-medium'
                 }`}
               >
                 {shortName}

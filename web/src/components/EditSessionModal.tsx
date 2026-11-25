@@ -130,7 +130,7 @@ function EditTimeAndTypeInputs({
             id="edit-session-start-time"
             type="time"
             aria-label="Start Time"
-            variant="blue"
+            variant="brand"
             value={startTime}
             onChange={(e) => onStartTimeChange(e.target.value)}
           />
@@ -140,7 +140,7 @@ function EditTimeAndTypeInputs({
             id="edit-session-end-time"
             type="time"
             aria-label="End Time"
-            variant="blue"
+            variant="brand"
             value={endTime}
             onChange={(e) => onEndTimeChange(e.target.value)}
           />
@@ -152,7 +152,7 @@ function EditTimeAndTypeInputs({
           options={ACTIVITY_TYPE_OPTIONS}
           selected={activityType}
           onChange={(val) => onActivityTypeChange(val as ActivityType)}
-          variant="blue"
+          variant="brand"
         />
       </FormField>
     </>
@@ -229,7 +229,7 @@ function EditLabelAndNotesFields({
         <TextInput
           id="edit-session-routine-name"
           type="text"
-          variant="blue"
+          variant="brand"
           value={routineName}
           onChange={(e) => onRoutineNameChange(e.target.value)}
           placeholder="Enter routine or activity name..."
@@ -238,7 +238,7 @@ function EditLabelAndNotesFields({
           options={presetOptions}
           selected={selectedPreset}
           onChange={onRoutineNameChange}
-          variant="blue"
+          variant="brand"
           className="mt-2"
         />
       </FormField>
@@ -254,7 +254,7 @@ function EditLabelAndNotesFields({
         <TextArea
           id="edit-session-notes"
           rows={2}
-          variant="blue"
+          variant="brand"
           value={notes}
           onChange={(e) => onNotesChange(e.target.value)}
           placeholder="How did this session feel? Any joint feedback or PRs?"
@@ -412,7 +412,7 @@ export function EditSessionModal({
           <Button variant="secondary" size="sm" onClick={onClose} disabled={actions.isSaving}>
             Cancel
           </Button>
-          <Button variant="blue" size="sm" onClick={() => void actions.handleSave()} disabled={actions.isSaving}>
+          <Button variant="brand" size="sm" onClick={() => void actions.handleSave()} disabled={actions.isSaving}>
             {actions.isSaving ? 'Saving...' : 'Save Changes'}
           </Button>
         </div>

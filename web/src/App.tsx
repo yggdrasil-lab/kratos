@@ -48,9 +48,9 @@ function KratosAppHeader({ status, queued, onRefresh }: { status: SyncStatus; qu
   const { label, variant } = resolveHeaderStatus(status, queued)
   return (
     <AppHeader
-      variant="blue"
+      variant="brand"
       brandIcon={<img src="/favicon.svg" alt="Kratos" className="w-full h-full object-contain rounded-xl" />}
-      brandColor="overflow-hidden p-0 border border-sky-500/30"
+      brandColor="overflow-hidden p-0 border border-accent/30"
       title="Kratos"
       subtitle="Strength & Circadian"
       onRefresh={onRefresh}

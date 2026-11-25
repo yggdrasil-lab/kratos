@@ -46,7 +46,7 @@ export function ExercisePickerModal({
           value={search}
           onChange={setSearch}
           placeholder="Search exercises..."
-          variant="blue"
+          variant="brand"
         />
 
         {exercises.length === 0 ? (
@@ -73,8 +73,8 @@ export function ExercisePickerModal({
                   className="exercise-item"
                   title={exercise.name}
                   subtitle={exercise.primary_muscles.join(', ')}
-                  badge={<span className="text-sky-400 font-bold text-lg">+</span>}
-                  variant="blue"
+                  badge={<span className="text-accent font-bold text-lg">+</span>}
+                  variant="brand"
                   onClick={() => handleSelect(exercise)}
                 />
               </li>

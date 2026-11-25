@@ -107,7 +107,7 @@ function ClassModeFields({
     <div className="space-y-2">
       <TextInput
         type="text"
-        variant="blue"
+        variant="brand"
         aria-label={`Segment ${index + 1} Class Name`}
         value={segment.routineName}
         onChange={(e) => onUpdate({ ...segment, routineName: e.target.value })}
@@ -117,7 +117,7 @@ function ClassModeFields({
         options={CLASS_PRESETS}
         selected={CLASS_PRESETS.find((p) => p.toLowerCase() === segment.routineName.toLowerCase())}
         onChange={(name) => onUpdate({ ...segment, routineName: name })}
-        variant="blue"
+        variant="brand"
       />
     </div>
   )
@@ -145,11 +145,11 @@ function CardioModeFields({
             routineName: getDefaultLabelForActivity(nextActivity),
           })
         }}
-        variant="blue"
+        variant="brand"
       />
       <TextInput
         type="text"
-        variant="blue"
+        variant="brand"
         aria-label={`Segment ${index + 1} Activity Name`}
         value={segment.routineName}
         onChange={(e) => onUpdate({ ...segment, routineName: e.target.value })}
@@ -192,7 +192,7 @@ function RoutineModeFields({
           })
         }
       }}
-      variant="blue"
+      variant="brand"
       className="[&_button]:min-h-[45px]"
     />
   )
@@ -219,7 +219,7 @@ function SegmentTimeInputs({
         <TextInput
           id={`seg-${index + 1}-start`}
           type="time"
-          variant="blue"
+          variant="brand"
           aria-label={`Segment ${index + 1} Start`}
           value={startHHMM}
           onChange={(e) => {
@@ -232,7 +232,7 @@ function SegmentTimeInputs({
         <TextInput
           id={`seg-${index + 1}-end`}
           type="time"
-          variant="blue"
+          variant="brand"
           aria-label={`Segment ${index + 1} End`}
           value={endHHMM}
           onChange={(e) => {
@@ -258,7 +258,7 @@ function SegmentMetricsPreview({
     return (
       <LoadingState
         label="Calculating Eir telemetry..."
-        variant="blue"
+        variant="brand"
         className="rounded-xl bg-card/60 border border-border/60 py-2"
       />
     )
@@ -400,7 +400,7 @@ export function SplitSegmentCard({
         onChange={(nextMode) =>
           onUpdate(buildUpdatedModeSegment(segment, nextMode, routines, recommendedName))
         }
-        variant="blue"
+        variant="brand"
         size="xs"
         fullWidth
         idPrefix={`seg-${index + 1}-mode`}
