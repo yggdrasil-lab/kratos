@@ -129,7 +129,7 @@ function RoutinePickerPanel({
           variant="outline"
           size="sm"
           fullWidth
-          className="text-sky-300 border-sky-500/40 mb-1"
+          className="text-accent border-accent/40 mb-1"
           style={{ justifyContent: 'flex-start' }}
           onClick={onReset}
         >
@@ -232,7 +232,7 @@ function TodayTrainingStatusRow({
 }) {
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
-      <span className="text-xs text-sky-400 font-semibold uppercase">Today&apos;s Training</span>
+      <span className="text-xs text-accent font-semibold uppercase">Today&apos;s Training</span>
       {isLiftPendingAfterClass && (
         <StatusBadge
           label="Pending"
@@ -330,7 +330,7 @@ function TodayTrainingHeader({
         subtitle={daySubtitle}
         titleAs="h3"
         size="md"
-        variant="sky"
+        variant="brand"
         actions={
           <TodayTrainingHeaderActions
             hasAiHandler={hasAiHandler}
@@ -491,6 +491,7 @@ function TodayWorkoutAiModal({
     <AiSynthesizerModal
       isOpen={isOpen}
       onClose={onClose}
+      variant="brand"
       title="Adaptive Workout Synthesizer"
       subtitle="Hypertrophy Science & Biomechanics Grounding"
       citationTitle={workoutRecommendation?.research_citation || 'Israetel (Volume Landmarks) & Helms (RIR Autoregulation)'}

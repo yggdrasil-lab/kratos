@@ -179,7 +179,7 @@ function FastingCardHeader({
         title="Fasting and Fueling"
         subtitle={protocol.protocolName}
         icon={<span className="text-base leading-none">⏱️</span>}
-        variant="sky"
+        variant="brand"
         size="md"
         actions={
           <FastingHeaderActions
@@ -276,7 +276,7 @@ function FastingCardBody({
       <div className="flex flex-col gap-1.5">
         {protocol.fuelingAnchors.map((anchor, idx) => (
           <div key={idx} className="text-xs text-slate-300 flex items-start gap-1.5">
-            <span className="text-sky-400 mt-0.5">•</span>
+            <span className="text-accent mt-0.5">•</span>
             <span>{anchor}</span>
           </div>
         ))}
@@ -353,6 +353,7 @@ export function FastingCard({
         <AiSynthesizerModal
           isOpen={showAiModal}
           onClose={() => setShowAiModal(false)}
+          variant="brand"
           title="Adaptive Fasting Synthesizer"
           subtitle="Sports Physiology & Circadian Research Grounding"
           citationTitle={protocol.researchCitation || 'Panda Lab (Circadian TRE) & Schoenfeld (MPS Distribution)'}

@@ -226,7 +226,7 @@ function ActiveWorkoutHeader({
         title={(session.extra?.routine_name as string) || 'Current Workout'}
         titleAs="h2"
         size="md"
-        variant="sky"
+        variant="brand"
         actions={
           <Button variant="secondary" size="sm" onClick={onDiscard}>
             {isRetroactive ? 'Cancel' : 'Discard'}

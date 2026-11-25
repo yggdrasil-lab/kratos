@@ -22,6 +22,12 @@ const PLATFORMS = [
       hasTouch: devices['Pixel 7'].hasTouch,
     },
   },
+  {
+    name: 'desktop',
+    options: {
+      viewport: { width: 1280, height: 800 },
+    },
+  },
 ]
 
 async function captureSplitModalWithAssertions(page: import('@playwright/test').Page, platform: string) {

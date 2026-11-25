@@ -40,7 +40,7 @@ function FastingHistorySection({ fastingLogs }: { fastingLogs: FastingCheckIn[] 
       <SectionHeader
         title={`Fasting History (${fastingLogs.length})`}
         icon={<span className="text-base leading-none">⏱️</span>}
-        variant="sky"
+        variant="brand"
         size="md"
         className="mb-3"
       />
