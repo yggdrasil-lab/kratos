@@ -1,34 +1,27 @@
 import { GlassCard, SectionHeader } from '@yggdrasil-lab/ui'
-import type { AccentVariant } from '@yggdrasil-lab/ui'
 import type { DailyBiometrics } from '../types'
-import { computeReadinessTier, type ReadinessTier } from '../utils/readiness'
+import { resolveReadinessSummary } from '../utils/readiness'
 
 interface ReadinessVitalsCardProps {
   biometrics: DailyBiometrics | null
 }
 
-const TIER_HEADER_VARIANT: Record<ReadinessTier, AccentVariant> = {
-  optimal: 'emerald',
-  moderate: 'amber',
-  fatigued: 'rose',
-}
-
 /**
- * Displays today's readiness tier, coaching summary, and wearable vitals pills.
+ * Displays today's backend readiness tier, coaching summary, and wearable vitals pills.
  */
 export function ReadinessVitalsCard({ biometrics }: ReadinessVitalsCardProps) {
   const sleepHours = biometrics?.sleep_duration_hours ?? null
   const hrvMs = biometrics?.hrv_ms ? Number(biometrics.hrv_ms) : null
   const rhrBpm = biometrics?.resting_hr_bpm ?? null
   const weightKg = biometrics?.latest_weight_kg ? Number(biometrics.latest_weight_kg) : null
-  const readiness = computeReadinessTier(biometrics)
+  const readiness = resolveReadinessSummary(biometrics)
 
   return (
     <GlassCard className={`animate-slide-up mb-4 ${readiness.borderClass}`}>
       <SectionHeader
         title={readiness.label}
         icon={<span className="text-base leading-none">{readiness.emoji}</span>}
-        variant={TIER_HEADER_VARIANT[readiness.tier]}
+        variant={readiness.headerVariant}
         size="sm"
         className="mb-2"
         actions={

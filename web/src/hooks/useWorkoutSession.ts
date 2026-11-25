@@ -32,14 +32,9 @@ function createSkippedSets(count: number): SetEntry[] {
 
 function matchExerciseForRecommendation(
   exercises: Exercise[],
-  exerciseId: string | null | undefined,
   rawName: string | undefined
 ): Exercise | undefined {
   const targetName = (rawName || '').trim().toLowerCase()
-  if (exerciseId) {
-    const byId = exercises.find((e) => e.id === exerciseId)
-    if (byId) return byId
-  }
   if (!targetName) return undefined
   return (
     exercises.find((e) => e.name.trim().toLowerCase() === targetName) ||
@@ -58,10 +53,9 @@ function buildRecommendedItems(
   const fallbackExerciseId = isValidUuid(exercises[0]?.id) ? exercises[0].id : null
 
   for (const recEx of recommendation.exercises) {
-    const matchEx = matchExerciseForRecommendation(exercises, recEx.exercise_id, recEx.exercise_name)
+    const matchEx = matchExerciseForRecommendation(exercises, recEx.exercise_name)
     const resolvedExerciseId =
       (isValidUuid(matchEx?.id) ? matchEx.id : null) ||
-      (isValidUuid(recEx.exercise_id) ? recEx.exercise_id : null) ||
       fallbackExerciseId
     if (!resolvedExerciseId) continue
 

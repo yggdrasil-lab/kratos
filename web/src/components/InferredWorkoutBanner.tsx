@@ -3,8 +3,9 @@ import type { Routine, SessionPayload } from '../types'
 import { formatFriendlyDate, formatSessionTimeRange } from '../utils/circadian'
 import { getSessionLabel } from '../utils/session'
 import { getSessionDurationMinutes } from '../utils/sessionMetrics'
+import { extractSessionTelemetry } from '../utils/telemetry'
 import { SessionMetricBadges } from './EffortBadge'
-import { HRZoneBar, type HRZonesData } from './HRZoneBar'
+import { HRZoneBar } from './HRZoneBar'
 
 interface InferredWorkoutBannerProps {
   inferredSessions: SessionPayload[]
@@ -23,13 +24,13 @@ function InferredSessionMetricsRow({
   session: SessionPayload
   durationMins: number | null
 }) {
-  const activeEnergy =
-    typeof session.extra?.active_energy_kcal === 'number' ? session.extra.active_energy_kcal : null
-  const stepCount = typeof session.extra?.step_count === 'number' ? session.extra.step_count : null
-  const avgHr = typeof session.extra?.avg_hr === 'number' ? session.extra.avg_hr : null
-  const peakHr = typeof session.extra?.peak_hr === 'number' ? session.extra.peak_hr : null
-  const hrRecovery =
-    typeof session.extra?.hr_recovery_60s === 'number' ? session.extra.hr_recovery_60s : null
+  const {
+    activeEnergyKcal: activeEnergy,
+    stepCount,
+    avgHrBpm: avgHr,
+    peakHrBpm: peakHr,
+    hrRecovery60s: hrRecovery,
+  } = extractSessionTelemetry(session)
 
   return (
     <div className="text-xs text-slate-300 mt-1 flex gap-3 flex-wrap items-center">
@@ -112,10 +113,7 @@ function InferredSessionCard({
   const routineName = getSessionLabel(infSession, routines)
   const sessionDate = infSession.started_at ? infSession.started_at.split('T')[0] : circadianDate
   const durationMins = getSessionDurationMinutes(infSession)
-  const effort = typeof infSession.extra?.effort_rating === 'string' ? infSession.extra.effort_rating : ''
-  const rpe = typeof infSession.extra?.rpe === 'number' ? infSession.extra.rpe : null
-  const trimp = typeof infSession.extra?.trimp === 'number' ? infSession.extra.trimp : null
-  const hrZones = infSession.extra?.hr_zones as HRZonesData | undefined
+  const { effortRating: effort, rpe, trimp, hrZones } = extractSessionTelemetry(infSession)
 
   return (
     <GlassCard className="animate-slide-up border-amber-500/40 bg-amber-500/10 p-4">

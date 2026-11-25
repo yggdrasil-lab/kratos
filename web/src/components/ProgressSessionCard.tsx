@@ -3,8 +3,9 @@ import type { Exercise, Routine, SessionPayload } from '../types'
 import { formatFriendlyDate, formatSessionTimeRange } from '../utils/circadian'
 import { computeSessionVolumeAndSets, getSessionLabel } from '../utils/session'
 import { getExerciseDisplayName, getSessionDurationMinutes } from '../utils/sessionMetrics'
+import { extractSessionTelemetry } from '../utils/telemetry'
 import { SessionMetricBadges } from './EffortBadge'
-import { HRZoneBar, type HRZonesData } from './HRZoneBar'
+import { HRZoneBar } from './HRZoneBar'
 
 interface ProgressSessionCardProps {
   session: SessionPayload
@@ -29,9 +30,7 @@ function SessionCardHeader({
   const routineName = getSessionLabel(session, routines)
   const dateStr = session.started_at.split('T')[0]
   const timeRange = formatSessionTimeRange(session.started_at, session.ended_at)
-  const effort = typeof session.extra?.effort_rating === 'string' ? session.extra.effort_rating : ''
-  const rpe = typeof session.extra?.rpe === 'number' ? session.extra.rpe : null
-  const trimp = typeof session.extra?.trimp === 'number' ? session.extra.trimp : null
+  const { effortRating: effort, rpe, trimp } = extractSessionTelemetry(session)
   const inferredPill = isInferred ? (
     <StatusBadge
       label="⚡ Inferred from Plan"
@@ -69,14 +68,14 @@ function SessionCardTelemetry({
 }) {
   const { volume, sets } = computeSessionVolumeAndSets(session, exercises)
   const durationMins = getSessionDurationMinutes(session)
-  const activeEnergy =
-    typeof session.extra?.active_energy_kcal === 'number' ? session.extra.active_energy_kcal : null
-  const stepCount = typeof session.extra?.step_count === 'number' ? session.extra.step_count : null
-  const avgHr = typeof session.extra?.avg_hr === 'number' ? session.extra.avg_hr : null
-  const peakHr = typeof session.extra?.peak_hr === 'number' ? session.extra.peak_hr : null
-  const hrRecovery =
-    typeof session.extra?.hr_recovery_60s === 'number' ? session.extra.hr_recovery_60s : null
-  const hrZones = session.extra?.hr_zones as HRZonesData | undefined
+  const {
+    activeEnergyKcal: activeEnergy,
+    stepCount,
+    avgHrBpm: avgHr,
+    peakHrBpm: peakHr,
+    hrRecovery60s: hrRecovery,
+    hrZones,
+  } = extractSessionTelemetry(session)
 
   return (
     <>

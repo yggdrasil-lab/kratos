@@ -87,6 +87,11 @@ test.describe('Fasting Check-In Flow', () => {
         body: JSON.stringify({
           date: todayStr,
           latest_weight_kg: 86.02,
+          readiness: {
+            tier: 'optimal',
+            label: 'High Readiness',
+            message: 'Optimal state. Prime day to push progressive overload and PRs.',
+          },
           fasting: {
             id: 'fb-server-123',
             date: todayStr,
@@ -95,7 +100,7 @@ test.describe('Fasting Check-In Flow', () => {
             score: 5.0,
             tags: ['energy:high'],
             payload: {
-              target_window: '16:8',
+              target_window: '14:10',
               energy: 'high',
               headache: 'none',
             },

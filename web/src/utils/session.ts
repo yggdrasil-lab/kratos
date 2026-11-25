@@ -2,7 +2,7 @@ import type { Exercise, Routine, SessionItemPayload, SessionPayload, WeightBasis
 
 /**
  * Determines whether an exercise's weight is entered and stored per hand (per dumbbell)
- * rather than total combined load.
+ * rather than total combined load, prioritizing authoritative backend weight_basis first.
  */
 export function isPerHandExercise(
   exercise?: Pick<Exercise, 'name' | 'weight_basis'> | null,
@@ -10,7 +10,9 @@ export function isPerHandExercise(
   fallbackName?: string
 ): boolean {
   if (explicitBasis === 'per_hand') return true
+  if (explicitBasis === 'total') return false
   if (exercise?.weight_basis === 'per_hand') return true
+  if (exercise?.weight_basis === 'total') return false
   const name = (fallbackName || exercise?.name || '').toLowerCase()
   return (
     name.includes('dumbbell') ||

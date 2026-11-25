@@ -171,12 +171,11 @@ export interface FastingRecommendation {
 }
 
 export interface RecommendedExerciseItem {
-  exercise_id?: string | null
   exercise_name: string
   target_sets: number
   target_reps: string
   suggested_weight_kg?: number | null
-  weight_basis?: WeightBasis
+  weight_basis: WeightBasis
   notes?: string | null
 }
 
@@ -205,6 +204,14 @@ export interface HealthFeedback {
   logged_at?: string
 }
 
+export type ReadinessTier = 'optimal' | 'moderate' | 'fatigued'
+
+export interface BackendReadiness {
+  tier: ReadinessTier
+  label: string
+  message: string
+}
+
 export interface DailyBiometrics {
   date: string
   latest_weight_kg?: number | string | null
@@ -216,6 +223,7 @@ export interface DailyBiometrics {
   sleep_score?: number | null
   step_count?: number | null
   active_energy_kcal?: number | null
+  readiness?: BackendReadiness | null
   readiness_notes?: string[]
   fasting?: HealthFeedback | null
   workout?: HealthFeedback | null

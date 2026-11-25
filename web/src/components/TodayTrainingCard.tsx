@@ -12,6 +12,7 @@ import {
   SummaryMetricGrid,
 } from '@yggdrasil-lab/ui'
 import type { Exercise, Routine, SessionPayload, WorkoutRecommendation } from '../types'
+import { getDefaultCitationTitle, getInlinePillars, getModalPillars } from '../utils/pillars'
 import { resolveTodayRoutineState } from '../utils/readiness'
 import { getSessionLabel, isPerHandExercise } from '../utils/session'
 import {
@@ -32,47 +33,8 @@ interface TodayTrainingCardProps {
   onSynthesizeWorkoutRecommendation?: (customContext?: string) => Promise<void>
 }
 
-const INLINE_CITATION_PILLARS = [
-  {
-    icon: '📊',
-    label: 'Israetel (RP):',
-    description: 'Sets scaled between MEV (2 sets deload on fatigue) and MAV (3+ overload sets).',
-  },
-  {
-    icon: '🎯',
-    label: 'Helms:',
-    description: 'Target RIR dictated by recovery score (RIR 1-2 on primed days; RIR 3-4 on fatigue).',
-  },
-  {
-    icon: '🛡️',
-    label: 'McGill / Starrett:',
-    description: 'Neutral grips and joint-sparing substitutions when friction is detected.',
-  },
-  {
-    icon: '🏸',
-    label: 'Concurrent Interference:',
-    description: 'Preserves leg power adjacent to badminton match play.',
-  },
-]
-
-const WORKOUT_PILLARS = [
-  {
-    label: 'Volume Landmarks (RP)',
-    description: 'Sets scaled between MEV (2 sets deload on fatigue) and MAV (3+ overload sets).',
-  },
-  {
-    label: 'RIR Autoregulation',
-    description: 'Target RIR dictated by recovery score (RIR 1-2 on primed days; RIR 3-4 on fatigue).',
-  },
-  {
-    label: 'Joint Sparing (McGill)',
-    description: 'Neutral grips and chest-supported variations to spare impinged shoulders/spine.',
-  },
-  {
-    label: 'Court Freshness',
-    description: 'Preserves leg power and avoids eccentric damage adjacent to badminton match play.',
-  },
-]
+const INLINE_CITATION_PILLARS = getInlinePillars('workout')
+const WORKOUT_PILLARS = getModalPillars('workout')
 
 function LoggedClassChips({
   classSessions,
@@ -493,7 +455,7 @@ function TodayWorkoutAiModal({
       onClose={onClose}
       title="Adaptive Workout Synthesizer"
       subtitle="Hypertrophy Science & Biomechanics Grounding"
-      citationTitle={workoutRecommendation?.research_citation || 'Israetel (Volume Landmarks) & Helms (RIR Autoregulation)'}
+      citationTitle={workoutRecommendation?.research_citation || getDefaultCitationTitle('workout')}
       pillars={WORKOUT_PILLARS}
       inputLabel="Constraints, Body State, or Schedule Shifts (Optional)"
       inputPlaceholder="e.g. Left shoulder is pinching on incline; only have 35 minutes today; badminton left my calves sore"
