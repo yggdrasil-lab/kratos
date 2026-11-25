@@ -17,7 +17,6 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://kratos:kratos@localhost:5432/kratos"
     environment: str = "development"
     log_level: str = "INFO"
-    cors_origins: str = "http://localhost:5173"
     mcp_token: str | None = None
     llm_base_url: str = "http://muninn:4000/v1"
     llm_api_key: str = ""
@@ -43,10 +42,6 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("KRATOS_DISCORD_USER_ID", "DISCORD_USER_ID"),
     )
-
-    @property
-    def cors_origin_list(self) -> list[str]:
-        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
 
 @lru_cache

@@ -6,7 +6,6 @@ generated from, so response models are declared on every route.
 """
 
 from fastapi import Depends, FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -86,13 +85,6 @@ def create_app(container: KratosContainer | None = None) -> FastAPI:
         summary="Workout catalogue, plans, and logged sessions on Postgres.",
     )
     fastapi_app.state.container = resolved_container
-    fastapi_app.add_middleware(
-        CORSMiddleware,
-        allow_origins=resolved_container.settings.cors_origin_list,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
     fastapi_app.add_middleware(NoCacheMiddleware)
     fastapi_app.add_exception_handler(EirUpstreamError, _handle_eir_upstream_error)
     fastapi_app.add_exception_handler(LegacyEirUpstreamError, _handle_eir_upstream_error)

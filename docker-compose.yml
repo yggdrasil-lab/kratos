@@ -100,7 +100,13 @@ services:
         - "traefik.http.routers.kratos-mcp.entrypoints=websecure"
         - "traefik.http.routers.kratos-mcp.tls=true"
         - "traefik.http.routers.kratos-mcp.tls.certresolver=cloudflare"
+        - "traefik.http.routers.kratos-mcp.middlewares=kratos-strip-authentik"
         - "traefik.http.routers.kratos-mcp.service=kratos-api"
+        - "traefik.http.middlewares.kratos-strip-authentik.headers.customrequestheaders.X-authentik-username="
+        - "traefik.http.middlewares.kratos-strip-authentik.headers.customrequestheaders.X-authentik-email="
+        - "traefik.http.middlewares.kratos-strip-authentik.headers.customrequestheaders.X-authentik-groups="
+        - "traefik.http.middlewares.kratos-strip-authentik.headers.customrequestheaders.X-authentik-name="
+        - "traefik.http.middlewares.kratos-strip-authentik.headers.customrequestheaders.X-authentik-uid="
         - "traefik.http.services.kratos-api.loadbalancer.server.port=8000"
         - "traefik.docker.network=aether-net"
 
