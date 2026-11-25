@@ -77,6 +77,19 @@ export function extractSessionTelemetry(
   }
 }
 
+function buildMetricValueMap(refreshed: WorkoutMetrics): Record<(typeof CLEARABLE_METRIC_KEYS)[number], unknown> {
+  return {
+    active_energy_kcal: refreshed.active_energy_kcal,
+    avg_hr: refreshed.avg_hr_bpm,
+    peak_hr: refreshed.peak_hr_bpm,
+    step_count: refreshed.step_count,
+    rpe: refreshed.rpe,
+    trimp: refreshed.trimp,
+    hr_zones: refreshed.hr_zones,
+    hr_recovery_60s: refreshed.hr_recovery_60s,
+  }
+}
+
 /**
  * Merges refreshed Eir WorkoutMetrics into session.extra, setting lock flags
  * and clearing stale telemetry keys whenever the refreshed payload returns null.
@@ -96,30 +109,15 @@ export function mergeRefreshedMetricsIntoExtra(
     telemetry_reconciled: true,
     duration_minutes: refreshed.duration_minutes,
   }
-  const valueMap: Record<(typeof CLEARABLE_METRIC_KEYS)[number], unknown> = {
-    active_energy_kcal: refreshed.active_energy_kcal,
-    avg_hr: refreshed.avg_hr_bpm,
-    peak_hr: refreshed.peak_hr_bpm,
-    step_count: refreshed.step_count,
-    rpe: refreshed.rpe,
-    trimp: refreshed.trimp,
-    hr_zones: refreshed.hr_zones,
-    hr_recovery_60s: refreshed.hr_recovery_60s,
-  }
+  const valueMap = buildMetricValueMap(refreshed)
   for (const key of CLEARABLE_METRIC_KEYS) {
     const val = valueMap[key]
-    if (val === null || val === undefined) {
-      delete next[key]
-    } else {
-      next[key] = val
-    }
+    if (val === null || val === undefined) delete next[key]
+    else next[key] = val
   }
   const resolvedEffort = explicitEffort ?? refreshed.effort_rating ?? null
-  if (resolvedEffort === null || resolvedEffort === undefined) {
-    delete next.effort_rating
-  } else {
-    next.effort_rating = resolvedEffort
-  }
+  if (resolvedEffort === null || resolvedEffort === undefined) delete next.effort_rating
+  else next.effort_rating = resolvedEffort
   return next
 }
 

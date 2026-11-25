@@ -199,6 +199,51 @@ function useRecommendationSynthesizers(
   return { synthesizeFastingRecommendation, synthesizeWorkoutRecommendation }
 }
 
+async function applyBiometricsResults(
+  results: [
+    PromiseSettledResult<DailyBiometrics | null>,
+    PromiseSettledResult<FastingRecommendation | null>,
+    PromiseSettledResult<WorkoutRecommendation | null>,
+  ],
+  handlers: {
+    setBiometrics: (val: DailyBiometrics | null) => void
+    setFastingRecommendation: (val: FastingRecommendation | null) => void
+    setWorkoutRecommendation: (val: WorkoutRecommendation | null) => void
+    setFastingLogs: React.Dispatch<React.SetStateAction<FastingCheckIn[]>>
+    setSessionExpired: (val: boolean) => void
+    setStatus: (status: SyncStatus) => void
+  }
+): Promise<void> {
+  const [bioRes, fastingRes, workoutRes] = results
+  if (fastingRes.status === 'fulfilled' && fastingRes.value) {
+    handlers.setFastingRecommendation(fastingRes.value)
+  }
+  if (workoutRes.status === 'fulfilled' && workoutRes.value) {
+    handlers.setWorkoutRecommendation(workoutRes.value)
+  }
+  if (bioRes.status === 'fulfilled' && bioRes.value) {
+    const data = bioRes.value
+    handlers.setBiometrics(data)
+    const serverCheckIn = parseServerFasting(data.fasting)
+    if (serverCheckIn) {
+      await db.fastingLogs.put(serverCheckIn).catch(() => undefined)
+      handlers.setFastingLogs((prev) => [
+        serverCheckIn,
+        ...prev.filter((c) => c.date !== serverCheckIn.date),
+      ])
+    }
+  }
+  const firstFailure = results.find((res): res is PromiseRejectedResult => res.status === 'rejected')
+  if (firstFailure) {
+    const err = firstFailure.reason
+    if (isSessionExpiredError(err)) handlers.setSessionExpired(true)
+    handlers.setStatus({ kind: 'error', message: formatSyncError(err, 'Failed to load biometrics') })
+    void reportClientError(err, { source: 'biometrics_fetch' })
+    return
+  }
+  handlers.setSessionExpired(false)
+}
+
 function useBiometricsState(
   circadianDate: string,
   setSessionExpired: (val: boolean) => void,
@@ -221,37 +266,19 @@ function useBiometricsState(
     setIsGeneratingFasting(true)
     setIsGeneratingWorkout(true)
     try {
-      const [bioRes, fastingRes, workoutRes] = await Promise.allSettled([
+      const results = await Promise.allSettled([
         api.getBiometricsToday(),
         api.getFastingRecommendation().finally(() => setIsGeneratingFasting(false)),
         api.getWorkoutRecommendation().finally(() => setIsGeneratingWorkout(false)),
       ])
-      if (fastingRes.status === 'fulfilled' && fastingRes.value) {
-        setFastingRecommendation(fastingRes.value)
-      }
-      if (workoutRes.status === 'fulfilled' && workoutRes.value) {
-        setWorkoutRecommendation(workoutRes.value)
-      }
-      if (bioRes.status === 'fulfilled' && bioRes.value) {
-        const data = bioRes.value
-        setBiometrics(data)
-        const serverCheckIn = parseServerFasting(data.fasting)
-        if (serverCheckIn) {
-          await db.fastingLogs.put(serverCheckIn).catch(() => undefined)
-          setFastingLogs((prev) => [serverCheckIn, ...prev.filter((c) => c.date !== serverCheckIn.date)])
-        }
-      }
-      const firstFailure = [bioRes, fastingRes, workoutRes].find(
-        (res): res is PromiseRejectedResult => res.status === 'rejected'
-      )
-      if (firstFailure) {
-        const err = firstFailure.reason
-        if (isSessionExpiredError(err)) setSessionExpired(true)
-        setStatus({ kind: 'error', message: formatSyncError(err, 'Failed to load biometrics') })
-        void reportClientError(err, { source: 'biometrics_fetch' })
-      } else {
-        setSessionExpired(false)
-      }
+      await applyBiometricsResults(results, {
+        setBiometrics,
+        setFastingRecommendation,
+        setWorkoutRecommendation,
+        setFastingLogs,
+        setSessionExpired,
+        setStatus,
+      })
     } finally {
       setIsGeneratingFasting(false)
       setIsGeneratingWorkout(false)
@@ -300,7 +327,25 @@ function useBiometricsState(
   }
 }
 
-function useSessionMutations(
+async function deleteSessionRemoteOrMissing(
+  sessionId: string,
+  isInferred: boolean,
+  setSessionExpired: (val: boolean) => void,
+  setStatus: (status: SyncStatus) => void
+): Promise<boolean> {
+  try {
+    await api.deleteSession(sessionId, isInferred)
+    return true
+  } catch (err) {
+    if (isKratosApiError(err) && err.status === 404) return true
+    if (isSessionExpiredError(err)) setSessionExpired(true)
+    setStatus({ kind: 'error', message: formatSyncError(err, 'Failed to delete session') })
+    void reportClientError(err, { source: 'session_delete', sessionId })
+    return false
+  }
+}
+
+function useSessionWriteMutations(
   sessions: SessionPayload[],
   setSessions: React.Dispatch<React.SetStateAction<SessionPayload[]>>,
   routines: Routine[],
@@ -319,16 +364,12 @@ function useSessionMutations(
       await enqueue(finalSession)
       await sync()
       await loadSessions()
-      if (feedback) {
-        await sendWorkoutFeedbackBestEffort(finalSession, feedback, routines, exercises, (err) => {
-          if (isSessionExpiredError(err)) setSessionExpired(true)
-          setStatus({
-            kind: 'error',
-            message: formatSyncError(err, 'Failed to sync workout feedback'),
-          })
-          void reportClientError(err, { source: 'workout_feedback_save' })
-        })
-      }
+      if (!feedback) return
+      await sendWorkoutFeedbackBestEffort(finalSession, feedback, routines, exercises, (err) => {
+        if (isSessionExpiredError(err)) setSessionExpired(true)
+        setStatus({ kind: 'error', message: formatSyncError(err, 'Failed to sync workout feedback') })
+        void reportClientError(err, { source: 'workout_feedback_save' })
+      })
     },
     [routines, exercises, sync, loadSessions, setSessionExpired, setStatus]
   )
@@ -336,19 +377,13 @@ function useSessionMutations(
   const deleteSession = useCallback(
     async (sessionId: string) => {
       const target = sessions.find((s) => s.id === sessionId)
-      try {
-        await api.deleteSession(sessionId, Boolean(target?.extra?.inferred))
-      } catch (err) {
-        if (!(isKratosApiError(err) && err.status === 404)) {
-          if (isSessionExpiredError(err)) setSessionExpired(true)
-          setStatus({
-            kind: 'error',
-            message: formatSyncError(err, 'Failed to delete session'),
-          })
-          void reportClientError(err, { source: 'session_delete', sessionId })
-          return
-        }
-      }
+      const removed = await deleteSessionRemoteOrMissing(
+        sessionId,
+        Boolean(target?.extra?.inferred),
+        setSessionExpired,
+        setStatus
+      )
+      if (!removed) return
       await db.outbox.delete(sessionId).catch(() => undefined)
       setSessions((prev) => prev.filter((s) => s.id !== sessionId))
       await refreshQueueCount()
@@ -356,6 +391,16 @@ function useSessionMutations(
     [sessions, setSessions, refreshQueueCount, setSessionExpired, setStatus]
   )
 
+  return { persistSession, deleteSession }
+}
+
+function useSessionRecordMutations(
+  sessions: SessionPayload[],
+  setSessions: React.Dispatch<React.SetStateAction<SessionPayload[]>>,
+  sync: () => Promise<void>,
+  loadSessions: () => Promise<void>,
+  refreshQueueCount: () => Promise<void>
+) {
   const confirmSession = useCallback(
     async (sessionId: string) => {
       const target = sessions.find((s) => s.id === sessionId)
@@ -394,7 +439,33 @@ function useSessionMutations(
     [setSessions, refreshQueueCount, loadSessions]
   )
 
-  return { persistSession, deleteSession, confirmSession, updateSessionRecord, splitSessionRecord }
+  return { confirmSession, updateSessionRecord, splitSessionRecord }
+}
+
+function useSessionMutations(
+  sessions: SessionPayload[],
+  setSessions: React.Dispatch<React.SetStateAction<SessionPayload[]>>,
+  routines: Routine[],
+  exercises: Exercise[],
+  sync: () => Promise<void>,
+  loadSessions: () => Promise<void>,
+  refreshQueueCount: () => Promise<void>,
+  setSessionExpired: (val: boolean) => void,
+  setStatus: (status: SyncStatus) => void
+) {
+  const writes = useSessionWriteMutations(
+    sessions,
+    setSessions,
+    routines,
+    exercises,
+    sync,
+    loadSessions,
+    refreshQueueCount,
+    setSessionExpired,
+    setStatus
+  )
+  const records = useSessionRecordMutations(sessions, setSessions, sync, loadSessions, refreshQueueCount)
+  return { ...writes, ...records }
 }
 
 function useSessionsState(
