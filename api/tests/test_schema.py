@@ -1,11 +1,21 @@
 """The migration must produce exactly the specified schema.
 
-This is the spec as an executable check: six tables, four views, no more.
+This is the spec as an executable check: nine tables, four views, no more.
 """
 
 from sqlalchemy import inspect, text
 
-EXPECTED_TABLES = {"exercise", "routine", "routine_item", "session", "session_item", "set_entry"}
+EXPECTED_TABLES = {
+    "exercise",
+    "routine",
+    "routine_item",
+    "session",
+    "session_item",
+    "set_entry",
+    "weekly_plan",
+    "fasting_recommendation",
+    "workout_recommendation",
+}
 EXPECTED_VIEWS = {"v_set", "v_e1rm", "v_session_volume", "v_exercise_last"}
 
 
@@ -55,31 +65,67 @@ def test_forward_migration_can_insert_with_no_client_side_defaults(engine) -> No
     assert row.extra == {}
 
 
-def test_downgrade_drops_everything(database_url: str) -> None:
-    """The migration must reverse cleanly — verified on its own database."""
+def _verify_downgrade_round_trip(api_dir: str, target_url: str) -> set[str]:
     import os
-    import tempfile
 
-    import pgserver
     from alembic import command
     from alembic.config import Config
     from sqlalchemy import create_engine as make_engine
 
-    api_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    pgdata = tempfile.mkdtemp(prefix="kratos-down-pg-")
-    server = pgserver.get_server(pgdata, cleanup_mode="delete")
+    config = Config(os.path.join(api_dir, "alembic.ini"))
+    config.set_main_option("script_location", os.path.join(api_dir, "alembic"))
+    config.set_main_option("sqlalchemy.url", target_url)
+    prev = os.environ.get("KRATOS_DATABASE_URL")
+    os.environ["KRATOS_DATABASE_URL"] = target_url
     try:
-        url = server.get_uri().replace("postgresql://", "postgresql+psycopg://", 1)
-        config = Config(os.path.join(api_dir, "alembic.ini"))
-        config.set_main_option("script_location", os.path.join(api_dir, "alembic"))
-        config.set_main_option("sqlalchemy.url", url)
-        os.environ["KRATOS_DATABASE_URL"] = url
         command.upgrade(config, "head")
         command.downgrade(config, "base")
-
-        engine = make_engine(url)
-        inspector = inspect(engine)
-        remaining = set(inspector.get_table_names()) - {"alembic_version"}
+        check_engine = make_engine(target_url)
+        try:
+            inspector = inspect(check_engine)
+            return set(inspector.get_table_names()) - {"alembic_version"}
+        finally:
+            check_engine.dispose()
     finally:
-        server.cleanup()
+        if prev is None:
+            os.environ.pop("KRATOS_DATABASE_URL", None)
+        else:
+            os.environ["KRATOS_DATABASE_URL"] = prev
+
+
+def test_downgrade_drops_everything(database_url: str) -> None:
+    """The migration must reverse cleanly, verified on its own database."""
+    import os
+    import tempfile
+    from urllib.parse import urlparse, urlunparse
+
+    from sqlalchemy import create_engine as make_engine
+
+    api_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    external = os.environ.get("KRATOS_TEST_DATABASE_URL")
+    if external:
+        parsed = urlparse(external)
+        admin_url = urlunparse(parsed._replace(path="/postgres"))
+        temp_db = "kratos_downgrade_test"
+        temp_url = urlunparse(parsed._replace(path=f"/{temp_db}"))
+        admin_engine = make_engine(admin_url, isolation_level="AUTOCOMMIT")
+        try:
+            with admin_engine.connect() as conn:
+                conn.execute(text(f"drop database if exists {temp_db}"))
+                conn.execute(text(f"create database {temp_db}"))
+            remaining = _verify_downgrade_round_trip(api_dir, temp_url)
+        finally:
+            with admin_engine.connect() as conn:
+                conn.execute(text(f"drop database if exists {temp_db} with (force)"))
+            admin_engine.dispose()
+    else:
+        import pgserver
+
+        pgdata = tempfile.mkdtemp(prefix="kratos-down-pg-")
+        server = pgserver.get_server(pgdata, cleanup_mode="delete")
+        try:
+            url = server.get_uri().replace("postgresql://", "postgresql+psycopg://", 1)
+            remaining = _verify_downgrade_round_trip(api_dir, url)
+        finally:
+            server.cleanup()
     assert remaining == set(), remaining

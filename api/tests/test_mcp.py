@@ -133,6 +133,12 @@ def test_mcp_initialize_and_lists_expected_tools(authorized_client: TestClient):
         "routine_create",
         "routine_update",
         "routine_item",
+        "weekly_plan_get",
+        "weekly_plan_set",
+        "fasting_recommendation_get",
+        "fasting_recommendation_adjust",
+        "workout_recommendation_get",
+        "workout_recommendation_adjust",
     }
 
 

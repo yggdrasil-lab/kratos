@@ -36,7 +36,7 @@ def _load(db: Session, session_id: uuid.UUID) -> WorkoutSession | None:
 
 
 def _replace_items(db: Session, session: WorkoutSession, payload: SessionCreate) -> None:
-    """Replace the tree wholesale — an upsert of the whole session, not a merge.
+    """Replace the tree wholesale: an upsert of the whole session, not a merge.
 
     The client owns the session and sends its complete current state, so replacing
     is simpler and correct for a retried flush. The old rows are deleted and

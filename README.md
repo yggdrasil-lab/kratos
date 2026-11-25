@@ -26,7 +26,7 @@ network and are published at `kratos.${DOMAIN_NAME}`.
 ## Status
 
 Bootstrap. The repository holds the decided stack and a working skeleton of the
-v1 domain — catalogue, plan, and log — with the specified database schema applied
+v1 domain (catalogue, plan, and log) with the specified database schema applied
 through a migration. Features are added from here.
 
 ## Layout
@@ -46,7 +46,7 @@ Three groups, in the order data arrives:
 | Plan | `routine`, `routine_item` | What do I intend to do? |
 | Log | `session`, `session_item`, `set_entry` | What did I actually do? |
 
-Derived values — volume, estimated 1RM, last performance — are database views
+Derived values (volume, estimated 1RM, last performance) are database views
 (`v_set`, `v_e1rm`, `v_session_volume`, `v_exercise_last`), never stored columns.
 The Alembic migration `0001_v1_schema` is the schema of record.
 
@@ -105,7 +105,7 @@ npm run test:e2e
 
 ## Configuration
 
-Environment variables carry the `KRATOS_` prefix — see `.env.example`.
+Environment variables carry the `KRATOS_` prefix (see `.env.example`).
 
 ## Deploy
 
@@ -122,6 +122,6 @@ chmod +x /tmp/deploy.sh
 ## Documentation
 
 Full documentation lives in the vault:
-`Areas/90-Infrastructure/Kratos/Kratos Stack.md` — architecture, routing, the
+`Areas/90-Infrastructure/Kratos/Kratos Stack.md`: architecture, routing, the
 database password rationale, host-directory procedure, the fleet-wide label
 convention, troubleshooting, and pitfalls.

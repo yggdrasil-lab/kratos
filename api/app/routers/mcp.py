@@ -19,7 +19,7 @@ Design notes
   ``/mcp``: SDK-native ``token_verifier`` needs OAuth ``AuthSettings`` (issuer
   URL plus discovery metadata) which this deployment does not have, and raw
   Starlette routes do not run FastAPI dependencies. The middleware fails
-  closed — a missing configured token is a 503, a wrong one is a 401 — so an
+  closed: a missing configured token is a 503, a wrong one is a 401, so an
   unauthenticated deployment can never serve tool calls.
 
 Every tool maps onto the same service functions the REST routers use, so the
@@ -534,7 +534,7 @@ class _RebuildableApp:
     ``StreamableHTTPSessionManager.run()`` may only be called once per instance,
     and the SDK's ``streamable_http_app`` builds a fresh manager every call. A
     single app-level sub-app would therefore work for the first startup and then
-    raise ``RuntimeError`` on any later one — which is exactly what a test suite
+    raise ``RuntimeError`` on any later one, which is exactly what a test suite
     (a new ``TestClient`` per test) and a restarted worker both do. Rebuilding on
     startup keeps ``/mcp`` alive across both.
     """

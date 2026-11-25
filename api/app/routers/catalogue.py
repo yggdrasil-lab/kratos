@@ -28,7 +28,7 @@ def _commit_or_409(db: Session, name: str) -> None:
     `exercise.name` carries a global unique constraint, so a second row with the
     same name is refused by the database. The spec is explicit that a duplicate
     name "must fail loudly" (Specs - MCP endpoint.md) and that `exercise_create`
-    "rejects a duplicate by name rather than making a second one" — an
+    "rejects a duplicate by name rather than making a second one": an
     unhandled `IntegrityError` surfacing as a 500 is not that. Any other
     integrity failure is a real error and keeps propagating.
     """
@@ -90,7 +90,7 @@ def update_exercise(
 
 @router.delete("/{exercise_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_exercise(exercise_id: uuid.UUID, db: Session = Depends(get_db)) -> None:
-    """Tombstone, not a hard delete — a second device never saw the row.
+    """Tombstone, not a hard delete: a second device never saw the row.
 
     Hard deletes are invisible to sync; the spec is explicit that `deleted_at`
     exists for this reason.
