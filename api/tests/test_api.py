@@ -269,3 +269,49 @@ def test_retired_fasting_routes_return_not_found(client) -> None:
     assert client.post("/biometrics/fasting", json={}).status_code == 404
 
 
+def test_biometrics_today_and_workout_include_nap_readiness_and_inertia_cue(client, fakes, db) -> None:
+    from app.models import Exercise, Routine, RoutineItem, WeeklyPlan
+
+    nzdt = dt.timezone(dt.timedelta(hours=13))
+    fakes.clock.set_utc(dt.datetime(2026, 11, 27, 14, 48, 19, tzinfo=nzdt).astimezone(dt.timezone.utc))
+    today_key = fakes.clock.today_str()
+    fakes.eir.daily_by_date[today_key] = {
+        "date": today_key,
+        "hrv_ms": "50.02",
+        "overnight_hrv_ms": "42.22",
+        "sleep_duration_hours": 6.64,
+        "sleep_deep_hours": 0.84,
+        "sleep_rem_hours": 1.74,
+        "nap_duration_hours": 2.51,
+        "nap_count": 1,
+        "total_sleep_hours": 9.15,
+        "naps": [
+            {
+                "start_at": "2026-11-27T11:29:24+13:00",
+                "end_at": "2026-11-27T14:18:19+13:00",
+                "duration_hours": 2.51,
+            }
+        ],
+    }
+
+    resp = client.get("/biometrics/today")
+    assert resp.status_code == 200
+    bio = resp.json()
+    assert bio["readiness"]["tier"] == "moderate"
+    assert bio["nap_duration_hours"] == 2.51
+
+    bench = Exercise(name="Incline Press", weight_basis="total", tracking="reps_weight")
+    routine = Routine(name="Upper Push")
+    routine.items.append(RoutineItem(exercise=bench, position=0, target_sets=3, target_reps=8))
+    plan = WeeklyPlan(
+        iso_week="2026-W48",
+        days=[{"day": "Fri", "activity": "Upper Push", "type": "lift"}],
+    )
+    db.add_all([bench, routine, plan])
+    db.commit()
+
+    rec_resp = client.get(f"/biometrics/workout-recommendation?target_date={today_key}")
+    assert rec_resp.status_code == 200
+    assert "Recent long nap ended 30m ago" in rec_resp.json()["readiness_adaptation"]
+
+

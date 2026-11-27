@@ -12,6 +12,8 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.autoregulation.jev import (
     classify_workout_decision_gates,
+    compute_effective_sleep,
+    resolve_effective_hrv,
     safe_float,
     safe_int,
 )
@@ -74,6 +76,76 @@ You must respond ONLY with a valid JSON object matching this exact structure:
 """
 
 _RESEARCH_CITATION = "Israetel (Volume Landmarks) & Helms (RIR Autoregulation)"
+_LONG_NAP_MIN_HOURS = 0.75
+_SLEEP_INERTIA_WINDOW_SECONDS = 3600
+
+
+def _parse_nap_end_at(raw_end_at: object) -> datetime | None:
+    if isinstance(raw_end_at, datetime):
+        return raw_end_at
+    if isinstance(raw_end_at, str) and raw_end_at.strip():
+        try:
+            return datetime.fromisoformat(raw_end_at.strip())
+        except ValueError:
+            return None
+    return None
+
+
+def _normalize_dt_pair(ref_dt: datetime, end_dt: datetime) -> tuple[datetime, datetime]:
+    if ref_dt.tzinfo is None and end_dt.tzinfo is not None:
+        ref_aware = ref_dt.replace(tzinfo=end_dt.tzinfo)
+        return ref_aware.astimezone(timezone.utc), end_dt.astimezone(timezone.utc)
+    if ref_dt.tzinfo is not None and end_dt.tzinfo is None:
+        end_aware = end_dt.replace(tzinfo=ref_dt.tzinfo)
+        return ref_dt.astimezone(timezone.utc), end_aware.astimezone(timezone.utc)
+    if ref_dt.tzinfo is None and end_dt.tzinfo is None:
+        return ref_dt.replace(tzinfo=timezone.utc), end_dt.replace(tzinfo=timezone.utc)
+    return ref_dt.astimezone(timezone.utc), end_dt.astimezone(timezone.utc)
+
+
+def _recent_long_nap_minutes(
+    biometrics: dict[str, Any] | None,
+    now_dt: datetime | None = None,
+) -> int | None:
+    """Return minutes since wake if a >=45m nap ended within the last 60 minutes."""
+    if not biometrics:
+        return None
+    naps = biometrics.get("naps")
+    if not isinstance(naps, list) or not naps:
+        return None
+    ref_dt = now_dt if now_dt is not None else datetime.now(timezone.utc)
+    best_elapsed_s: float | None = None
+    for nap in naps:
+        if not isinstance(nap, dict):
+            continue
+        duration_h = safe_float(nap.get("duration_hours"))
+        if duration_h is None or duration_h < _LONG_NAP_MIN_HOURS:
+            continue
+        end_dt = _parse_nap_end_at(nap.get("end_at"))
+        if end_dt is None:
+            continue
+        ref_utc, end_utc = _normalize_dt_pair(ref_dt, end_dt)
+        elapsed_s = (ref_utc - end_utc).total_seconds()
+        if 0 <= elapsed_s < _SLEEP_INERTIA_WINDOW_SECONDS:
+            if best_elapsed_s is None or elapsed_s < best_elapsed_s:
+                best_elapsed_s = elapsed_s
+    return int(best_elapsed_s // 60) if best_elapsed_s is not None else None
+
+
+def _sleep_inertia_cue(
+    activity_type: str,
+    biometrics: dict[str, Any] | None,
+    now_dt: datetime | None,
+) -> str | None:
+    if activity_type == "rest":
+        return None
+    minutes = _recent_long_nap_minutes(biometrics, now_dt)
+    if minutes is None:
+        return None
+    return (
+        f"Recent long nap ended {minutes}m ago: "
+        "extend dynamic warmup 5-10 min for sleep inertia before heavy sets."
+    )
 
 
 def get_last_lift_for_exercise(db: Session, exercise_id) -> dict[str, Any] | None:
@@ -344,6 +416,7 @@ def generate_workout_recommendation(
     *,
     muninn: MuninnPort | None = None,
     readiness: ReadinessAssessment | None = None,
+    now: datetime | None = None,
 ) -> WorkoutRecommendationRead:
     """Generate a deterministic database-backed workout recommendation scaled by readiness."""
     assessment = readiness or assess_readiness(biometrics, muninn=muninn)
@@ -390,6 +463,10 @@ def generate_workout_recommendation(
             )
             rationale = f"No active exercise entries found for {routine_name} in PostgreSQL."
 
+    inertia_cue = _sleep_inertia_cue(activity_type, biometrics, now)
+    if inertia_cue is not None:
+        readiness_adaptation = f"{readiness_adaptation} {inertia_cue}"
+
     return WorkoutRecommendationRead(
         date=target_date.isoformat(),
         routine_name=routine_name,
@@ -413,15 +490,21 @@ def _build_workout_llm_context(
     custom_context: str | None,
     db: Session | None,
     jev_gates: dict[str, str],
+    inertia_cue: str | None = None,
 ) -> dict[str, Any]:
     bio = biometrics or {}
-    return {
+    overnight_h = safe_float(bio.get("sleep_duration_hours"))
+    nap_h = safe_float(bio.get("nap_duration_hours"))
+    payload: dict[str, Any] = {
         "date": target_date.isoformat(),
         "day_of_week": target_date.strftime("%A"),
         "scheduled_activity": {"name": activity_name, "type": activity_type},
         "biometrics": {
-            "hrv_ms": safe_float(bio.get("hrv_ms")),
-            "sleep_duration_hours": safe_float(bio.get("sleep_duration_hours")),
+            "hrv_ms": resolve_effective_hrv(bio),
+            "overnight_hrv_ms": safe_float(bio.get("overnight_hrv_ms")),
+            "sleep_duration_hours": overnight_h,
+            "nap_duration_hours": nap_h,
+            "effective_sleep_hours": compute_effective_sleep(overnight_h, nap_h),
             "sleep_deep_hours": safe_float(bio.get("sleep_deep_hours")),
             "resting_hr_bpm": safe_int(bio.get("resting_hr_bpm")),
             "weight_kg": safe_float(bio.get("latest_weight_kg")),
@@ -439,6 +522,9 @@ def _build_workout_llm_context(
             "time_budget": jev_gates.get("time_budget", "TIME_STANDARD_45M"),
         },
     }
+    if inertia_cue is not None:
+        payload["sleep_inertia_cue"] = inertia_cue
+    return payload
 
 
 def _parse_workout_llm_response(
@@ -500,12 +586,14 @@ def synthesize_workout_recommendation(
     db: Session | None = None,
     *,
     muninn: MuninnPort | None = None,
+    now: datetime | None = None,
 ) -> WorkoutRecommendationRead:
     """Synthesize workout prescription via MuninnPort, falling back cleanly to deterministic engine."""
     activity_type, activity_name, _, _ = _resolve_workout_schedule(
         target_date, weekly_plan, db
     )
     readiness = assess_readiness(biometrics, muninn=muninn, custom_context=custom_context)
+    inertia_cue = _sleep_inertia_cue(activity_type, biometrics, now)
 
     if muninn is not None:
         jev_gates = classify_workout_decision_gates(muninn, biometrics, custom_context)
@@ -518,6 +606,7 @@ def synthesize_workout_recommendation(
             custom_context,
             db,
             jev_gates,
+            inertia_cue=inertia_cue,
         )
         user_prompt = (
             "Synthesize today's workout prescription and exercise cues based on athlete context:\n"
@@ -529,6 +618,11 @@ def synthesize_workout_recommendation(
                 content_data, target_date, activity_name, readiness.tier
             )
             if parsed is not None:
+                if (
+                    inertia_cue is not None
+                    and "sleep inertia" not in parsed.readiness_adaptation.lower()
+                ):
+                    parsed.readiness_adaptation = f"{parsed.readiness_adaptation} {inertia_cue}"
                 return parsed
         except Exception as exc:
             logger.warning(
@@ -541,6 +635,7 @@ def synthesize_workout_recommendation(
         biometrics,
         db=db,
         readiness=readiness,
+        now=now,
     )
     baseline.is_llm_generated = False
     return baseline

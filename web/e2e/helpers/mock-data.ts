@@ -392,9 +392,20 @@ async function registerBiometricProxyRoutes(page: Page, state: MockApiState): Pr
         latest_weight_kg: 86.65,
         latest_body_fat_pct: 25.31,
         resting_hr_bpm: 64,
-        hrv_ms: 50.26,
+        hrv_ms: 50.02,
+        overnight_hrv_ms: 42.22,
         sleep_duration_hours: 8.11,
         sleep_deep_hours: 1.25,
+        nap_duration_hours: 2.51,
+        nap_count: 1,
+        total_sleep_hours: 9.15,
+        naps: [
+          {
+            start_at: '2026-11-27T11:29:24+13:00',
+            end_at: '2026-11-27T14:18:19+13:00',
+            duration_hours: 2.51,
+          },
+        ],
         step_count: 966,
         active_energy_kcal: 40,
         readiness: {

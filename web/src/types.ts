@@ -188,14 +188,26 @@ export interface BackendReadiness {
   message: string
 }
 
+export interface NapSegment {
+  start_at: string
+  end_at: string
+  duration_hours: number
+}
+
 export interface DailyBiometrics {
   date: string
   latest_weight_kg?: number | string | null
   latest_body_fat_pct?: number | string | null
   resting_hr_bpm?: number | null
   hrv_ms?: number | string | null
+  overnight_hrv_ms?: number | string | null
   sleep_duration_hours?: number | null
   sleep_deep_hours?: number | null
+  sleep_rem_hours?: number | null
+  nap_duration_hours?: number | null
+  nap_count?: number
+  total_sleep_hours?: number | null
+  naps?: NapSegment[]
   sleep_score?: number | null
   step_count?: number | null
   active_energy_kcal?: number | null

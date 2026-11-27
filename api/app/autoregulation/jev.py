@@ -88,6 +88,26 @@ def safe_int(val: object) -> int | None:
         return None
 
 
+def resolve_effective_hrv(biometrics: dict[str, Any]) -> float | None:
+    """Prefer overnight HRV, falling back to latest daily HRV only when absent."""
+    overnight = safe_float(biometrics.get("overnight_hrv_ms"))
+    if overnight is not None:
+        return overnight
+    return safe_float(biometrics.get("hrv_ms"))
+
+
+def compute_effective_sleep(
+    overnight_h: float | None,
+    nap_h: float | None,
+) -> float | None:
+    """Add half of daytime nap duration capped at +1.0h when overnight sleep exists."""
+    if overnight_h is None:
+        return None
+    if nap_h is not None and nap_h > 0:
+        return overnight_h + min(1.0, nap_h * 0.5)
+    return overnight_h
+
+
 def format_biometric_summary(biometrics: dict[str, Any] | None) -> tuple[str, bool]:
     """Render compact wearable vitals for Jev prompts and flag whether vitals exist."""
     if not biometrics:
@@ -95,16 +115,24 @@ def format_biometric_summary(biometrics: dict[str, Any] | None) -> tuple[str, bo
 
     sleep_h = safe_float(biometrics.get("sleep_duration_hours"))
     deep_h = safe_float(biometrics.get("sleep_deep_hours"))
-    hrv = safe_float(biometrics.get("hrv_ms"))
+    nap_h = safe_float(biometrics.get("nap_duration_hours"))
+    hrv = resolve_effective_hrv(biometrics)
     rhr = safe_int(biometrics.get("resting_hr_bpm"))
 
-    if sleep_h is None and hrv is None and rhr is None:
+    has_nap = nap_h is not None and nap_h > 0
+    if sleep_h is None and hrv is None and rhr is None and not has_nap:
         return "Biometrics: unavailable", False
 
     parts: list[str] = []
     if sleep_h is not None:
         deep_part = f" ({deep_h:.1f}h deep)" if deep_h is not None else ""
         parts.append(f"Sleep: {sleep_h:.1f}h{deep_part}")
+    if has_nap and nap_h is not None:
+        effective_h = compute_effective_sleep(sleep_h, nap_h)
+        if effective_h is not None:
+            parts.append(f"Nap: {nap_h:.1f}h (Effective sleep: {effective_h:.1f}h)")
+        else:
+            parts.append(f"Nap: {nap_h:.1f}h")
     if hrv is not None:
         parts.append(f"HRV: {hrv:.1f}ms")
     if rhr is not None:

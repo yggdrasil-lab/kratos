@@ -66,6 +66,46 @@ export function resolveReadinessSummary(biometrics: DailyBiometrics | null): Rea
   }
 }
 
+export interface VitalsDisplay {
+  sleepHours: number | null
+  deepSleepHours: number | null
+  napHours: number | null
+  hrvMs: number | null
+  rhrBpm: number | null
+  weightKg: number | null
+}
+
+function parseOptionalNumber(raw: number | string | null | undefined): number | null {
+  if (raw === null || raw === undefined || raw === '') return null
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+/**
+ * Extracts normalized vitals values for ReadinessVitalsCard, preferring overnight HRV
+ * over latest daily HRV and surfacing daytime nap hours only when positive.
+ */
+export function resolveVitalsDisplay(biometrics: DailyBiometrics | null): VitalsDisplay {
+  const sleepHours = parseOptionalNumber(biometrics?.sleep_duration_hours)
+  const rawDeep = parseOptionalNumber(biometrics?.sleep_deep_hours)
+  const deepSleepHours = rawDeep !== null && rawDeep > 0 ? rawDeep : null
+  const rawNap = parseOptionalNumber(biometrics?.nap_duration_hours)
+  const napHours = rawNap !== null && rawNap > 0 ? rawNap : null
+  const overnightHrv = parseOptionalNumber(biometrics?.overnight_hrv_ms)
+  const hrvMs = overnightHrv !== null ? overnightHrv : parseOptionalNumber(biometrics?.hrv_ms)
+  const rhrBpm = parseOptionalNumber(biometrics?.resting_hr_bpm)
+  const weightKg = parseOptionalNumber(biometrics?.latest_weight_kg)
+
+  return {
+    sleepHours,
+    deepSleepHours,
+    napHours,
+    hrvMs,
+    rhrBpm,
+    weightKg,
+  }
+}
+
 export interface TodayRoutineResolution {
   matchedRecommendedRoutine: Routine | null
   defaultRoutine: Routine | null

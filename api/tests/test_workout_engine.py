@@ -446,3 +446,118 @@ def test_persist_workout_cache_handles_unique_conflict_and_fails_loud(db: Sessio
             extra_payload={"source": "llm"},
         )
     assert integrity_without_row.rolled_back is True
+
+
+def test_sleep_inertia_cue_thresholds_and_rest_day_suppression(db: Session) -> None:
+    _seed_upper_routine(db)
+    plan = WeeklyPlan(
+        iso_week="2026-W48",
+        days=[
+            {"day": "Fri", "activity": "Upper Body A", "type": "lift"},
+            {"day": "Sat", "activity": "Rest Day", "type": "rest"},
+        ],
+    )
+    wake_dt = dt.datetime(2026, 11, 27, 14, 18, 19, tzinfo=dt.timezone(dt.timedelta(hours=13)))
+    now_30m = wake_dt + dt.timedelta(minutes=30)
+    now_75m = wake_dt + dt.timedelta(minutes=75)
+
+    long_nap_bio = {
+        "sleep_duration_hours": 6.64,
+        "nap_duration_hours": 2.51,
+        "overnight_hrv_ms": "42.22",
+        "hrv_ms": "50.02",
+        "naps": [
+            {
+                "start_at": "2026-11-27T11:29:24+13:00",
+                "end_at": "2026-11-27T14:18:19+13:00",
+                "duration_hours": 2.51,
+            }
+        ],
+    }
+
+    lift_rec = generate_workout_recommendation(
+        dt.date(2026, 11, 27), plan, long_nap_bio, db=db, now=now_30m
+    )
+    assert "Recent long nap ended 30m ago: extend dynamic warmup 5-10 min for sleep inertia" in lift_rec.readiness_adaptation
+
+    rest_rec = generate_workout_recommendation(
+        dt.date(2026, 11, 28), plan, long_nap_bio, db=db, now=now_30m
+    )
+    assert "sleep inertia" not in rest_rec.readiness_adaptation.lower()
+
+    expired_rec = generate_workout_recommendation(
+        dt.date(2026, 11, 27), plan, long_nap_bio, db=db, now=now_75m
+    )
+    assert "sleep inertia" not in expired_rec.readiness_adaptation.lower()
+
+    short_nap_bio = {
+        "sleep_duration_hours": 7.0,
+        "nap_duration_hours": 0.5,
+        "hrv_ms": 50.0,
+        "naps": [
+            {
+                "start_at": "2026-11-27T13:48:19+13:00",
+                "end_at": "2026-11-27T14:18:19+13:00",
+                "duration_hours": 0.5,
+            }
+        ],
+    }
+    short_rec = generate_workout_recommendation(
+        dt.date(2026, 11, 27), plan, short_nap_bio, db=db, now=now_30m
+    )
+    assert "sleep inertia" not in short_rec.readiness_adaptation.lower()
+
+
+def test_synthesize_workout_passes_nap_context_and_appends_inertia_cue(db: Session) -> None:
+    _seed_upper_routine(db)
+    muninn = InMemoryMuninnAdapter(
+        json_responses=[
+            {
+                "routine_name": "Upper Body A",
+                "readiness_adaptation": "Moderate recovery. Cap intensity at RIR 2.",
+                "target_rir": "RIR 2",
+                "volume_landmark": "MAV",
+                "rationale": "Overnight HRV supports maintenance stimulus.",
+                "exercises": [
+                    {
+                        "exercise_name": "Bench Press",
+                        "target_sets": 3,
+                        "target_reps": "8-10 reps",
+                        "suggested_weight_kg": 60.0,
+                    }
+                ],
+                "recovery_status": "moderate",
+            }
+        ],
+        jev_verdicts=[
+            '{"recovery_tier": "MAINTENANCE", "joint_focus": "NOMINAL", "time_budget": "TIME_STANDARD_45M"}'
+        ],
+    )
+    plan = WeeklyPlan(
+        iso_week="2026-W48",
+        days=[{"day": "Fri", "activity": "Upper Body A", "type": "lift"}],
+    )
+    now_dt = dt.datetime(2026, 11, 27, 14, 48, 19, tzinfo=dt.timezone(dt.timedelta(hours=13)))
+    rec = synthesize_workout_recommendation(
+        dt.date(2026, 11, 27),
+        plan,
+        {
+            "sleep_duration_hours": 6.64,
+            "nap_duration_hours": 2.51,
+            "overnight_hrv_ms": "42.22",
+            "hrv_ms": "50.02",
+            "naps": [
+                {
+                    "start_at": "2026-11-27T11:29:24+13:00",
+                    "end_at": "2026-11-27T14:18:19+13:00",
+                    "duration_hours": 2.51,
+                }
+            ],
+        },
+        db=db,
+        muninn=muninn,
+        now=now_dt,
+    )
+    assert "sleep_inertia_cue" in muninn.synthesize_calls[0]["user_content"]
+    assert '"effective_sleep_hours": 7.64' in muninn.synthesize_calls[0]["user_content"]
+    assert "Recent long nap ended 30m ago" in rec.readiness_adaptation

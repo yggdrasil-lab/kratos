@@ -5,10 +5,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from app.autoregulation.jev import classify_recovery_state, safe_float, safe_int
+from app.autoregulation.jev import (
+    classify_recovery_state,
+    compute_effective_sleep,
+    resolve_effective_hrv,
+    safe_float,
+    safe_int,
+)
 from app.ports.muninn import MuninnPort
 
 ReadinessTier = Literal["optimal", "moderate", "fatigued"]
+_TIER_ORDER: tuple[ReadinessTier, ...] = ("fatigued", "moderate", "optimal")
 
 _TIER_COPY: dict[ReadinessTier, tuple[str, str]] = {
     "fatigued": (
@@ -102,6 +109,16 @@ def _build_assessment(
     )
 
 
+def _clamp_tier_lift(
+    base_tier: ReadinessTier,
+    credited_tier: ReadinessTier,
+) -> ReadinessTier:
+    base_idx = _TIER_ORDER.index(base_tier)
+    credited_idx = _TIER_ORDER.index(credited_tier)
+    clamped_idx = max(base_idx, min(credited_idx, base_idx + 1))
+    return _TIER_ORDER[clamped_idx]
+
+
 def assess_readiness(
     biometrics: dict[str, Any] | None,
     *,
@@ -110,13 +127,17 @@ def assess_readiness(
 ) -> ReadinessAssessment:
     """Evaluate unified ReadinessAssessment with optional Jev classification and deterministic fallback."""
     bio = biometrics or {}
-    sleep_h = safe_float(bio.get("sleep_duration_hours"))
+    overnight_h = safe_float(bio.get("sleep_duration_hours"))
+    nap_h = safe_float(bio.get("nap_duration_hours"))
     deep_h = safe_float(bio.get("sleep_deep_hours"))
-    hrv = safe_float(bio.get("hrv_ms"))
+    effective_hrv = resolve_effective_hrv(bio)
     rhr = safe_int(bio.get("resting_hr_bpm"))
 
-    fatigue_flags = _collect_fatigue_flags(sleep_h, deep_h, hrv, rhr)
-    tier = _deterministic_tier(sleep_h, hrv, fatigue_flags)
+    fatigue_flags = _collect_fatigue_flags(overnight_h, deep_h, effective_hrv, rhr)
+    base_tier = _deterministic_tier(overnight_h, effective_hrv, fatigue_flags)
+    effective_sleep_h = compute_effective_sleep(overnight_h, nap_h)
+    credited_tier = _deterministic_tier(effective_sleep_h, effective_hrv, fatigue_flags)
+    tier = _clamp_tier_lift(base_tier, credited_tier)
 
     if muninn is not None and (biometrics or (custom_context and custom_context.strip())):
         jev_verdict = classify_recovery_state(
