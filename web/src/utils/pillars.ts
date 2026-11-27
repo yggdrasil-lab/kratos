@@ -1,6 +1,6 @@
 import type { AiSynthesizerPillar } from '@yggdrasil-lab/ui'
 
-export type PillarDomain = 'workout' | 'fasting'
+export type PillarDomain = 'workout'
 
 export interface SciencePillar {
   id: string
@@ -12,7 +12,6 @@ export interface SciencePillar {
 
 const CITATION_TITLES: Record<PillarDomain, string> = {
   workout: 'Israetel (Volume Landmarks) & Helms (RIR Autoregulation)',
-  fasting: 'Panda Lab (Circadian TRE) & Schoenfeld (MPS Distribution)',
 }
 
 export const SCIENCE_PILLARS: Record<PillarDomain, readonly SciencePillar[]> = {
@@ -44,36 +43,6 @@ export const SCIENCE_PILLARS: Record<PillarDomain, readonly SciencePillar[]> = {
       inlineLabel: 'Concurrent Interference:',
       modalLabel: 'Court Freshness',
       description: 'Preserves leg power and avoids eccentric damage adjacent to badminton match play.',
-    },
-  ],
-  fasting: [
-    {
-      id: 'tre',
-      icon: '☀️',
-      inlineLabel: 'Panda Lab:',
-      modalLabel: 'Circadian TRE',
-      description: '8-10h feeding window ending 3-4h prior to sleep preserves nocturnal HRV and deep sleep.',
-    },
-    {
-      id: 'mps',
-      icon: '🥩',
-      inlineLabel: 'Schoenfeld / Aragon:',
-      modalLabel: 'MPS Distribution',
-      description: '0.4-0.5 g/kg protein spaced across 3-4 meals every 3-5h on lifting days with post-lift anchor.',
-    },
-    {
-      id: 'court_fuel',
-      icon: '🏸',
-      inlineLabel: 'Court Kinetics:',
-      modalLabel: 'Court Glycogen',
-      description: 'Pre-match complex carbs and electrolytes 2-3h before play; post-match amino acids.',
-    },
-    {
-      id: 'autophagy',
-      icon: '🧬',
-      inlineLabel: 'Mattson / Longo:',
-      modalLabel: 'Metabolic Reset',
-      description: '18:6 autophagy fasts reserved strictly for low-strain recovery days.',
     },
   ],
 }

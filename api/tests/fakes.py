@@ -53,7 +53,6 @@ class InMemoryEirAdapter:
     timeline_response: WorkoutTimelineRead | None = None
     raise_on_metrics: Exception | None = None
     raise_on_timeline: Exception | None = None
-    fasting_feedback: list[dict[str, Any]] = field(default_factory=list)
     workout_feedback: list[dict[str, Any]] = field(default_factory=list)
     daily_requests: list[str] = field(default_factory=list)
     metrics_requests: list[dict[str, Any]] = field(default_factory=list)
@@ -114,10 +113,6 @@ class InMemoryEirAdapter:
         if self.timeline_response is not None:
             return self.timeline_response
         return WorkoutTimelineRead(started_at=started_at, ended_at=ended_at)
-
-    def submit_fasting_feedback(self, payload: dict[str, Any]) -> bool:
-        self.fasting_feedback.append(dict(payload))
-        return True
 
     def submit_workout_feedback(self, payload: dict[str, Any]) -> bool:
         self.workout_feedback.append(dict(payload))

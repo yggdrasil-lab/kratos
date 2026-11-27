@@ -254,3 +254,18 @@ def test_cross_origin_request_omits_cors_headers(client) -> None:
     assert "access-control-allow-origin" not in preflight.headers
 
 
+def test_retired_fasting_routes_return_not_found(client) -> None:
+    """Retired fasting routes must return 404 and stay out of OpenAPI."""
+    schema = client.get("/openapi.json").json()
+    for path in (
+        "/biometrics/fasting-recommendation",
+        "/biometrics/fasting-recommendation/synthesize",
+        "/biometrics/fasting",
+    ):
+        assert path not in schema["paths"]
+
+    assert client.get("/biometrics/fasting-recommendation").status_code == 404
+    assert client.post("/biometrics/fasting-recommendation/synthesize", json={}).status_code == 404
+    assert client.post("/biometrics/fasting", json={}).status_code == 404
+
+

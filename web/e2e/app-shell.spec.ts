@@ -76,7 +76,7 @@ test.describe('App Shell and Navigation', () => {
     // Default tab is Today
     await expect(todayBtn).toHaveClass(/active/)
     await expect(page.getByText(/Today's Training/i)).toBeVisible()
-    await expect(page.getByText(/Fasting and Fueling/i)).toBeVisible()
+    await expect(page.getByText(/Fasting and Fueling/i)).toHaveCount(0)
 
     // Switch to Progress tab
     await progressBtn.click()

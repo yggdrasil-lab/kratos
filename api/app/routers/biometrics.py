@@ -11,9 +11,6 @@ from sqlalchemy.orm import Session
 from app.container import get_container
 from app.db import get_db
 from app.schemas import (
-    FastingCheckInPayload,
-    FastingRecommendationRead,
-    FastingSynthesizeRequest,
     WorkoutFeedbackPayload,
     WorkoutMetricsRead,
     WorkoutRecommendationRead,
@@ -77,28 +74,6 @@ def get_workout_timeline(
     )
 
 
-@router.get("/fasting-recommendation", response_model=FastingRecommendationRead)
-def get_fasting_recommendation_endpoint(
-    request: Request,
-    target_date: str | None = None,
-    db: Session = Depends(get_db),
-) -> FastingRecommendationRead:
-    return get_container(request).autoregulation.get_fasting_recommendation(
-        db, target_date=target_date
-    )
-
-
-@router.post("/fasting-recommendation/synthesize", response_model=FastingRecommendationRead)
-def trigger_fasting_synthesis_endpoint(
-    request: Request,
-    payload: FastingSynthesizeRequest,
-    db: Session = Depends(get_db),
-) -> FastingRecommendationRead:
-    return get_container(request).autoregulation.synthesize_fasting_recommendation(
-        db, payload
-    )
-
-
 @router.get("/workout-recommendation", response_model=WorkoutRecommendationRead)
 def get_workout_recommendation_endpoint(
     request: Request,
@@ -119,13 +94,6 @@ def trigger_workout_synthesis_endpoint(
     return get_container(request).autoregulation.synthesize_workout_recommendation(
         db, payload
     )
-
-
-@router.post("/fasting")
-def save_fasting_checkin(request: Request, payload: FastingCheckInPayload) -> dict[str, str]:
-    """Record fasting feedback and forward to Eir when available."""
-    get_container(request).autoregulation.submit_fasting_feedback(payload)
-    return {"status": "ok"}
 
 
 @router.post("/workout-feedback")

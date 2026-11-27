@@ -400,26 +400,6 @@ class WeeklyPlanRead(ORMModel):
     updated_at: datetime
 
 
-# ----------------------------------------------------------------- fasting recommendation
-class FastingRecommendationRead(BaseModel):
-    date: str
-    protocol_name: str
-    target_window: str
-    window_hours: str
-    rationale: str
-    fueling_anchors: list[str] = Field(default_factory=list)
-    recovery_status: Literal["optimal", "moderate", "fatigued"]
-    activity_context: str
-    is_llm_generated: bool = False
-    research_citation: str | None = None
-    extra: dict = Field(default_factory=dict)
-
-
-class FastingSynthesizeRequest(BaseModel):
-    target_date: str | None = None
-    custom_context: str | None = None
-
-
 # ----------------------------------------------------------------- workout recommendation
 class RecommendedExerciseItem(BaseModel):
     exercise_name: str
@@ -452,17 +432,6 @@ class WorkoutRecommendationRead(BaseModel):
 class WorkoutSynthesizeRequest(BaseModel):
     target_date: str | None = None
     custom_context: str | None = None
-
-
-class FastingCheckInPayload(BaseModel):
-    id: str
-    date: str
-    target_window: str
-    adherence: str
-    energy: str = "normal"
-    headache: str = "none"
-    notes: str | None = None
-    logged_at: str
 
 
 class WorkoutFeedbackPayload(BaseModel):

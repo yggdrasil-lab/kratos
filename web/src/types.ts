@@ -146,30 +146,6 @@ export type ActiveTab = 'today' | 'progress' | 'train' | 'week' | 'history'
 
 export type EffortRating = 'too_easy' | 'optimal' | 'hard' | 'too_hard'
 
-export interface FastingCheckIn {
-  id: string
-  date: string
-  target_window: string
-  adherence: 'completed' | 'early' | 'off_plan'
-  energy?: 'high' | 'normal' | 'low'
-  headache?: 'none' | 'mild' | 'sugar_spike'
-  notes?: string | null
-  logged_at: string
-}
-
-export interface FastingRecommendation {
-  date: string
-  protocol_name: string
-  target_window: string
-  window_hours: string
-  rationale: string
-  fueling_anchors: string[]
-  recovery_status: 'optimal' | 'moderate' | 'fatigued'
-  activity_context: string
-  is_llm_generated?: boolean
-  research_citation?: string | null
-}
-
 export interface RecommendedExerciseItem {
   exercise_name: string
   target_sets: number
@@ -225,7 +201,6 @@ export interface DailyBiometrics {
   active_energy_kcal?: number | null
   readiness?: BackendReadiness | null
   readiness_notes?: string[]
-  fasting?: HealthFeedback | null
   workout?: HealthFeedback | null
   wellness?: HealthFeedback | null
 }

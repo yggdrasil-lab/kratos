@@ -1,4 +1,4 @@
-"""Unified Readiness Tier evaluator shared by biometrics, fasting, and workout engines."""
+"""Unified Readiness Tier evaluator shared by biometrics and workout engines."""
 
 from __future__ import annotations
 

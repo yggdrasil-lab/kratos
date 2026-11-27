@@ -2,7 +2,7 @@
 // exists. Dexie over IndexedDB, per the accepted stack.
 
 import Dexie, { type Table } from 'dexie'
-import type { Exercise, FastingCheckIn, Routine, SessionPayload } from './types'
+import type { Exercise, Routine, SessionPayload } from './types'
 
 export interface QueuedSession {
   id: string
@@ -24,7 +24,6 @@ export interface DraftSession {
 class KratosDb extends Dexie {
   outbox!: Table<QueuedSession, string>
   drafts!: Table<DraftSession, string>
-  fastingLogs!: Table<FastingCheckIn, string>
   exercises!: Table<Exercise, string>
   routines!: Table<Routine, string>
 

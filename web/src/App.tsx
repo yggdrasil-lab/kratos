@@ -177,7 +177,6 @@ function AppMainRouter({
         sessions={data.sessions}
         exercises={data.exercises}
         routines={data.routines}
-        fastingLogs={data.fastingLogs}
         biometrics={data.biometrics}
         onDeleteSession={data.deleteSession}
         onConfirmSession={data.confirmSession}
@@ -192,22 +191,17 @@ function AppMainRouter({
       circadianDate={data.circadianDate}
       dayOfWeek={data.dayOfWeek}
       biometrics={data.biometrics}
-      fastingRecommendation={data.fastingRecommendation}
       workoutRecommendation={data.workoutRecommendation}
       routines={data.routines}
       exercises={data.exercises}
       sessions={data.sessions}
-      latestFastingCheckIn={data.todayFastingCheckIn}
       onStartRoutine={onStartRoutine}
-      onSaveFastingCheckIn={data.saveFastingCheckIn}
-      onSynthesizeFastingRecommendation={data.synthesizeFastingRecommendation}
       onSynthesizeWorkoutRecommendation={data.synthesizeWorkoutRecommendation}
       onDeleteSession={data.deleteSession}
       onConfirmSession={data.confirmSession}
       onEditSession={onEditSession}
       onSplitSession={onSplitSession}
       isGeneratingWorkout={data.isGeneratingWorkout}
-      isGeneratingFasting={data.isGeneratingFasting}
     />
   )
 }

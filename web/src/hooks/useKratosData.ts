@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { clearBrowserCaches, isSessionExpiredError, useAppResumeRefresh } from '@yggdrasil-lab/ui'
 import { api, isKratosApiError } from '../api'
 import { db, requestPersistence } from '../db'
@@ -7,14 +7,12 @@ import type {
   DailyBiometrics,
   EffortRating,
   Exercise,
-  FastingCheckIn,
-  FastingRecommendation,
   Routine,
   SessionPayload,
   SplitSegmentInput,
   WorkoutRecommendation,
 } from '../types'
-import { getCircadianDate, getCircadianDayOfWeek, parseServerFasting } from '../utils/circadian'
+import { getCircadianDate, getCircadianDayOfWeek } from '../utils/circadian'
 import { computeSessionVolumeAndSets } from '../utils/session'
 import { reportClientError } from '../utils/telemetry'
 
@@ -149,32 +147,9 @@ function useRecommendationSynthesizers(
   circadianDate: string,
   setSessionExpired: (val: boolean) => void,
   setStatus: (status: SyncStatus) => void,
-  setIsGeneratingFasting: (val: boolean) => void,
   setIsGeneratingWorkout: (val: boolean) => void,
-  setFastingRecommendation: (val: FastingRecommendation | null) => void,
   setWorkoutRecommendation: (val: WorkoutRecommendation | null) => void
 ) {
-  const synthesizeFastingRecommendation = useCallback(
-    async (customContext?: string) => {
-      setIsGeneratingFasting(true)
-      try {
-        const updated = await api.synthesizeFastingRecommendation(customContext, circadianDate)
-        setFastingRecommendation(updated)
-      } catch (err) {
-        if (isSessionExpiredError(err)) setSessionExpired(true)
-        setStatus({
-          kind: 'error',
-          message: formatSyncError(err, 'Failed to synthesize fasting recommendation'),
-        })
-        void reportClientError(err, { source: 'fasting_synthesis' })
-        throw err
-      } finally {
-        setIsGeneratingFasting(false)
-      }
-    },
-    [circadianDate, setSessionExpired, setStatus, setIsGeneratingFasting, setFastingRecommendation]
-  )
-
   const synthesizeWorkoutRecommendation = useCallback(
     async (customContext?: string) => {
       setIsGeneratingWorkout(true)
@@ -196,42 +171,27 @@ function useRecommendationSynthesizers(
     [circadianDate, setSessionExpired, setStatus, setIsGeneratingWorkout, setWorkoutRecommendation]
   )
 
-  return { synthesizeFastingRecommendation, synthesizeWorkoutRecommendation }
+  return { synthesizeWorkoutRecommendation }
 }
 
-async function applyBiometricsResults(
+function applyBiometricsResults(
   results: [
     PromiseSettledResult<DailyBiometrics | null>,
-    PromiseSettledResult<FastingRecommendation | null>,
     PromiseSettledResult<WorkoutRecommendation | null>,
   ],
   handlers: {
     setBiometrics: (val: DailyBiometrics | null) => void
-    setFastingRecommendation: (val: FastingRecommendation | null) => void
     setWorkoutRecommendation: (val: WorkoutRecommendation | null) => void
-    setFastingLogs: React.Dispatch<React.SetStateAction<FastingCheckIn[]>>
     setSessionExpired: (val: boolean) => void
     setStatus: (status: SyncStatus) => void
   }
-): Promise<void> {
-  const [bioRes, fastingRes, workoutRes] = results
-  if (fastingRes.status === 'fulfilled' && fastingRes.value) {
-    handlers.setFastingRecommendation(fastingRes.value)
-  }
+): void {
+  const [bioRes, workoutRes] = results
   if (workoutRes.status === 'fulfilled' && workoutRes.value) {
     handlers.setWorkoutRecommendation(workoutRes.value)
   }
   if (bioRes.status === 'fulfilled' && bioRes.value) {
-    const data = bioRes.value
-    handlers.setBiometrics(data)
-    const serverCheckIn = parseServerFasting(data.fasting)
-    if (serverCheckIn) {
-      await db.fastingLogs.put(serverCheckIn).catch(() => undefined)
-      handlers.setFastingLogs((prev) => [
-        serverCheckIn,
-        ...prev.filter((c) => c.date !== serverCheckIn.date),
-      ])
-    }
+    handlers.setBiometrics(bioRes.value)
   }
   const firstFailure = results.find((res): res is PromiseRejectedResult => res.status === 'rejected')
   if (firstFailure) {
@@ -244,90 +204,46 @@ async function applyBiometricsResults(
   handlers.setSessionExpired(false)
 }
 
-async function persistFastingCheckInRemote(
-  checkIn: FastingCheckIn,
-  setSessionExpired: (val: boolean) => void,
-  setStatus: (status: SyncStatus) => void
-): Promise<void> {
-  try {
-    await api.saveFastingCheckIn(checkIn)
-  } catch (err) {
-    if (isSessionExpiredError(err)) setSessionExpired(true)
-    setStatus({ kind: 'error', message: formatSyncError(err, 'Failed to sync fasting check-in') })
-    void reportClientError(err, { source: 'fasting_checkin_save' })
-  }
-}
-
 function useBiometricsState(
   circadianDate: string,
   setSessionExpired: (val: boolean) => void,
   setStatus: (status: SyncStatus) => void
 ) {
   const [biometrics, setBiometrics] = useState<DailyBiometrics | null>(null)
-  const [fastingRecommendation, setFastingRecommendation] = useState<FastingRecommendation | null>(null)
   const [workoutRecommendation, setWorkoutRecommendation] = useState<WorkoutRecommendation | null>(null)
-  const [isGeneratingFasting, setIsGeneratingFasting] = useState<boolean>(false)
   const [isGeneratingWorkout, setIsGeneratingWorkout] = useState<boolean>(false)
-  const [fastingLogs, setFastingLogs] = useState<FastingCheckIn[]>([])
-
-  const loadFastingLogs = useCallback(async () => {
-    const logs = await db.fastingLogs.toArray().catch(() => [])
-    logs.sort((a, b) => b.logged_at.localeCompare(a.logged_at))
-    setFastingLogs(logs)
-  }, [])
 
   const loadBiometrics = useCallback(async () => {
-    setIsGeneratingFasting(true)
     setIsGeneratingWorkout(true)
     try {
       const results = await Promise.allSettled([
         api.getBiometricsToday(),
-        api.getFastingRecommendation().finally(() => setIsGeneratingFasting(false)),
         api.getWorkoutRecommendation().finally(() => setIsGeneratingWorkout(false)),
       ])
-      await applyBiometricsResults(results, {
+      applyBiometricsResults(results, {
         setBiometrics,
-        setFastingRecommendation,
         setWorkoutRecommendation,
-        setFastingLogs,
         setSessionExpired,
         setStatus,
       })
     } finally {
-      setIsGeneratingFasting(false)
       setIsGeneratingWorkout(false)
     }
   }, [setSessionExpired, setStatus])
-
-  const saveFastingCheckIn = useCallback(
-    async (checkIn: FastingCheckIn) => {
-      await db.fastingLogs.put(checkIn).catch(() => undefined)
-      setFastingLogs((prev) => [checkIn, ...prev.filter((c) => c.id !== checkIn.id)])
-      await persistFastingCheckInRemote(checkIn, setSessionExpired, setStatus)
-    },
-    [setSessionExpired, setStatus]
-  )
 
   const synths = useRecommendationSynthesizers(
     circadianDate,
     setSessionExpired,
     setStatus,
-    setIsGeneratingFasting,
     setIsGeneratingWorkout,
-    setFastingRecommendation,
     setWorkoutRecommendation
   )
 
   return {
     biometrics,
-    fastingRecommendation,
     workoutRecommendation,
-    isGeneratingFasting,
     isGeneratingWorkout,
-    fastingLogs,
     loadBiometrics,
-    loadFastingLogs,
-    saveFastingCheckIn,
     ...synths,
   }
 }
@@ -583,27 +499,17 @@ export function useKratosData() {
       sessionsState.loadSessions(),
       catalogue.loadCatalogue(),
       catalogue.loadRoutines(),
-      biometricsState.loadFastingLogs(),
     ])
   }, [
     refreshCircadianClock,
     sessionsState.sync,
     sessionsState.loadSessions,
     biometricsState.loadBiometrics,
-    biometricsState.loadFastingLogs,
     catalogue.loadCatalogue,
     catalogue.loadRoutines,
   ])
 
   useRefreshLifecycle(refreshAll, refreshCircadianClock)
-
-  const todayFastingCheckIn = useMemo(() => {
-    const serverFastingToday = parseServerFasting(biometricsState.biometrics?.fasting)
-    return (
-      biometricsState.fastingLogs.find((f) => f.date === circadianDate) ||
-      (serverFastingToday?.date === circadianDate ? serverFastingToday : undefined)
-    )
-  }, [biometricsState.fastingLogs, biometricsState.biometrics?.fasting, circadianDate])
 
   return {
     status,
@@ -613,14 +519,10 @@ export function useKratosData() {
     routines: catalogue.routines,
     sessions: sessionsState.sessions,
     biometrics: biometricsState.biometrics,
-    fastingRecommendation: biometricsState.fastingRecommendation,
     workoutRecommendation: biometricsState.workoutRecommendation,
-    isGeneratingFasting: biometricsState.isGeneratingFasting,
     isGeneratingWorkout: biometricsState.isGeneratingWorkout,
-    fastingLogs: biometricsState.fastingLogs,
     circadianDate,
     dayOfWeek,
-    todayFastingCheckIn,
     sync: sessionsState.sync,
     refreshAll,
     persistSession: sessionsState.persistSession,
@@ -628,8 +530,6 @@ export function useKratosData() {
     confirmSession: sessionsState.confirmSession,
     updateSessionRecord: sessionsState.updateSessionRecord,
     splitSessionRecord: sessionsState.splitSessionRecord,
-    saveFastingCheckIn: biometricsState.saveFastingCheckIn,
-    synthesizeFastingRecommendation: biometricsState.synthesizeFastingRecommendation,
     synthesizeWorkoutRecommendation: biometricsState.synthesizeWorkoutRecommendation,
   }
 }
