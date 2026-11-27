@@ -16,8 +16,6 @@ from app.ports.muninn import MuninnPort
 
 ReadinessTier = Literal["optimal", "moderate", "fatigued"]
 _TIER_ORDER: tuple[ReadinessTier, ...] = ("fatigued", "moderate", "optimal")
-_resolve_effective_hrv = resolve_effective_hrv
-_compute_effective_sleep = compute_effective_sleep
 
 _TIER_COPY: dict[ReadinessTier, tuple[str, str]] = {
     "fatigued": (
@@ -132,12 +130,12 @@ def assess_readiness(
     overnight_h = safe_float(bio.get("sleep_duration_hours"))
     nap_h = safe_float(bio.get("nap_duration_hours"))
     deep_h = safe_float(bio.get("sleep_deep_hours"))
-    effective_hrv = _resolve_effective_hrv(bio)
+    effective_hrv = resolve_effective_hrv(bio)
     rhr = safe_int(bio.get("resting_hr_bpm"))
 
     fatigue_flags = _collect_fatigue_flags(overnight_h, deep_h, effective_hrv, rhr)
     base_tier = _deterministic_tier(overnight_h, effective_hrv, fatigue_flags)
-    effective_sleep_h = _compute_effective_sleep(overnight_h, nap_h)
+    effective_sleep_h = compute_effective_sleep(overnight_h, nap_h)
     credited_tier = _deterministic_tier(effective_sleep_h, effective_hrv, fatigue_flags)
     tier = _clamp_tier_lift(base_tier, credited_tier)
 
