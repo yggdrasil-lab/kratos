@@ -61,8 +61,6 @@ class EirPort(Protocol):
         self, started_at: datetime, ended_at: datetime
     ) -> WorkoutTimelineRead: ...
 
-    def submit_fasting_feedback(self, payload: dict[str, Any]) -> bool: ...
-
     def submit_workout_feedback(self, payload: dict[str, Any]) -> bool: ...
 
 
@@ -198,14 +196,6 @@ class HttpEirAdapter:
             return WorkoutTimelineRead.model_validate(data)
         except ValidationError as exc:
             raise EirUpstreamError(f"Invalid Eir workout timeline payload: {exc}") from exc
-
-    def submit_fasting_feedback(self, payload: dict[str, Any]) -> bool:
-        return (
-            self._request_json_optional(
-                "/feedback/fasting", method="POST", payload=payload
-            )
-            is not None
-        )
 
     def submit_workout_feedback(self, payload: dict[str, Any]) -> bool:
         return (

@@ -122,7 +122,6 @@ def test_http_eir_adapter_maps_class_and_forwards_feedback() -> None:
     assert "classification=gym" in seen_urls[1]
     assert metrics.activity_type == "class"
     assert metrics.classification == "class"
-    assert adapter.submit_fasting_feedback({"id": "1"}) is True
 
 
 def test_http_eir_adapter_fails_loud_on_required_endpoints() -> None:
@@ -233,4 +232,4 @@ def test_in_memory_fakes_satisfy_protocols_and_create_app_wires_container() -> N
     fastapi_app = create_app(container)
     assert fastapi_app.state.container is container
     assert container.get_workout_lock("2026-11-25") is container.get_workout_lock("2026-11-25")
-    assert container.get_fasting_lock("2026-11-25") is not container.get_workout_lock("2026-11-25")
+    assert container.get_workout_lock("2026-11-25") is not container.get_workout_lock("2026-11-26")

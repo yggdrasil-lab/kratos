@@ -8,7 +8,7 @@ import {
 } from './pillars'
 
 describe('science pillar registry', () => {
-  const domains: PillarDomain[] = ['workout', 'fasting']
+  const domains: PillarDomain[] = ['workout']
 
   it('provides four non-empty pillars and citation titles per domain without em/en dashes', () => {
     for (const domain of domains) {
@@ -25,21 +25,13 @@ describe('science pillar registry', () => {
     }
   })
 
-  it('keeps expected modal and inline labels for workout and fasting cards', () => {
+  it('keeps expected modal labels for workout card', () => {
     const workoutModalLabels = getModalPillars('workout').map((p) => p.label)
     expect(workoutModalLabels).toEqual([
       'Volume Landmarks (RP)',
       'RIR Autoregulation',
       'Joint Sparing (McGill)',
       'Court Freshness',
-    ])
-
-    const fastingInlineLabels = getInlinePillars('fasting').map((p) => p.label)
-    expect(fastingInlineLabels).toEqual([
-      'Panda Lab:',
-      'Schoenfeld / Aragon:',
-      'Court Kinetics:',
-      'Mattson / Longo:',
     ])
   })
 })

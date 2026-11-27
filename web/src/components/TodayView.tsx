@@ -1,15 +1,12 @@
 import type {
   DailyBiometrics,
   Exercise,
-  FastingCheckIn,
-  FastingRecommendation,
   Routine,
   SessionPayload,
   WorkoutRecommendation,
 } from '../types'
 import { DAY_NAMES, formatFriendlyDate } from '../utils/circadian'
 import { computeWeeklyRhythm } from '../utils/sessionMetrics'
-import { FastingCard } from './FastingCard'
 import { InferredWorkoutBanner } from './InferredWorkoutBanner'
 import { ReadinessVitalsCard } from './ReadinessVitalsCard'
 import { TodayTrainingCard } from './TodayTrainingCard'
@@ -19,48 +16,38 @@ interface TodayViewProps {
   circadianDate: string
   dayOfWeek: number
   biometrics: DailyBiometrics | null
-  fastingRecommendation?: FastingRecommendation | null
   workoutRecommendation?: WorkoutRecommendation | null
   routines: Routine[]
   exercises: Exercise[]
   sessions: SessionPayload[]
-  latestFastingCheckIn?: FastingCheckIn
   onStartRoutine: (routine?: Routine) => void
-  onSaveFastingCheckIn: (checkIn: FastingCheckIn) => void
-  onSynthesizeFastingRecommendation?: (customContext?: string) => Promise<void>
   onSynthesizeWorkoutRecommendation?: (customContext?: string) => Promise<void>
   onDeleteSession: (id: string) => Promise<void> | void
   onConfirmSession: (id: string) => Promise<void> | void
   onEditSession?: (session: SessionPayload) => void
   onSplitSession?: (session: SessionPayload) => void
   isGeneratingWorkout?: boolean
-  isGeneratingFasting?: boolean
 }
 
 /**
- * Today dashboard composing daily readiness, fasting targets, training prescription,
+ * Today dashboard composing daily readiness, training prescription,
  * inferred workout reviews, and Monday-Sunday weekly adherence.
  */
 export function TodayView({
   circadianDate,
   dayOfWeek,
   biometrics,
-  fastingRecommendation,
   workoutRecommendation,
   routines,
   exercises,
   sessions,
-  latestFastingCheckIn,
   onStartRoutine,
-  onSaveFastingCheckIn,
-  onSynthesizeFastingRecommendation,
   onSynthesizeWorkoutRecommendation,
   onDeleteSession,
   onConfirmSession,
   onEditSession,
   onSplitSession,
   isGeneratingWorkout,
-  isGeneratingFasting,
 }: TodayViewProps) {
   const inferredSessions = sessions.filter((s) => Boolean(s.extra?.inferred))
   const weekDaySessions = computeWeeklyRhythm(sessions, dayOfWeek)
@@ -87,16 +74,6 @@ export function TodayView({
       />
 
       <ReadinessVitalsCard biometrics={biometrics} />
-
-      <FastingCard
-        circadianDate={circadianDate}
-        dayOfWeek={dayOfWeek}
-        latestCheckIn={latestFastingCheckIn}
-        recommendation={fastingRecommendation}
-        onSaveCheckIn={onSaveFastingCheckIn}
-        onSynthesizeRecommendation={onSynthesizeFastingRecommendation}
-        isGenerating={isGeneratingFasting}
-      />
 
       <TodayTrainingCard
         circadianDate={circadianDate}

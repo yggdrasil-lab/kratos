@@ -43,12 +43,10 @@ describe('api transport and fail-loud error handling', () => {
     fetchMock
       .mockResolvedValueOnce(errorResponse(404, 'Not Found', 'No weekly plan'))
       .mockResolvedValueOnce(errorResponse(404, 'Not Found', 'No biometrics'))
-      .mockResolvedValueOnce(errorResponse(404, 'Not Found', 'No fasting rec'))
       .mockResolvedValueOnce(errorResponse(404, 'Not Found', 'No workout rec'))
 
     await expect(api.getWeeklyPlan('2026-W47')).resolves.toBeNull()
     await expect(api.getBiometricsToday()).resolves.toBeNull()
-    await expect(api.getFastingRecommendation('2026-11-25')).resolves.toBeNull()
     await expect(api.getWorkoutRecommendation('2026-11-25')).resolves.toBeNull()
   })
 
@@ -66,7 +64,7 @@ describe('api transport and fail-loud error handling', () => {
     })
 
     fetchMock.mockResolvedValueOnce(errorResponse(422, 'Unprocessable Entity', 'Bad date'))
-    await expect(api.getFastingRecommendation('invalid')).rejects.toMatchObject({
+    await expect(api.getWorkoutRecommendation('invalid')).rejects.toMatchObject({
       name: 'KratosApiError',
       status: 422,
     })
@@ -85,7 +83,7 @@ describe('api transport and fail-loud error handling', () => {
 
   it('fails loudly on synthesis endpoints instead of returning null', async () => {
     fetchMock.mockResolvedValueOnce(errorResponse(503, 'Service Unavailable', 'Muninn offline'))
-    await expect(api.synthesizeFastingRecommendation('lunch at 1pm', '2026-11-25')).rejects.toMatchObject({
+    await expect(api.synthesizeWorkoutRecommendation('shoulder sore', '2026-11-25')).rejects.toMatchObject({
       name: 'KratosApiError',
       status: 503,
     })
@@ -96,18 +94,7 @@ describe('api transport and fail-loud error handling', () => {
     )
   })
 
-  it('fails loudly on fasting check-in and workout feedback writes', async () => {
-    fetchMock.mockResolvedValueOnce(errorResponse(500, 'Internal Server Error', 'Write failed'))
-    await expect(
-      api.saveFastingCheckIn({
-        id: 'fc-1',
-        date: '2026-11-25',
-        target_window: '14:10',
-        adherence: 'completed',
-        logged_at: '2026-11-25T10:30:00Z',
-      })
-    ).rejects.toMatchObject({ name: 'KratosApiError', status: 500 })
-
+  it('fails loudly on workout feedback writes', async () => {
     fetchMock.mockResolvedValueOnce(errorResponse(502, 'Bad Gateway', 'Eir timeout'))
     await expect(
       api.saveWorkoutFeedback({

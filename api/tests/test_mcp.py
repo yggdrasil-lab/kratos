@@ -130,11 +130,11 @@ def test_mcp_initialize_and_lists_expected_tools(authorized_client: TestClient) 
         "routine_item",
         "weekly_plan_get",
         "weekly_plan_set",
-        "fasting_recommendation_get",
-        "fasting_recommendation_adjust",
         "workout_recommendation_get",
         "workout_recommendation_adjust",
     }
+    assert "fasting_recommendation_get" not in names
+    assert "fasting_recommendation_adjust" not in names
 
 
 def test_mcp_exercise_round_trip_tags_source(authorized_client: TestClient, db) -> None:

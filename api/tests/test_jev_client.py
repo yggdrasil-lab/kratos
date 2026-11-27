@@ -8,7 +8,6 @@ import json
 from sqlalchemy.orm import Session
 
 from app.autoregulation.jev import (
-    classify_fasting_window,
     classify_recovery_state,
     classify_workout_decision_gates,
 )
@@ -101,22 +100,6 @@ def test_classify_workout_decision_gates_batched_and_fallback() -> None:
         "joint_focus": "NOMINAL",
         "time_budget": "TIME_STANDARD_45M",
     }
-
-
-def test_classify_fasting_window_calibrated_labels_only() -> None:
-    muninn = InMemoryMuninnAdapter(
-        jev_verdicts=["EVENING_SPORT_14_10", "DEEP_FAST_18_6", "EVENING_SPORT_16_8"]
-    )
-    assert (
-        classify_fasting_window(muninn, "Badminton Match Play", {"sleep_duration_hours": 7.5})
-        == "EVENING_SPORT_14_10"
-    )
-    assert (
-        classify_fasting_window(muninn, "Friday Rest", {"sleep_duration_hours": 8.0})
-        == "DEEP_FAST_18_6"
-    )
-    # Obsolete 16:8 labels must never be accepted.
-    assert classify_fasting_window(muninn, "Badminton", {"sleep_duration_hours": 7.5}) is None
 
 
 def test_workout_engine_integration_with_jev(db: Session) -> None:

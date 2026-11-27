@@ -12,22 +12,15 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.autoregulation.discord_formatter import (
-    sync_fasting_discord_thread,
-    sync_workout_discord_thread,
-)
-from app.autoregulation.fasting import synthesize_fasting_recommendation
+from app.autoregulation.discord_formatter import sync_workout_discord_thread
 from app.autoregulation.readiness import assess_readiness
 from app.autoregulation.workout import synthesize_workout_recommendation
-from app.models import FastingRecommendation, WorkoutRecommendation
+from app.models import WorkoutRecommendation
 from app.ports.clock import ClockPort
 from app.ports.discord import DiscordPort
 from app.ports.eir import EirPort
 from app.ports.muninn import MuninnPort
 from app.schemas import (
-    FastingCheckInPayload,
-    FastingRecommendationRead,
-    FastingSynthesizeRequest,
     RecommendedExerciseItem,
     WorkoutFeedbackPayload,
     WorkoutMetricsRead,
@@ -54,22 +47,6 @@ def _default_lock_getter() -> LockGetter:
             return lock
 
     return _get
-
-
-def _format_fasting_cached(cached: FastingRecommendation) -> FastingRecommendationRead:
-    return FastingRecommendationRead(
-        date=cached.date,
-        protocol_name=cached.protocol_name,
-        target_window=cached.target_window,
-        window_hours=cached.window_hours,
-        rationale=cached.rationale,
-        fueling_anchors=cached.fueling_anchors,
-        recovery_status=cached.recovery_status,
-        activity_context=cached.activity_context,
-        is_llm_generated=cached.is_llm_generated,
-        research_citation=cached.research_citation,
-        extra=cached.extra or {},
-    )
 
 
 def _format_workout_cached(cached: WorkoutRecommendation) -> WorkoutRecommendationRead:
@@ -103,71 +80,6 @@ def _format_workout_cached(cached: WorkoutRecommendation) -> WorkoutRecommendati
         is_llm_generated=cached.is_llm_generated,
         extra=cached.extra or {},
     )
-
-
-def _apply_fasting_fields(
-    row: FastingRecommendation,
-    rec: FastingRecommendationRead,
-    extra_payload: dict[str, Any],
-    custom_context: str | None,
-) -> None:
-    row.protocol_name = rec.protocol_name
-    row.target_window = rec.target_window
-    row.window_hours = rec.window_hours
-    row.rationale = rec.rationale
-    row.fueling_anchors = rec.fueling_anchors
-    row.recovery_status = rec.recovery_status
-    row.activity_context = rec.activity_context
-    row.is_llm_generated = rec.is_llm_generated
-    row.research_citation = rec.research_citation
-    row.custom_context = custom_context
-    row.extra = extra_payload
-
-
-def _persist_fasting_cache(
-    db: Session,
-    date_str: str,
-    rec: FastingRecommendationRead,
-    existing: FastingRecommendation | None,
-    extra_payload: dict[str, Any],
-    custom_context: str | None = None,
-) -> None:
-    if existing is not None:
-        _apply_fasting_fields(existing, rec, extra_payload, custom_context)
-    else:
-        db.add(
-            FastingRecommendation(
-                date=date_str,
-                protocol_name=rec.protocol_name,
-                target_window=rec.target_window,
-                window_hours=rec.window_hours,
-                rationale=rec.rationale,
-                fueling_anchors=rec.fueling_anchors,
-                recovery_status=rec.recovery_status,
-                activity_context=rec.activity_context,
-                is_llm_generated=rec.is_llm_generated,
-                research_citation=rec.research_citation,
-                custom_context=custom_context,
-                extra=extra_payload,
-            )
-        )
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        concurrent_row = db.scalar(
-            select(FastingRecommendation).where(
-                FastingRecommendation.date == date_str,
-                FastingRecommendation.deleted_at.is_(None),
-            )
-        )
-        if concurrent_row is None:
-            raise
-        _apply_fasting_fields(concurrent_row, rec, extra_payload, custom_context)
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
 
 
 def _apply_workout_fields(
@@ -242,7 +154,7 @@ def _persist_workout_cache(
 
 
 class AutoregulationCore:
-    """Cohesive domain coordinator for biometrics, readiness, fasting, and workout synthesis."""
+    """Cohesive domain coordinator for biometrics, readiness, and workout synthesis."""
 
     def __init__(
         self,
@@ -252,14 +164,12 @@ class AutoregulationCore:
         muninn: MuninnPort,
         discord: DiscordPort,
         get_workout_lock: LockGetter | None = None,
-        get_fasting_lock: LockGetter | None = None,
     ) -> None:
         self._clock = clock
         self._eir = eir
         self._muninn = muninn
         self._discord = discord
         self._get_workout_lock = get_workout_lock or _default_lock_getter()
-        self._get_fasting_lock = get_fasting_lock or _default_lock_getter()
 
     def _resolve_target_date(self, target_date: str | None) -> tuple[date, str]:
         if target_date is None:
@@ -311,96 +221,11 @@ class AutoregulationCore:
     ) -> WorkoutTimelineRead:
         return self._eir.get_workout_timeline(started_at, ended_at)
 
-    def submit_fasting_feedback(
-        self, payload: FastingCheckInPayload | dict[str, Any]
-    ) -> bool:
-        data = payload.model_dump() if isinstance(payload, BaseModel) else dict(payload)
-        return self._eir.submit_fasting_feedback(data)
-
     def submit_workout_feedback(
         self, payload: WorkoutFeedbackPayload | dict[str, Any]
     ) -> bool:
         data = payload.model_dump() if isinstance(payload, BaseModel) else dict(payload)
         return self._eir.submit_workout_feedback(data)
-
-    def get_fasting_recommendation(
-        self,
-        db: Session,
-        target_date: str | None = None,
-    ) -> FastingRecommendationRead:
-        """Return cached fasting recommendation or synthesize, sync Discord, and cache."""
-        t_date, date_str = self._resolve_target_date(target_date)
-        stmt = select(FastingRecommendation).where(
-            FastingRecommendation.date == date_str,
-            FastingRecommendation.deleted_at.is_(None),
-        )
-        if cached := db.scalar(stmt):
-            return _format_fasting_cached(cached)
-
-        with self._get_fasting_lock(date_str):
-            db.expire_all()
-            if cached := db.scalar(stmt):
-                return _format_fasting_cached(cached)
-            weekly_plan = self._weekly_plan_for_date(db, t_date)
-            biometrics = self._eir.get_daily_biometrics(date_str)
-            rec = synthesize_fasting_recommendation(
-                t_date,
-                weekly_plan,
-                biometrics,
-                db=db,
-                muninn=self._muninn,
-            )
-            thread_id = sync_fasting_discord_thread(
-                self._discord, rec, date_str, None, None
-            )
-            extra_payload: dict[str, Any] = {"source": "llm"}
-            if thread_id:
-                extra_payload["discord_thread_id"] = str(thread_id)
-            _persist_fasting_cache(db, date_str, rec, None, extra_payload)
-            rec.extra = extra_payload
-            return rec
-
-    def synthesize_fasting_recommendation(
-        self,
-        db: Session,
-        payload: FastingSynthesizeRequest,
-        *,
-        source: str | None = None,
-    ) -> FastingRecommendationRead:
-        """Force on-demand fasting synthesis, update cache, and sync Discord thread."""
-        t_date, date_str = self._resolve_target_date(payload.target_date)
-        with self._get_fasting_lock(date_str):
-            weekly_plan = self._weekly_plan_for_date(db, t_date)
-            biometrics = self._eir.get_daily_biometrics(date_str)
-            rec = synthesize_fasting_recommendation(
-                t_date,
-                weekly_plan,
-                biometrics,
-                custom_context=payload.custom_context,
-                db=db,
-                muninn=self._muninn,
-            )
-            existing = db.scalar(
-                select(FastingRecommendation).where(
-                    FastingRecommendation.date == date_str,
-                    FastingRecommendation.deleted_at.is_(None),
-                )
-            )
-            thread_id = sync_fasting_discord_thread(
-                self._discord, rec, date_str, existing, payload.custom_context
-            )
-            extra_payload = dict(existing.extra or {}) if existing else {"source": "llm"}
-            if source is not None:
-                extra_payload["source"] = source
-            if thread_id:
-                extra_payload["discord_thread_id"] = str(thread_id)
-            if payload.custom_context:
-                extra_payload["last_adjustment"] = payload.custom_context
-            _persist_fasting_cache(
-                db, date_str, rec, existing, extra_payload, payload.custom_context
-            )
-            rec.extra = extra_payload
-            return rec
 
     def get_workout_recommendation(
         self,

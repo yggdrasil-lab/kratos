@@ -193,7 +193,6 @@ export interface MockApiState {
   splitRequests: { parentId: string; segments: Record<string, unknown>[] }[]
   metricsQueries: string[]
   timelineQueries: string[]
-  savedFastingCheckIns: unknown[]
   clientErrors: unknown[]
 }
 
@@ -409,58 +408,6 @@ async function registerBiometricProxyRoutes(page: Page, state: MockApiState): Pr
   })
 }
 
-async function registerFastingRoutes(page: Page, state: MockApiState): Promise<void> {
-  await page.route(/\/api\/biometrics\/fasting-recommendation\/synthesize(\?.*)?$/, async (route) => {
-    if (route.request().method() !== 'POST') return route.continue()
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        date: '2026-11-01',
-        protocol_name: '14:10 Shifted Schedule Protocol',
-        target_window: '14:10',
-        window_hours: '11:00 AM - 9:00 PM',
-        rationale: 'Custom user schedule adjustment incorporated with 3h pre-bed cutoff.',
-        fueling_anchors: ['11:00 AM: Meal 1 with 40g protein', '04:00 PM: Pre-workout fuel', '08:30 PM: Recovery meal'],
-        recovery_status: 'optimal',
-        activity_context: 'Badminton Match Play (sport)',
-        is_llm_generated: true,
-        research_citation: 'Panda Lab (Circadian TRE) & Schoenfeld (MPS Distribution)',
-      }),
-    })
-  })
-
-  await page.route(/\/api\/biometrics\/fasting-recommendation(\?.*)?$/, async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        date: '2026-11-01',
-        protocol_name: '14:10 Badminton Court Fueling',
-        target_window: '14:10',
-        window_hours: '10:30 AM - 8:30 PM',
-        rationale: 'Court session scheduled. Standard 14:10 window with a zero-prep pre-court top-up and post-court protein recovery.',
-        fueling_anchors: [
-          'Morning: Clean fast with water, black coffee, or tea until 10:30 AM',
-          '10:30 AM: Leftovers or eat-out plate triage, protein first, then carbs and sides to satiety',
-          '05:00 PM: Pre-court top-up, whey protein shake in water or milk (optional)',
-          'Post-court or family dinner: plate triage, protein first, then carbs and sides to satiety',
-        ],
-        recovery_status: 'optimal',
-        activity_context: 'Badminton Match Play (sport)',
-        is_llm_generated: true,
-        research_citation: 'Panda Lab (Circadian TRE) & Schoenfeld (MPS Distribution)',
-      }),
-    })
-  })
-
-  await page.route(/\/api\/biometrics\/fasting(\?.*)?$/, async (route) => {
-    if (route.request().method() !== 'POST') return route.continue()
-    state.savedFastingCheckIns.push(JSON.parse(route.request().postData() || '{}'))
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '{"status":"ok"}' })
-  })
-}
-
 const MOCK_SYNTHESIZED_REC = {
   date: '2026-11-01',
   routine_name: 'Upper Body A (Joint-Sparing Autoregulated)',
@@ -537,8 +484,7 @@ async function registerWorkoutRecRoutes(page: Page): Promise<void> {
   })
 }
 
-async function registerRecommendationRoutes(page: Page, state: MockApiState): Promise<void> {
-  await registerFastingRoutes(page, state)
+async function registerRecommendationRoutes(page: Page): Promise<void> {
   await registerWorkoutRecRoutes(page)
 }
 
@@ -554,7 +500,6 @@ export async function setupMockApi(page: Page): Promise<MockApiState> {
     splitRequests: [],
     metricsQueries: [],
     timelineQueries: [],
-    savedFastingCheckIns: [],
     clientErrors: [],
   }
 
@@ -588,6 +533,6 @@ export async function setupMockApi(page: Page): Promise<MockApiState> {
 
   await registerSessionRoutes(page, state)
   await registerBiometricProxyRoutes(page, state)
-  await registerRecommendationRoutes(page, state)
+  await registerRecommendationRoutes(page)
   return state
 }

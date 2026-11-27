@@ -27,12 +27,6 @@ TIME_BUDGET_STATES = (
     "TIME_STANDARD_45M",
     "TIME_EXTENDED_60M",
 )
-FASTING_WINDOW_STATES = (
-    "EVENING_SPORT_14_10",
-    "STANDARD_14_10",
-    "GENTLE_14_10",
-    "DEEP_FAST_18_6",
-)
 
 WORKOUT_GATES_SCHEMA: dict[str, Any] = {
     "questions": {
@@ -73,16 +67,6 @@ _RECOVERY_SYSTEM_PROMPT = (
     "MEV_DELOAD: Poor sleep (<6.0h), elevated resting HR, or low HRV (<35ms). Needs fatigue deload. "
     "ACTIVE_RECOVERY: Severe exhaustion (<5.0h sleep), extreme soreness, or rest day."
 )
-
-_FASTING_SYSTEM_PROMPT = (
-    "Classify daily intermittent fasting window into exactly one category: "
-    "[EVENING_SPORT_14_10, STANDARD_14_10, GENTLE_14_10, DEEP_FAST_18_6]. "
-    "EVENING_SPORT_14_10: Badminton match play (7-9 PM) scheduled. 14:10 baseline (10:30 AM - 8:30 PM) with pre-court whey top-up. "
-    "STANDARD_14_10: Lifting or standard athletic day (10:30 AM - 8:30 PM). "
-    "GENTLE_14_10: High fatigue, sleep deficit, or elevated cortisol. Gentler 14:10 window (10:30 AM - 8:30 PM). "
-    "DEEP_FAST_18_6: Friday rest day with optimal recovery ONLY (3:30 PM - 8:30 PM)."
-)
-
 
 def safe_float(val: object) -> float | None:
     """Parse numeric values from mixed telemetry dicts without raising."""
@@ -189,23 +173,3 @@ def classify_recovery_state(
 
     verdict = result.verdict.strip()
     return verdict if verdict in RECOVERY_STATES else None
-
-
-def classify_fasting_window(
-    muninn: MuninnPort,
-    activity_context: str,
-    biometrics: dict[str, Any] | None,
-) -> str | None:
-    """Classify daily circadian fasting window across calibrated 14:10 / 18:6 labels."""
-    sleep_h = safe_float(biometrics.get("sleep_duration_hours")) if biometrics else None
-    hrv = safe_float(biometrics.get("hrv_ms")) if biometrics else None
-    user_content = f"Activity: {activity_context}. Recovery: Sleep={sleep_h}h, HRV={hrv}ms"
-
-    try:
-        result = muninn.decide(_FASTING_SYSTEM_PROMPT, user_content)
-    except Exception as exc:
-        logger.warning("Jev fasting window classification failed (%s); falling back", exc)
-        return None
-
-    verdict = result.verdict.strip()
-    return verdict if verdict in FASTING_WINDOW_STATES else None

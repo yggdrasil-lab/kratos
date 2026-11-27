@@ -13,6 +13,7 @@ EXPECTED_TABLES = {
     "session_item",
     "set_entry",
     "weekly_plan",
+    # Intentionally dormant table retained for safe rollback of retired fasting module.
     "fasting_recommendation",
     "workout_recommendation",
 }

@@ -1,5 +1,4 @@
 import { formatAucklandDate, formatAucklandTime } from '@yggdrasil-lab/ui'
-import type { DailyBiometrics, FastingCheckIn, FastingRecommendation } from '../types'
 
 const EXPLICIT_TZ_RE = /(Z|[+-]\d{2}:?\d{2})$/i
 
@@ -70,84 +69,4 @@ export function formatSessionTimeRange(
   if (!startLabel) return ''
   const endLabel = formatLocal12Hour(endedAt)
   return endLabel ? `${startLabel} - ${endLabel}` : startLabel
-}
-
-/**
- * Normalizes server-synced fasting feedback from daily biometrics into a FastingCheckIn.
- */
-export function parseServerFasting(fb?: DailyBiometrics['fasting']): FastingCheckIn | undefined {
-  if (!fb || !fb.date) return undefined
-  const payload = fb.payload || {}
-  return {
-    id: fb.id || `server-${fb.date}`,
-    date: fb.date,
-    target_window: (payload.target_window as string) || '14:10',
-    adherence: (fb.rating as 'completed' | 'early' | 'off_plan') || 'completed',
-    energy: (payload.energy as 'high' | 'normal' | 'low') || 'normal',
-    headache: (payload.headache as 'none' | 'mild' | 'sugar_spike') || 'none',
-    notes: fb.notes || null,
-    logged_at: fb.logged_at || new Date().toISOString(),
-  }
-}
-
-export interface ResolvedFastingProtocol {
-  protocolName: string
-  targetWindow: string
-  windowHours: string
-  fuelingAnchors: string[]
-  rationale?: string
-  recoveryStatus?: FastingRecommendation['recovery_status']
-  isLlmGenerated: boolean
-  researchCitation?: string | null
-}
-
-const DEFAULT_FASTING_ANCHORS = [
-  'Morning: Clean fast with water, black coffee, or tea until 10:30 AM',
-  '10:30 AM: Leftovers or eat-out plate triage, protein first, then carbs and sides to satiety',
-  'Family dinner (done by 8:30 PM): plate triage, protein first, then carbs and sides to satiety',
-  'Optional: whey protein shake in water or milk as a zero-prep top-up',
-]
-
-/**
- * Resolves the active circadian fasting protocol from an AI recommendation or
- * falls back to the canonical 14:10 circadian baseline (10:30 AM - 8:30 PM).
- */
-export function resolveFastingProtocol(
-  dayOfWeek: number,
-  recommendation?: FastingRecommendation | null
-): ResolvedFastingProtocol {
-  if (recommendation) {
-    return {
-      protocolName: recommendation.protocol_name ?? '14:10 Circadian Protocol',
-      targetWindow: recommendation.target_window ?? '14:10',
-      windowHours: recommendation.window_hours ?? '10:30 AM - 8:30 PM',
-      fuelingAnchors: recommendation.fueling_anchors ?? [...DEFAULT_FASTING_ANCHORS],
-      rationale: recommendation.rationale,
-      recoveryStatus: recommendation.recovery_status,
-      isLlmGenerated: recommendation.is_llm_generated ?? false,
-      researchCitation: recommendation.research_citation,
-    }
-  }
-
-  const isWeekend = dayOfWeek === 5 || dayOfWeek === 6
-  if (isWeekend) {
-    return {
-      protocolName: '14:10 Social Baseline',
-      targetWindow: '14:10',
-      windowHours: '10:30 AM - 8:30 PM',
-      fuelingAnchors: [
-        'Mindful portions with family and friends',
-        'Prioritize hydration and avoid high-sugar snacks',
-      ],
-      isLlmGenerated: false,
-    }
-  }
-
-  return {
-    protocolName: '14:10 Circadian Protocol',
-    targetWindow: '14:10',
-    windowHours: '10:30 AM - 8:30 PM',
-    fuelingAnchors: [...DEFAULT_FASTING_ANCHORS],
-    isLlmGenerated: false,
-  }
 }

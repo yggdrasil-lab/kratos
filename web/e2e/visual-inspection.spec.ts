@@ -120,19 +120,7 @@ for (const { name: platform, options } of PLATFORMS) {
         fullPage: true,
       })
 
-      // 2. Fasting Check-in Modal
-      const checkInBtn = page.getByRole('button', { name: /Log Fast/i }).first()
-      await expect(checkInBtn).toBeVisible()
-      await checkInBtn.click()
-      await expect(page.getByRole('heading', { name: 'Fasting Check-In' })).toBeVisible()
-      await page.waitForTimeout(350)
-      await page.screenshot({
-        path: `screenshots/${platform}/02-fasting-modal.png`,
-      })
-      await page.getByRole('button', { name: 'Cancel' }).click()
-      await page.waitForTimeout(200)
-
-      // 3. Active Workout Logging Screen
+      // 2. Active Workout Logging Screen
       const startBtn = page.getByRole('button', { name: /Start Workout/i }).first()
       await expect(startBtn).toBeVisible()
       await startBtn.click()

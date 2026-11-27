@@ -3,15 +3,11 @@ import {
   Button,
   CollapsibleSection,
   EmptyState,
-  GlassCard,
   GoalProgressCard,
   SearchInput,
   SectionHeader,
-  StatusBadge,
-  type StatusBadgeVariant,
 } from '@yggdrasil-lab/ui'
-import type { DailyBiometrics, Exercise, FastingCheckIn, Routine, SessionPayload } from '../types'
-import { formatFriendlyDate } from '../utils/circadian'
+import type { DailyBiometrics, Exercise, Routine, SessionPayload } from '../types'
 import { getSessionLabel } from '../utils/session'
 import { ProgressSessionCard } from './ProgressSessionCard'
 
@@ -19,67 +15,12 @@ interface ProgressViewProps {
   sessions: SessionPayload[]
   exercises: Exercise[]
   routines?: Routine[]
-  fastingLogs: FastingCheckIn[]
   biometrics: DailyBiometrics | null
   onDeleteSession: (id: string) => Promise<void> | void
   onConfirmSession: (id: string) => Promise<void> | void
   onEditSession: (session: SessionPayload) => void
   onSplitSession?: (session: SessionPayload) => void
   onLogSets?: (session: SessionPayload) => void
-}
-
-const ADHERENCE_BADGE_MAP: Record<FastingCheckIn['adherence'], { label: string; variant: StatusBadgeVariant }> = {
-  completed: { label: '✓ Completed', variant: 'success' },
-  early: { label: '⚡ Broke Early', variant: 'warning' },
-  off_plan: { label: '🔴 Off-Plan', variant: 'error' },
-}
-
-function FastingHistorySection({ fastingLogs }: { fastingLogs: FastingCheckIn[] }) {
-  return (
-    <div className="mb-4">
-      <SectionHeader
-        title={`Fasting History (${fastingLogs.length})`}
-        icon={<span className="text-base leading-none">⏱️</span>}
-        variant="brand"
-        size="md"
-        className="mb-3"
-      />
-      {fastingLogs.length === 0 ? (
-        <EmptyState
-          variant="glass"
-          title="No fasting logs recorded yet"
-          description='Use the Fasting Card on "Today" to log your check-ins!'
-        />
-      ) : (
-        <div className="flex flex-col gap-2">
-          {fastingLogs.slice(0, 7).map((f) => {
-            const badge = ADHERENCE_BADGE_MAP[f.adherence] || ADHERENCE_BADGE_MAP.off_plan
-            return (
-              <GlassCard key={f.id} className="px-4 py-3 flex justify-between items-center gap-2">
-                <div>
-                  <div className="font-semibold text-xs text-slate-100">
-                    {formatFriendlyDate(f.date)} ({f.target_window})
-                  </div>
-                  <div className="text-xs text-slate-400">
-                    {[f.energy ? `Energy: ${f.energy}` : null, f.headache ? `Headache: ${f.headache}` : null, f.notes ? `"${f.notes}"` : null]
-                      .filter(Boolean)
-                      .join(' • ')}
-                  </div>
-                </div>
-                <StatusBadge
-                  label={badge.label}
-                  variant={badge.variant}
-                  size="sm"
-                  showDot={false}
-                  className="rounded-md font-semibold shrink-0"
-                />
-              </GlassCard>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
 }
 
 function OlderArchiveSection({
@@ -211,13 +152,12 @@ function RecentWorkoutsSection({
 
 /**
  * Progress and Momentum tab displaying weight milestone trajectory, 7-day activity
- * telemetry stream, fasting adherence logs, and searchable older session archive.
+ * telemetry stream, and searchable older session archive.
  */
 export function ProgressView({
   sessions,
   exercises,
   routines = [],
-  fastingLogs,
   biometrics,
   onDeleteSession,
   onConfirmSession,
@@ -266,8 +206,6 @@ export function ProgressView({
         onSplitSession={onSplitSession}
         onLogSets={onLogSets}
       />
-
-      <FastingHistorySection fastingLogs={fastingLogs} />
 
       <OlderArchiveSection
         olderSessions={olderSessions}

@@ -45,14 +45,10 @@ class KratosContainer:
     training: TrainingCore
     autoregulation: AutoregulationCore
     workout_date_locks: dict[str, threading.Lock] = field(default_factory=dict)
-    fasting_date_locks: dict[str, threading.Lock] = field(default_factory=dict)
     _lock_mutex: threading.Lock = field(default_factory=threading.Lock)
 
     def get_workout_lock(self, date_key: str) -> threading.Lock:
         return _get_or_create_lock(self._lock_mutex, self.workout_date_locks, date_key)
-
-    def get_fasting_lock(self, date_key: str) -> threading.Lock:
-        return _get_or_create_lock(self._lock_mutex, self.fasting_date_locks, date_key)
 
 
 def _default_muninn(settings_obj: Settings) -> MuninnPort:
@@ -83,7 +79,6 @@ def _default_autoregulation(
     discord: DiscordPort,
     lock_mutex: threading.Lock,
     workout_locks: dict[str, threading.Lock],
-    fasting_locks: dict[str, threading.Lock],
 ) -> AutoregulationCore:
     return AutoregulationCore(
         clock=clock,
@@ -91,7 +86,6 @@ def _default_autoregulation(
         muninn=muninn,
         discord=discord,
         get_workout_lock=lambda key: _get_or_create_lock(lock_mutex, workout_locks, key),
-        get_fasting_lock=lambda key: _get_or_create_lock(lock_mutex, fasting_locks, key),
     )
 
 
@@ -117,7 +111,6 @@ def build_container(
     resolved_muninn = muninn if muninn is not None else _default_muninn(resolved_settings)
     resolved_discord = discord if discord is not None else _default_discord(resolved_settings)
     workout_locks: dict[str, threading.Lock] = {}
-    fasting_locks: dict[str, threading.Lock] = {}
     lock_mutex = threading.Lock()
     return KratosContainer(
         settings=resolved_settings,
@@ -135,10 +128,8 @@ def build_container(
             resolved_discord,
             lock_mutex,
             workout_locks,
-            fasting_locks,
         ),
         workout_date_locks=workout_locks,
-        fasting_date_locks=fasting_locks,
         _lock_mutex=lock_mutex,
     )
 

@@ -29,7 +29,6 @@ from app.schemas import (
     ExerciseCreate,
     ExerciseRead,
     ExerciseUpdate,
-    FastingSynthesizeRequest,
     RoutineCreate,
     RoutineItemCreate,
     RoutineItemRead,
@@ -322,40 +321,6 @@ def _register_weekly_plan_tools(
             return data
 
 
-def _register_fasting_tools(
-    server: MCPServer,
-    open_session: SessionOpener,
-    get_autoregulation: AutoregulationGetter,
-) -> None:
-    @server.tool(
-        name="fasting_recommendation_get",
-        description="Get today's (or target date's) AI-synthesized circadian fasting recommendation, including target window, rationale, fueling anchors, and Discord thread ID.",
-    )
-    def fasting_recommendation_get(target_date: str | None = None) -> dict:
-        with open_session() as db, _tool_errors():
-            rec = get_autoregulation().get_fasting_recommendation(
-                db, target_date=target_date
-            )
-            return rec.model_dump()
-
-    @server.tool(
-        name="fasting_recommendation_adjust",
-        description="Adjust and re-synthesize a fasting recommendation for today (or target date) using user instructions from Discord or chat (e.g. 'shorten fast to 14h', 'shift feeding window earlier for lunch meeting').",
-    )
-    def fasting_recommendation_adjust(
-        user_adjustment: str,
-        target_date: str | None = None,
-    ) -> dict:
-        with open_session() as db, _tool_errors():
-            payload = FastingSynthesizeRequest(
-                target_date=target_date, custom_context=user_adjustment
-            )
-            rec = get_autoregulation().synthesize_fasting_recommendation(
-                db, payload, source=SOURCE
-            )
-            return rec.model_dump()
-
-
 def _register_workout_tools(
     server: MCPServer,
     open_session: SessionOpener,
@@ -424,7 +389,6 @@ def build_mcp_server(container: KratosContainer | None = None) -> MCPServer:
     _register_routine_crud_tools(server, _open_session, get_training)
     _register_routine_mutation_tools(server, _open_session, get_training)
     _register_weekly_plan_tools(server, _open_session, get_training)
-    _register_fasting_tools(server, _open_session, get_autoregulation)
     _register_workout_tools(server, _open_session, get_autoregulation)
     return server
 

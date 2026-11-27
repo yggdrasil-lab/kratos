@@ -7,8 +7,6 @@ import type {
   ClientErrorPayload,
   DailyBiometrics,
   Exercise,
-  FastingCheckIn,
-  FastingRecommendation,
   Routine,
   SessionPayload,
   SessionSplitResponse,
@@ -159,23 +157,6 @@ export const api = {
   getBiometricsToday: (): Promise<DailyBiometrics | null> =>
     requestOrNull<DailyBiometrics>('/biometrics/today'),
 
-  getFastingRecommendation: (targetDate?: string): Promise<FastingRecommendation | null> => {
-    const suffix = targetDate ? `?target_date=${encodeURIComponent(targetDate)}` : ''
-    return requestOrNull<FastingRecommendation>(`/biometrics/fasting-recommendation${suffix}`)
-  },
-
-  synthesizeFastingRecommendation: (
-    customContext?: string,
-    targetDate?: string
-  ): Promise<FastingRecommendation> =>
-    request<FastingRecommendation>('/biometrics/fasting-recommendation/synthesize', {
-      method: 'POST',
-      body: JSON.stringify({
-        target_date: targetDate,
-        custom_context: customContext,
-      }),
-    }),
-
   getWorkoutRecommendation: (targetDate?: string): Promise<WorkoutRecommendation | null> => {
     const suffix = targetDate ? `?target_date=${encodeURIComponent(targetDate)}` : ''
     return requestOrNull<WorkoutRecommendation>(`/biometrics/workout-recommendation${suffix}`)
@@ -191,12 +172,6 @@ export const api = {
         target_date: targetDate,
         custom_context: customContext,
       }),
-    }),
-
-  saveFastingCheckIn: (payload: FastingCheckIn): Promise<void> =>
-    request<void>('/biometrics/fasting', {
-      method: 'POST',
-      body: JSON.stringify(payload),
     }),
 
   saveWorkoutFeedback: (payload: {
