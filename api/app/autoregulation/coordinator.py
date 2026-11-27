@@ -253,6 +253,7 @@ class AutoregulationCore:
                 biometrics,
                 db=db,
                 muninn=self._muninn,
+                now=self._clock.now_utc(),
             )
             thread_id = sync_workout_discord_thread(
                 self._discord, rec, date_str, None, None
@@ -283,6 +284,7 @@ class AutoregulationCore:
                 custom_context=payload.custom_context,
                 db=db,
                 muninn=self._muninn,
+                now=self._clock.now_utc(),
             )
             existing = db.scalar(
                 select(WorkoutRecommendation).where(

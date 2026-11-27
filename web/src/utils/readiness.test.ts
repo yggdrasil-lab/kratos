@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { DailyBiometrics, Routine, WorkoutRecommendation } from '../types'
-import { READINESS_STYLE_MAP, resolveReadinessSummary, resolveTodayRoutineState } from './readiness'
+import {
+  READINESS_STYLE_MAP,
+  resolveReadinessSummary,
+  resolveTodayRoutineState,
+  resolveVitalsDisplay,
+} from './readiness'
 
 describe('resolveReadinessSummary', () => {
   it('maps backend optimal, moderate, and fatigued tiers without client threshold overrides', () => {
@@ -110,5 +115,50 @@ describe('resolveTodayRoutineState', () => {
     expect(state.activeRoutine?.id).toBe('r-1')
     expect(state.dayHeadline).toBe('Upper Body A')
     expect(state.daySubtitle).toBe('1 exercises configured')
+  })
+})
+
+describe('resolveVitalsDisplay', () => {
+  it('prefers overnight_hrv_ms over hrv_ms and surfaces positive nap duration', () => {
+    const vitals = resolveVitalsDisplay({
+      date: '2026-11-27',
+      hrv_ms: '50.02',
+      overnight_hrv_ms: '42.22',
+      sleep_duration_hours: 6.64,
+      sleep_deep_hours: 0.84,
+      sleep_rem_hours: 1.74,
+      nap_duration_hours: 2.51,
+      nap_count: 1,
+      total_sleep_hours: 9.15,
+      naps: [
+        {
+          start_at: '2026-11-27T11:29:24+13:00',
+          end_at: '2026-11-27T14:18:19+13:00',
+          duration_hours: 2.51,
+        },
+      ],
+    })
+
+    expect(vitals.sleepHours).toBe(6.64)
+    expect(vitals.deepSleepHours).toBe(0.84)
+    expect(vitals.napHours).toBe(2.51)
+    expect(vitals.hrvMs).toBe(42.22)
+  })
+
+  it('falls back to hrv_ms and hides zero nap duration on legacy payloads', () => {
+    const vitals = resolveVitalsDisplay({
+      date: '2026-11-25',
+      hrv_ms: '50.02',
+      overnight_hrv_ms: null,
+      sleep_duration_hours: 7.5,
+      nap_duration_hours: 0,
+      resting_hr_bpm: 58,
+      latest_weight_kg: '74.4',
+    })
+
+    expect(vitals.hrvMs).toBe(50.02)
+    expect(vitals.napHours).toBeNull()
+    expect(vitals.rhrBpm).toBe(58)
+    expect(vitals.weightKg).toBe(74.4)
   })
 })

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.autoregulation.jev import (
     classify_recovery_state,
     classify_workout_decision_gates,
+    format_biometric_summary,
 )
 from app.autoregulation.readiness import assess_readiness
 from app.autoregulation.workout import generate_workout_recommendation
@@ -121,3 +122,57 @@ def test_workout_engine_integration_with_jev(db: Session) -> None:
     assert rec.volume_landmark == "MEV"
     assert rec.target_rir == "RIR 3-4"
     assert rec.exercises[0].target_sets == 2
+
+
+def test_assess_readiness_nap_credit_overnight_hrv_and_clamping() -> None:
+    # 2026-11-27 scenario: 6.64h overnight + 2.51h nap (effective 7.64h), overnight HRV 42.22 < 45 -> stays moderate
+    nov_27 = assess_readiness(
+        {
+            "sleep_duration_hours": 6.64,
+            "sleep_deep_hours": 0.84,
+            "nap_duration_hours": 2.51,
+            "overnight_hrv_ms": "42.22",
+            "hrv_ms": "50.02",
+        }
+    )
+    assert nov_27.tier == "moderate"
+    assert nov_27.fatigue_flags == ()
+
+    # Moderate overnight sleep (6.5h) + 1.5h nap (effective 7.25h) + 48ms overnight HRV -> lifts 1 tier to optimal
+    lifted = assess_readiness(
+        {
+            "sleep_duration_hours": 6.5,
+            "nap_duration_hours": 1.5,
+            "overnight_hrv_ms": 48.0,
+            "hrv_ms": 55.0,
+        }
+    )
+    assert lifted.tier == "optimal"
+
+    # Short overnight sleep (5.0h) + 2.5h nap (effective 6.0h) -> keeps short sleep fatigue flag & clamps to moderate
+    clamped = assess_readiness(
+        {
+            "sleep_duration_hours": 5.0,
+            "nap_duration_hours": 2.5,
+            "overnight_hrv_ms": 48.0,
+        }
+    )
+    assert clamped.tier == "moderate"
+    assert clamped.fatigue_flags == ("short sleep (5.0h)",)
+
+
+def test_format_biometric_summary_prefers_overnight_hrv_and_formats_nap() -> None:
+    summary, has_vitals = format_biometric_summary(
+        {
+            "sleep_duration_hours": 6.64,
+            "sleep_deep_hours": 0.84,
+            "nap_duration_hours": 2.51,
+            "overnight_hrv_ms": "42.22",
+            "hrv_ms": "50.02",
+        }
+    )
+    assert has_vitals is True
+    assert "Sleep: 6.6h (0.8h deep)" in summary
+    assert "Nap: 2.5h (Effective sleep: 7.6h)" in summary
+    assert "HRV: 42.2ms" in summary
+    assert "50.0ms" not in summary
